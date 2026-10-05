@@ -73,9 +73,3 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 Type: filesandordirs; Name: "{app}"
 ; Keep user data by default — comment out to enable clean uninstall
 ; Type: filesandordirs; Name: "{localappdata}\BatPlayer"
-
-[Code]
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-end;
