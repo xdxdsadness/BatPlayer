@@ -514,8 +514,10 @@ public partial class MainWindow : Window
         {
             if (_batSpinning) return; // уже крутится нативной анимацией — не перезапускать
             _batSpinning = true;
-            // От текущего базового угла: после выбега паузы логотип замер не на нуле.
-            var from = BatSpinAngle.Angle;
+            // От текущего базового угла (после выбега паузы логотип замер не на нуле).
+            // Нормализация по модулю 360: вращение модульно, а копиться угол не должен.
+            var from = BatSpinAngle.Angle % 360;
+            if (from < 0) from += 360;
             _spinBaseAngle = from;
             _spinCycleStartUtc = DateTime.UtcNow;
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty,
@@ -533,12 +535,16 @@ public partial class MainWindow : Window
             var current = _spinBaseAngle + (elapsed % cycleSec) / cycleSec * 360;
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty, null);
             BatSpinAngle.Angle = current;
-            // Инерция выбега: ~170° с плавным затуханием (как прежняя экспонента с tau=0.45с).
+            // Инерция выбега: ~170° с плавным затуханием (как прежняя экспонента tau=0.45с).
+            // БЕЗ FillBehavior.Stop: Stop по завершении выбега возвращал значение к базе —
+            // лого визуально ОТСКАКИВАЛО назад на 170° через секунду после паузы
+            // (жалоба: «разворачивает, а не по инерции перестаёт двигаться»).
+            // HoldEnd держит конечный угол; следующий запуск продолжит с него
+            // (угол нормализуется по модулю 360 при старте).
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty,
                 new DoubleAnimation(current, current + 170, TimeSpan.FromMilliseconds(1100))
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-                    FillBehavior = FillBehavior.Stop,
                 });
         }
     }
