@@ -1,0 +1,309 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+
+  <data name="AppName" xml:space="preserve"><value>Bat Player</value></data>
+  <data name="AddFiles" xml:space="preserve"><value>Add files</value></data>
+  <data name="AddFolder" xml:space="preserve"><value>Add folder</value></data>
+  <data name="Home" xml:space="preserve"><value>Home</value></data>
+  <data name="Library" xml:space="preserve"><value>My Music</value></data>
+  <data name="Playlists" xml:space="preserve"><value>Playlists</value></data>
+  <data name="ScApiExpired" xml:space="preserve"><value>Code expired — press Connect for a new one</value></data>
+  <data name="ScApiTimeout" xml:space="preserve"><value>Timed out — try again</value></data>
+  <data name="PlaylistNewName" xml:space="preserve"><value>New playlist</value></data>
+  <data name="Favorites" xml:space="preserve"><value>Favorites</value></data>
+  <data name="RecentlyAdded" xml:space="preserve"><value>Recently added</value></data>
+  <data name="RecentlyPlayed" xml:space="preserve"><value>Recently played</value></data>
+  <data name="Artists" xml:space="preserve"><value>Artists</value></data>
+  <data name="Equalizer" xml:space="preserve"><value>Equalizer</value></data>
+  <data name="Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Play" xml:space="preserve"><value>Play</value></data>
+  <data name="Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="Next" xml:space="preserve"><value>Next</value></data>
+  <data name="Previous" xml:space="preserve"><value>Previous</value></data>
+  <data name="Shuffle" xml:space="preserve"><value>Shuffle</value></data>
+  <data name="Repeat" xml:space="preserve"><value>Repeat</value></data>
+  <data name="RepeatOne" xml:space="preserve"><value>Repeat one</value></data>
+  <data name="RepeatAll" xml:space="preserve"><value>Repeat all</value></data>
+  <data name="Mute" xml:space="preserve"><value>Mute</value></data>
+  <data name="Favorite" xml:space="preserve"><value>Favorite</value></data>
+  <data name="AddToQueue" xml:space="preserve"><value>Add to queue</value></data>
+  <data name="AddToPlaylist" xml:space="preserve"><value>Add to playlist</value></data>
+  <data name="RemoveFromLibrary" xml:space="preserve"><value>Remove from library</value></data>
+  <data name="DeleteFromDisk" xml:space="preserve"><value>Delete file from disk</value></data>
+  <data name="CreatePlaylist" xml:space="preserve"><value>Create playlist</value></data>
+  <data name="EmptyLibrary" xml:space="preserve"><value>Add music to start listening</value></data>
+  <data name="EmptyLibraryHint" xml:space="preserve"><value>Drag files or folders into the window, or use the buttons in the header</value></data>
+  <data name="Tracks" xml:space="preserve"><value>tracks</value></data>
+  <data name="ColTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="ColArtist" xml:space="preserve"><value>Artist</value></data>
+  <data name="ColDuration" xml:space="preserve"><value>Duration</value></data>
+  <data name="ColFormat" xml:space="preserve"><value>Format</value></data>
+  <data name="ColQuality" xml:space="preserve"><value>Quality</value></data>
+  <data name="SettingsGeneral" xml:space="preserve"><value>General</value></data>
+  <data name="SettingsLibrary" xml:space="preserve"><value>Library</value></data>
+  <data name="SettingsPlayback" xml:space="preserve"><value>Playback</value></data>
+  <data name="SettingsInterface" xml:space="preserve"><value>Interface</value></data>
+  <data name="SettingsHotkeys" xml:space="preserve"><value>Hotkeys</value></data>
+  <data name="UnknownArtist" xml:space="preserve"><value>Unknown Artist</value></data>
+  <data name="UnknownAlbum" xml:space="preserve"><value>Unknown Album</value></data>
+  <data name="ErrorUnsupportedFormat" xml:space="preserve"><value>Unsupported format</value></data>
+  <data name="ErrorPlayback" xml:space="preserve"><value>Cannot start playback</value></data>
+  <data name="Minimize" xml:space="preserve"><value>Minimize</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="ClearSearch" xml:space="preserve"><value>Clear search</value></data>
+  <data name="NoTrack" xml:space="preserve"><value>No track</value></data>
+  <data name="PlayPause" xml:space="preserve"><value>Play / Pause</value></data>
+  <data name="TracksInLibrary" xml:space="preserve"><value>tracks in library</value></data>
+  <data name="Back" xml:space="preserve"><value>Back</value></data>
+  <data name="TracksCountFormat" xml:space="preserve"><value>{0} tracks</value></data>
+  <data name="Scanning" xml:space="preserve"><value>Scanning…</value></data>
+
+  <data name="NowPlayingHeader" xml:space="preserve"><value>NOW PLAYING</value></data>
+  <data name="FileInformation" xml:space="preserve"><value>File information</value></data>
+  <data name="Bitrate" xml:space="preserve"><value>Bitrate</value></data>
+  <data name="SampleRate" xml:space="preserve"><value>Sample rate</value></data>
+  <data name="Channels" xml:space="preserve"><value>Channels</value></data>
+  <data name="Lyrics" xml:space="preserve"><value>Lyrics</value></data>
+  <data name="LyricsUnavailable" xml:space="preserve"><value>Lyrics are not available in file metadata</value></data>
+  <data name="PlaylistDefaultName" xml:space="preserve"><value>Playlist</value></data>
+  <data name="PlaylistsEmpty" xml:space="preserve"><value>No playlists yet</value></data>
+    <data name="OpenCover" xml:space="preserve"><value>Show cover</value></data>
+  <data name="PlaylistsEmptyHint" xml:space="preserve"><value>Create your first playlist with the button in the header</value></data>
+
+  <data name="SettingsMaintenance" xml:space="preserve"><value>Maintenance</value></data>
+  <data name="SettingsStartWithWindows" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="SettingsStartWithWindowsDesc" xml:space="preserve"><value>Launch automatically at sign-in</value></data>
+  <data name="SettingsMinimizeToTray" xml:space="preserve"><value>Minimize to tray</value></data>
+  <data name="SettingsMinimizeToTrayDesc" xml:space="preserve"><value>Minimize button sends the window to the tray</value></data>
+  <data name="SettingsCloseToTray" xml:space="preserve"><value>Close to tray</value></data>
+  <data name="SettingsCloseToTrayDesc" xml:space="preserve"><value>Close button hides the window and keeps the music playing</value></data>
+  <data name="SettingsAutoResume" xml:space="preserve"><value>Restore last track</value></data>
+  <data name="SettingsAutoResumeDesc" xml:space="preserve"><value>Show the last track and position (paused) on startup</value></data>
+  <data name="SettingsConfirmDeletion" xml:space="preserve"><value>Confirm deletion</value></data>
+  <data name="SettingsConfirmDeletionDesc" xml:space="preserve"><value>Show a confirmation dialog before deleting files from disk</value></data>
+  <data name="SettingsScanOnStartup" xml:space="preserve"><value>Scan on startup</value></data>
+  <data name="SettingsScanOnStartupDesc" xml:space="preserve"><value>Automatically look for new tracks in folders</value></data>
+  <data name="SettingsMusicFolders" xml:space="preserve"><value>Music folders</value></data>
+  <data name="SettingsScanNow" xml:space="preserve"><value>Scan now</value></data>
+  <data name="SettingsAudioDevice" xml:space="preserve"><value>Audio output device</value></data>
+  <data name="SettingsAudioDeviceDesc" xml:space="preserve"><value>The system default device is used unless changed</value></data>
+  <data name="SettingsWasapi" xml:space="preserve"><value>WASAPI exclusive mode</value></data>
+  <data name="SettingsWasapiDesc" xml:space="preserve"><value>Bit-perfect output, minimal latency. Requires device support.</value></data>
+  <data name="SettingsGapless" xml:space="preserve"><value>Gapless playback</value></data>
+  <data name="SettingsGaplessDesc" xml:space="preserve"><value>Play without pauses between tracks</value></data>
+  <data name="SettingsCrossfade" xml:space="preserve"><value>Crossfade</value></data>
+  <data name="SettingsCrossfadeDesc" xml:space="preserve"><value>Smooth transition between tracks</value></data>
+  <data name="SettingsReplayGain" xml:space="preserve"><value>ReplayGain</value></data>
+  <data name="SettingsReplayGainDesc" xml:space="preserve"><value>Automatic volume correction from tags</value></data>
+  <data name="SettingsSmoothVolume" xml:space="preserve"><value>Smooth volume changes</value></data>
+  <data name="SettingsSmoothVolumeDesc" xml:space="preserve"><value>Prevents clicks when adjusting volume</value></data>
+  <data name="SettingsAudioInfo" xml:space="preserve"><value>ℹ The player does not improve audio quality. It reproduces the original material as accurately as possible, without compression or unnecessary normalization. Lossless formats (FLAC, WAV, ALAC) are output bit-perfect when WASAPI exclusive is enabled.</value></data>
+  <data name="SettingsSidebar" xml:space="preserve"><value>Sidebar</value></data>
+  <data name="SettingsSidebarDesc" xml:space="preserve"><value>Show navigation on the left</value></data>
+  <data name="SettingsAnimations" xml:space="preserve"><value>Animations</value></data>
+  <data name="SettingsAnimationsDesc" xml:space="preserve"><value>Smooth transitions and effects</value></data>
+  <data name="SettingsLanguage" xml:space="preserve"><value>Language</value></data>
+  <data name="SettingsLanguageDesc" xml:space="preserve"><value>Applied immediately</value></data>
+  <data name="SettingsGlobalHotkeys" xml:space="preserve"><value>Global hotkeys</value></data>
+  <data name="SettingsGlobalHotkeysDesc" xml:space="preserve"><value>Work even when the window is inactive</value></data>
+  <data name="SettingsInAppHotkeys" xml:space="preserve"><value>In-app hotkeys:</value></data>
+  <data name="HotkeyNextTrack" xml:space="preserve"><value>Next track</value></data>
+  <data name="HotkeyPrevTrack" xml:space="preserve"><value>Previous track</value></data>
+  <data name="SettingsClearCoverCache" xml:space="preserve"><value>Clear cover cache</value></data>
+  <data name="DefaultDevice" xml:space="preserve"><value>(System default)</value></data>
+
+  <data name="FileFilterAudio" xml:space="preserve"><value>Audio files</value></data>
+  <data name="FileFilterAll" xml:space="preserve"><value>All files</value></data>
+
+  <data name="EqSubtitle" xml:space="preserve"><value>Parametric equalizer</value></data>
+  <data name="EqSaveAs" xml:space="preserve"><value>Save as:</value></data>
+  <data name="EqDeletePresetDesc" xml:space="preserve"><value>Deletes the selected custom preset (built-in presets cannot be deleted).</value></data>
+  <data name="EqReset" xml:space="preserve"><value>Reset</value></data>
+  <data name="EqResetDesc" xml:space="preserve"><value>Flattens all bands and preamp back to a straight line.</value></data>
+  <data name="EqEnable" xml:space="preserve"><value>Enable</value></data>
+  <data name="EqCurveHint" xml:space="preserve"><value>Click the graph to place a node and drag it; double-click a node to remove it; right-click a node for the menu (type, audition harmonic, delete); wheel over a node sets width (Q), Ctrl+wheel sets gain; wheel over a cut sets its slope 12/18/24/30/36/48 dB/oct; wheel over the graph compresses or stretches the whole curve; Alt+drag scales the curve; Shift locks movement to one axis.</value></data>
+  <data name="EqLowCut" xml:space="preserve"><value>Low cut</value></data>
+  <data name="EqHighCut" xml:space="preserve"><value>High cut</value></data>
+  <data name="EqBell" xml:space="preserve"><value>Bell</value></data>
+  <data name="EqSolo" xml:space="preserve"><value>Audition harmonic</value></data>
+  <data name="EqDelete" xml:space="preserve"><value>Delete node</value></data>
+  <data name="EqPreset" xml:space="preserve"><value>Preset:</value></data>
+  <data name="EqPreamp" xml:space="preserve"><value>Preamp</value></data>
+  <data name="EqPreampDesc" xml:space="preserve"><value>Adjusts the overall volume before the equalizer. Protects against clipping.</value></data>
+  <data name="EqSave" xml:space="preserve"><value>Save</value></data>
+  <data name="ShowWindow" xml:space="preserve"><value>Show window</value></data>
+  <data name="ShowWindowDesc" xml:space="preserve"><value>Open Bat Player</value></data>
+  <data name="Exit" xml:space="preserve"><value>Exit</value></data>
+  <data name="ExitDesc" xml:space="preserve"><value>Fully close Bat Player</value></data>
+
+  <data name="ErrorRestoreTrack" xml:space="preserve"><value>Failed to restore the last track</value></data>
+  <data name="ErrorPlaybackStopped" xml:space="preserve"><value>Playback stopped due to an error</value></data>
+  <data name="ErrorWindowInit" xml:space="preserve"><value>Window initialization failed</value></data>
+  <data name="ErrorStartup" xml:space="preserve"><value>Failed to start the application</value></data>
+
+  <!-- ===== SoundCloud ===== -->
+  <data name="SoundCloud" xml:space="preserve"><value>SoundCloud</value></data>
+  <data name="SoundCloudLikedCounter" xml:space="preserve"><value>liked tracks</value></data>
+  <data name="LastSynced" xml:space="preserve"><value>Last synced</value></data>
+  <data name="YmAccount" xml:space="preserve"><value>Account</value></data>
+  <data name="SoundCloudNever" xml:space="preserve"><value>never</value></data>
+  <data name="ConnectSoundCloud" xml:space="preserve"><value>Connect</value></data>
+  <data name="DisconnectSoundCloud" xml:space="preserve"><value>Disconnect</value></data>
+  <data name="SyncNow" xml:space="preserve"><value>Sync now</value></data>
+  <data name="ScApiPairing" xml:space="preserve"><value>Pairing...</value></data>
+  <data name="NotConnected" xml:space="preserve"><value>Not connected</value></data>
+  <data name="ConnectedAs" xml:space="preserve"><value>Connected as</value></data>
+  <data name="SoundCloudDrmProtected" xml:space="preserve"><value>SoundCloud serves this track only as a DRM-protected (Widevine) stream — third-party players cannot play it</value></data>
+  <data name="SoundCloudSessionExpired" xml:space="preserve"><value>SoundCloud session is not valid — reconnect your account in Settings</value></data>
+  <data name="SettingsSoundCloud" xml:space="preserve"><value>SoundCloud account</value></data>
+  <data name="SettingsSoundCloudDesc" xml:space="preserve"><value>ℹ Liked tracks are synced as metadata only — audio files are never downloaded. Tracks matched with the local library play offline, the rest stream online.</value></data>
+  <data name="SoundCloudProxy" xml:space="preserve"><value>Proxy</value></data>
+  <data name="SoundCloudProxyHint" xml:space="preserve"><value>Proxy (auto / off / socks5://host:port)</value></data>
+  <data name="SoundCloudWebviewMissing" xml:space="preserve"><value>Signing in to SoundCloud requires the WebView2 Runtime (Microsoft Edge WebView2). Install it from the Microsoft website and try again.</value></data>
+  <data name="SoundCloudSyncFailed" xml:space="preserve"><value>SoundCloud sync failed</value></data>
+  <data name="ZapretSearching" xml:space="preserve"><value>Bypassing SoundCloud blocking: looking for a working strategy…</value></data>
+  <data name="ZapretStrategy" xml:space="preserve"><value>Bypass: strategy {0}/{1}…</value></data>
+  <data name="ZapretFound" xml:space="preserve"><value>Bypass found — {0}</value></data>
+  <data name="ZapretFailed" xml:space="preserve"><value>Bypass failed — SoundCloud unavailable without VPN</value></data>
+  <data name="ZapretNeedUac" xml:space="preserve"><value>Bypass needs admin rights (UAC request declined)</value></data>
+  <data name="SettingsSoundCloudSwitch" xml:space="preserve"><value>Switch account</value></data>
+  <data name="SettingsSoundCloudSwitchHint" xml:space="preserve"><value>Sign out on the SoundCloud site and sign in with another account</value></data>
+  <data name="SoundCloudSyncing" xml:space="preserve"><value>Syncing SoundCloud likes…</value></data>
+  <data name="SoundCloudDownloading" xml:space="preserve"><value>Loading track…</value></data>
+  <data name="SoundCloudUnavailable" xml:space="preserve"><value>Track unavailable for streaming</value></data>
+  <data name="SoundCloudLocalMatch" xml:space="preserve"><value>Available in local library</value></data>
+  <data name="SoundCloudEmpty" xml:space="preserve"><value>No SoundCloud likes yet</value></data>
+  <data name="SoundCloudEmptyHint" xml:space="preserve"><value>Connect your SoundCloud account in Settings and sync your likes.</value></data>
+  <data name="SoundCloudLoginTitle" xml:space="preserve"><value>Sign in to SoundCloud</value></data>
+  <data name="SoundCloudLoginHint" xml:space="preserve"><value>Sign in with your SoundCloud account — the window closes automatically after login. The session is stored only on this computer.</value></data>
+    <!-- ===== VK Music ===== -->
+  <data name="VkMusic" xml:space="preserve"><value>VK Music</value></data>
+  <data name="VkWebviewMissing" xml:space="preserve"><value>Signing in to VK requires the WebView2 Runtime (Microsoft Edge WebView2). Install it from the Microsoft website and try again.</value></data>
+  <data name="VkAudioPermissionDenied" xml:space="preserve"><value>VK did not grant access to your audio library — music playback via VK is unavailable.</value></data>
+  <data name="VkSyncFailed" xml:space="preserve"><value>VK sync failed</value></data>
+  <data name="VkSyncing" xml:space="preserve"><value>Syncing VK music…</value></data>
+  <data name="VkDownloading" xml:space="preserve"><value>Loading track…</value></data>
+  <data name="VkNever" xml:space="preserve"><value>never</value></data>
+  <data name="VkCounter" xml:space="preserve"><value>tracks</value></data>
+  <data name="VkEmpty" xml:space="preserve"><value>No VK music yet</value></data>
+  <data name="VkEmptyHint" xml:space="preserve"><value>Connect your VK account in Settings and sync your music library.</value></data>
+  <data name="VkLoginTitle" xml:space="preserve"><value>Sign in to VK</value></data>
+  <data name="VkLoginHint" xml:space="preserve"><value>Sign in with your VK account — the window closes automatically after login.</value></data>
+  <data name="VkLocalMatch" xml:space="preserve"><value>Available in local library</value></data>
+  <data name="VkSessionExpired" xml:space="preserve"><value>VK session expired — connect again</value></data>
+  <data name="VkConnected" xml:space="preserve"><value>Connected</value></data>
+  <data name="SettingsVkDesc" xml:space="preserve"><value>ℹ Your VK music library is synced as metadata only — audio files are never downloaded. Tracks matched with the local library play offline, the rest stream online.</value></data>
+    <!-- ===== Yandex Music ===== -->
+  <data name="YandexMusic" xml:space="preserve"><value>Yandex Music</value></data>
+  <data name="YmConnect" xml:space="preserve"><value>Connect</value></data>
+  <data name="YmDisconnect" xml:space="preserve"><value>Disconnect</value></data>
+  <data name="YmNotConnected" xml:space="preserve"><value>Not connected</value></data>
+  <data name="YmConnectedAs" xml:space="preserve"><value>Connected as</value></data>
+  <data name="YmSyncNow" xml:space="preserve"><value>Sync now</value></data>
+  <data name="YmDeviceIntro" xml:space="preserve"><value>Open the confirmation page in your browser and enter this code.</value></data>
+  <data name="YmDeviceCodeHint" xml:space="preserve"><value>The code is valid for a few minutes — after confirmation this window closes itself. The token is stored only on this computer.</value></data>
+  <data name="YmDeviceOpen" xml:space="preserve"><value>Open page and enter code</value></data>
+  <data name="YmDeviceRequesting" xml:space="preserve"><value>Getting a code…</value></data>
+  <data name="YmDeviceWaiting" xml:space="preserve"><value>Waiting for confirmation…</value></data>
+  <data name="YmDeviceConfirmed" xml:space="preserve"><value>Confirmed! Saving token…</value></data>
+  <data name="YmDeviceFailed" xml:space="preserve"><value>Couldn't get a code — check your internet connection.</value></data>
+  <data name="YmDeviceRetry" xml:space="preserve"><value>Try again</value></data>
+  <data name="YmSyncFailed" xml:space="preserve"><value>Yandex Music sync failed</value></data>
+  <data name="YmSyncing" xml:space="preserve"><value>Syncing Yandex Music likes…</value></data>
+  <data name="YmDownloading" xml:space="preserve"><value>Loading track…</value></data>
+  <data name="YmNever" xml:space="preserve"><value>never</value></data>
+  <data name="YmCounter" xml:space="preserve"><value>tracks</value></data>
+  <data name="YmEmpty" xml:space="preserve"><value>No Yandex Music likes yet</value></data>
+  <data name="YmEmptyHint" xml:space="preserve"><value>Connect your Yandex Music account in Settings and sync your likes.</value></data>
+  <data name="YmLoginTitle" xml:space="preserve"><value>Sign in to Yandex Music</value></data>
+  <data name="YmAuthDenied" xml:space="preserve"><value>Yandex access denied — try again</value></data>
+  <data name="YmLocalMatch" xml:space="preserve"><value>Available in local library</value></data>
+  <data name="YmSessionExpired" xml:space="preserve"><value>Yandex Music session expired — connect again</value></data>
+  <data name="YmConnected" xml:space="preserve"><value>Connected</value></data>
+  <data name="YmTrackUnavailable" xml:space="preserve"><value>Track unavailable on your Yandex Music plan</value></data>
+  <data name="SettingsYm" xml:space="preserve"><value>Yandex Music account</value></data>
+  <data name="SettingsYmDesc" xml:space="preserve"><value>ℹ Your Yandex Music likes are synced as metadata only — audio files are never downloaded. Tracks matched with the local library play offline, the rest stream online.</value></data>
+<data name="Downloads" xml:space="preserve"><value>Local</value></data>
+  <data name="DownloadsEmpty" xml:space="preserve"><value>No local tracks yet</value></data>
+  <data name="DownloadsEmptyHint" xml:space="preserve"><value>Add music files from your computer — they will appear here.</value></data>
+  <data name="DownloadsHint" xml:space="preserve"><value>Local tracks added from your computer</value></data>
+  <data name="StatsTitle" xml:space="preserve"><value>Statistics</value></data>
+  <data name="StatsDay" xml:space="preserve"><value>Day</value></data>
+  <data name="StatsWeek" xml:space="preserve"><value>Week</value></data>
+  <data name="StatsMonth" xml:space="preserve"><value>Month</value></data>
+  <data name="StatsYear" xml:space="preserve"><value>Year</value></data>
+  <data name="StatsAll" xml:space="preserve"><value>All time</value></data>
+  <data name="StatsUniqueTracks" xml:space="preserve"><value>Unique tracks</value></data>
+  <data name="StatsPlays" xml:space="preserve"><value>Plays</value></data>
+  <data name="StatsHours" xml:space="preserve"><value>Hours of music</value></data>
+  <data name="StatsMostReplayed" xml:space="preserve"><value>Most replayed:</value></data>
+  <data name="StatsNone" xml:space="preserve"><value>—</value></data>
+  <data name="StatsTopArtists" xml:space="preserve"><value>Top 10 artists</value></data>
+  <data name="StatsTopTracks" xml:space="preserve"><value>Top 10 tracks</value></data>
+  <data name="ToggleGridDensity" xml:space="preserve"><value>Toggle card grid density (4/8 columns)</value></data>
+  <data name="SettingsTheme" xml:space="preserve"><value>Theme</value></data>
+  <data name="ThemeStandard" xml:space="preserve"><value>Standard</value></data>
+  <data name="ThemeDarker" xml:space="preserve"><value>Extra dark</value></data>
+  <data name="ThemeAccent" xml:space="preserve"><value>Accent color</value></data>
+  <data name="AccentDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="AccentBlue" xml:space="preserve"><value>Blue</value></data>
+  <data name="AccentGreen" xml:space="preserve"><value>Green</value></data>
+  <data name="AccentPurple" xml:space="preserve"><value>Purple</value></data>
+  <data name="AccentRed" xml:space="preserve"><value>Red</value></data>
+  <data name="AccentOrange" xml:space="preserve"><value>Orange</value></data>
+  <data name="SettingsCompactGrid" xml:space="preserve"><value>Compact card grid (8 per row)</value></data>
+  <data name="SettingsCompactGridDesc" xml:space="preserve"><value>More cards fit per row on library pages</value></data>
+  <data name="BackgroundEnable" xml:space="preserve"><value>Enable GIF background</value></data>
+  <data name="BackgroundSelect" xml:space="preserve"><value>Choose GIF…</value></data>
+  <data name="BackgroundOpacity" xml:space="preserve"><value>Background visibility</value></data>
+  <data name="BackgroundHint" xml:space="preserve"><value>Applies after restart. Large GIFs are decoded in the background thread; very heavy files may still affect performance.</value></data>
+  <data name="SettingsCoverShadows" xml:space="preserve"><value>Soft shadows under covers</value></data>
+  <data name="SettingsCoverShadowsDesc" xml:space="preserve"><value>Applies after restart</value></data>
+  <data name="BackgroundBlurEnable" xml:space="preserve"><value>Blur background</value></data>
+  <data name="BackgroundBlurDesc" xml:space="preserve"><value>Blurs the GIF/video background</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Light</value></data>
+  <data name="SettingsNormalizeVolume" xml:space="preserve"><value>Normalize volume</value></data>
+  <data name="SettingsApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="SettingsApplyDesc" xml:space="preserve"><value>Apply theme, shadows and background now (music keeps playing)</value></data>
+  <!-- ===== Spotify free import (без Web API) ===== -->
+  <data name="SpotifyImportButton" xml:space="preserve"><value>Import file</value></data>
+  <data name="SpotifyImporting" xml:space="preserve"><value>Importing Spotify library…</value></data>
+  <data name="SpotifySyncing" xml:space="preserve"><value>Syncing Spotify likes…</value></data>
+  <data name="SpotifyImportFailed" xml:space="preserve"><value>Spotify import failed</value></data>
+  <data name="SpotifyImportNoTracks" xml:space="preserve"><value>No Spotify tracks found in the selected file — use the &quot;Download your data&quot; ZIP from spotify.com or a playlist CSV.</value></data>
+  <data name="SpotifyImportDone" xml:space="preserve"><value>Spotify library imported: {0} tracks</value></data>
+  <data name="SpotifyEmptyHint" xml:space="preserve"><value>Connect your account in the header to sync Liked Songs via the Web API (Spotify requires Premium for it since Feb 2026) — or click &quot;Import file&quot; and pick your free data export: spotify.com → Account → Privacy settings → Download your data.</value></data>
+  <data name="WaveNav" xml:space="preserve"><value>My Mix</value></data>
+  <data name="WaveTitle" xml:space="preserve"><value>My Mix</value></data>
+  <data name="WaveSubtitle" xml:space="preserve"><value>alpha test of recommendations — works when Yandex Music is connected</value></data>
+  <data name="WaveRefresh" xml:space="preserve"><value>Refresh mix</value></data>
+  <data name="WaveGenerating" xml:space="preserve"><value>building your mix…</value></data>
+  <data name="WaveGeneratingLong" xml:space="preserve"><value>Building your mix from your music — the first run can take up to a minute</value></data>
+  <data name="WaveCounter" xml:space="preserve"><value>tracks</value></data>
+  <data name="WaveEmpty" xml:space="preserve"><value>Your mix is empty</value></data>
+  <data name="WaveEmptyHint" xml:space="preserve"><value>The mix is built from your music: Yandex Music likes, VK and SoundCloud tracks, and your local library. Connect Yandex Music in Settings — its similarity graph picks the candidates.</value></data>
+  <data name="WaveNotConnected" xml:space="preserve"><value>Connect Yandex Music in Settings — the mix needs it</value></data>
+  <data name="WaveFailed" xml:space="preserve"><value>Could not build the mix — try again</value></data>
+</root>

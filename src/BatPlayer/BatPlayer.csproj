@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>BatPlayer</RootNamespace>
+    <AssemblyName>BatPlayer</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <Version>1.0.0.0</Version>
+    <Company>Bat Player</Company>
+    <Product>Bat Player</Product>
+    <AssemblyTitle>Bat Player</AssemblyTitle>
+    <Copyright>© 2026 Bat Player</Copyright>
+    <Description>Native minimalist music player for Windows</Description>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BunLabs.NAudio.Flac" Version="2.0.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Dapper" Version="2.1.35" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BatPlayer.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ExcludeFromSingleFile: инструменты должны лежать РЯДОМ с BatPlayer.exe
+         (SDK иначе бандлит их внутрь exe, откуда путь BaseDirectory\Tools не резолвится) -->
+    <None Include="Tools/ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- Антиблокировка SoundCloud (zapret/winws + WinDivert): запуск только при
+         недоступности всех транспортов, с повышением прав (UAC). Хостлист —
+         только домены SoundCloud, остальной трафик не затрагивается. -->
+    <None Include="Tools/zapret/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Logos\soundcloud.png" />
+    <Resource Include="Resources\Logos\vk.png" />
+    <Resource Include="Resources\Logos\yandex.png" />
+    <Resource Include="Resources\Logos\spotify.png" />
+    <Resource Include="Resources\Logos\soundcloud.grey.png" />
+    <Resource Include="Resources\Logos/vk.grey.png" />
+    <Resource Include="Resources\Logos/yandex.grey.png" />
+    <Resource Include="Resources\Logos/spotify.grey.png" />
+    <Resource Include="Resources\batlogo.png" />
+    <Resource Include="Resources\batlogo_white.png" />
+    <Resource Include="Resources\batlogo_gray.png" />
+    <Resource Include="Resources\batlogo_dark.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="app.manifest">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

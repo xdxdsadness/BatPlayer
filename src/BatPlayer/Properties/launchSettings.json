@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "BatPlayer (Debug)": {
+      "commandName": "Project",
+      "commandLineArgs": "",
+      "workingDirectory": "."
+    },
+    "BatPlayer (with --reset)": {
+      "commandName": "Project",
+      "commandLineArgs": "--reset-settings"
+    }
+  }
+}

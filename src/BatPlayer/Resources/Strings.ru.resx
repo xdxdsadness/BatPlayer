@@ -1,0 +1,309 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+
+  <data name="AppName" xml:space="preserve"><value>Bat Player</value></data>
+  <data name="AddFiles" xml:space="preserve"><value>Добавить файлы</value></data>
+  <data name="AddFolder" xml:space="preserve"><value>Добавить папку</value></data>
+  <data name="Home" xml:space="preserve"><value>Главная</value></data>
+  <data name="Library" xml:space="preserve"><value>Моя музыка</value></data>
+  <data name="Playlists" xml:space="preserve"><value>Плейлисты</value></data>
+  <data name="ScApiExpired" xml:space="preserve"><value>Код истёк — нажмите Подключить для нового</value></data>
+  <data name="ScApiTimeout" xml:space="preserve"><value>Время вышло — попробуйте ещё раз</value></data>
+  <data name="PlaylistNewName" xml:space="preserve"><value>Новый плейлист</value></data>
+  <data name="Favorites" xml:space="preserve"><value>Любимые</value></data>
+  <data name="RecentlyAdded" xml:space="preserve"><value>Недавно добавленные</value></data>
+  <data name="RecentlyPlayed" xml:space="preserve"><value>Недавно прослушанные</value></data>
+  <data name="Artists" xml:space="preserve"><value>Исполнители</value></data>
+  <data name="Equalizer" xml:space="preserve"><value>Эквалайзер</value></data>
+  <data name="Settings" xml:space="preserve"><value>Настройки</value></data>
+  <data name="Search" xml:space="preserve"><value>Поиск</value></data>
+  <data name="Play" xml:space="preserve"><value>Воспроизвести</value></data>
+  <data name="Pause" xml:space="preserve"><value>Пауза</value></data>
+  <data name="Next" xml:space="preserve"><value>Следующий</value></data>
+  <data name="Previous" xml:space="preserve"><value>Предыдущий</value></data>
+  <data name="Shuffle" xml:space="preserve"><value>Перемешать</value></data>
+  <data name="Repeat" xml:space="preserve"><value>Повтор</value></data>
+  <data name="RepeatOne" xml:space="preserve"><value>Повтор одного</value></data>
+  <data name="RepeatAll" xml:space="preserve"><value>Повтор всех</value></data>
+  <data name="Mute" xml:space="preserve"><value>Без звука</value></data>
+  <data name="Favorite" xml:space="preserve"><value>В избранное</value></data>
+  <data name="AddToQueue" xml:space="preserve"><value>Добавить в очередь</value></data>
+  <data name="AddToPlaylist" xml:space="preserve"><value>Добавить в плейлист</value></data>
+  <data name="RemoveFromLibrary" xml:space="preserve"><value>Удалить из библиотеки</value></data>
+  <data name="DeleteFromDisk" xml:space="preserve"><value>Удалить файл с диска</value></data>
+  <data name="CreatePlaylist" xml:space="preserve"><value>Создать плейлист</value></data>
+  <data name="EmptyLibrary" xml:space="preserve"><value>Добавьте музыку, чтобы начать прослушивание</value></data>
+  <data name="EmptyLibraryHint" xml:space="preserve"><value>Перетащите файлы или папки в окно, либо воспользуйтесь кнопками в шапке</value></data>
+  <data name="Tracks" xml:space="preserve"><value>треков</value></data>
+  <data name="ColTitle" xml:space="preserve"><value>Название</value></data>
+  <data name="ColArtist" xml:space="preserve"><value>Исполнитель</value></data>
+  <data name="ColDuration" xml:space="preserve"><value>Длительность</value></data>
+  <data name="ColFormat" xml:space="preserve"><value>Формат</value></data>
+  <data name="ColQuality" xml:space="preserve"><value>Качество</value></data>
+  <data name="SettingsGeneral" xml:space="preserve"><value>Основные</value></data>
+  <data name="SettingsLibrary" xml:space="preserve"><value>Библиотека</value></data>
+  <data name="SettingsPlayback" xml:space="preserve"><value>Воспроизведение</value></data>
+  <data name="SettingsInterface" xml:space="preserve"><value>Интерфейс</value></data>
+  <data name="SettingsHotkeys" xml:space="preserve"><value>Горячие клавиши</value></data>
+  <data name="UnknownArtist" xml:space="preserve"><value>Неизвестный исполнитель</value></data>
+  <data name="UnknownAlbum" xml:space="preserve"><value>Неизвестный альбом</value></data>
+  <data name="ErrorUnsupportedFormat" xml:space="preserve"><value>Формат не поддерживается</value></data>
+  <data name="ErrorPlayback" xml:space="preserve"><value>Невозможно начать воспроизведение</value></data>
+  <data name="Minimize" xml:space="preserve"><value>Свернуть</value></data>
+  <data name="Close" xml:space="preserve"><value>Закрыть</value></data>
+  <data name="ClearSearch" xml:space="preserve"><value>Очистить поиск</value></data>
+  <data name="NoTrack" xml:space="preserve"><value>Нет трека</value></data>
+  <data name="PlayPause" xml:space="preserve"><value>Пауза / Воспроизвести</value></data>
+  <data name="TracksInLibrary" xml:space="preserve"><value>треков в библиотеке</value></data>
+  <data name="Back" xml:space="preserve"><value>Назад</value></data>
+  <data name="TracksCountFormat" xml:space="preserve"><value>{0} треков</value></data>
+  <data name="Scanning" xml:space="preserve"><value>Сканирование…</value></data>
+
+  <data name="NowPlayingHeader" xml:space="preserve"><value>СЕЙЧАС ИГРАЕТ</value></data>
+  <data name="FileInformation" xml:space="preserve"><value>Информация о файле</value></data>
+  <data name="Bitrate" xml:space="preserve"><value>Битрейт</value></data>
+  <data name="SampleRate" xml:space="preserve"><value>Частота</value></data>
+  <data name="Channels" xml:space="preserve"><value>Каналы</value></data>
+  <data name="Lyrics" xml:space="preserve"><value>Текст песни</value></data>
+  <data name="LyricsUnavailable" xml:space="preserve"><value>Текст недоступен в метаданных файла</value></data>
+  <data name="PlaylistDefaultName" xml:space="preserve"><value>Плейлист</value></data>
+  <data name="PlaylistsEmpty" xml:space="preserve"><value>Плейлистов пока нет</value></data>
+    <data name="OpenCover" xml:space="preserve"><value>Показать обложку</value></data>
+  <data name="PlaylistsEmptyHint" xml:space="preserve"><value>Создайте первый плейлист кнопкой в шапке</value></data>
+
+  <data name="SettingsMaintenance" xml:space="preserve"><value>Обслуживание</value></data>
+  <data name="SettingsStartWithWindows" xml:space="preserve"><value>Запускать вместе с Windows</value></data>
+  <data name="SettingsStartWithWindowsDesc" xml:space="preserve"><value>Автозапуск при входе в систему</value></data>
+  <data name="SettingsMinimizeToTray" xml:space="preserve"><value>Сворачивать в трей</value></data>
+  <data name="SettingsMinimizeToTrayDesc" xml:space="preserve"><value>Минимизация вместо сворачивания в панель задач</value></data>
+  <data name="SettingsCloseToTray" xml:space="preserve"><value>Закрывать в трей</value></data>
+  <data name="SettingsCloseToTrayDesc" xml:space="preserve"><value>Кнопка закрытия скрывает окно, музыка продолжает играть</value></data>
+  <data name="SettingsAutoResume" xml:space="preserve"><value>Восстанавливать последний трек</value></data>
+  <data name="SettingsAutoResumeDesc" xml:space="preserve"><value>При запуске показать последний трек и позицию (на паузе)</value></data>
+  <data name="SettingsConfirmDeletion" xml:space="preserve"><value>Подтверждать удаление</value></data>
+  <data name="SettingsConfirmDeletionDesc" xml:space="preserve"><value>Диалог подтверждения при удалении файлов с диска</value></data>
+  <data name="SettingsScanOnStartup" xml:space="preserve"><value>Сканировать при запуске</value></data>
+  <data name="SettingsScanOnStartupDesc" xml:space="preserve"><value>Автоматически искать новые треки в папках</value></data>
+  <data name="SettingsMusicFolders" xml:space="preserve"><value>Папки с музыкой</value></data>
+  <data name="SettingsScanNow" xml:space="preserve"><value>Сканировать сейчас</value></data>
+  <data name="SettingsAudioDevice" xml:space="preserve"><value>Аудиоустройство вывода</value></data>
+  <data name="SettingsAudioDeviceDesc" xml:space="preserve"><value>По умолчанию используется системное устройство</value></data>
+  <data name="SettingsWasapi" xml:space="preserve"><value>WASAPI эксклюзивный режим</value></data>
+  <data name="SettingsWasapiDesc" xml:space="preserve"><value>Бит-perfect вывод, минимальная задержка. Требует поддержки устройством.</value></data>
+  <data name="SettingsGapless" xml:space="preserve"><value>Gapless-воспроизведение</value></data>
+  <data name="SettingsGaplessDesc" xml:space="preserve"><value>Воспроизведение без пауз между треками</value></data>
+  <data name="SettingsCrossfade" xml:space="preserve"><value>Кроссфейд</value></data>
+  <data name="SettingsCrossfadeDesc" xml:space="preserve"><value>Плавный переход между треками</value></data>
+  <data name="SettingsReplayGain" xml:space="preserve"><value>ReplayGain</value></data>
+  <data name="SettingsReplayGainDesc" xml:space="preserve"><value>Автоматическая корректировка громкости по тегам</value></data>
+  <data name="SettingsSmoothVolume" xml:space="preserve"><value>Плавное изменение громкости</value></data>
+  <data name="SettingsSmoothVolumeDesc" xml:space="preserve"><value>Защита от щелчков при регулировке</value></data>
+  <data name="SettingsAudioInfo" xml:space="preserve"><value>ℹ Плеер не улучшает качество аудиофайла. Он максимально корректно воспроизводит исходный материал без сжатия или ненужной нормализации. Lossless-форматы (FLAC, WAV, ALAC) выводятся бит-perfect при включении WASAPI exclusive.</value></data>
+  <data name="SettingsSidebar" xml:space="preserve"><value>Боковая панель</value></data>
+  <data name="SettingsSidebarDesc" xml:space="preserve"><value>Показывать навигацию слева</value></data>
+  <data name="SettingsAnimations" xml:space="preserve"><value>Анимации</value></data>
+  <data name="SettingsAnimationsDesc" xml:space="preserve"><value>Плавные переходы и эффекты</value></data>
+  <data name="SettingsLanguage" xml:space="preserve"><value>Язык интерфейса</value></data>
+  <data name="SettingsLanguageDesc" xml:space="preserve"><value>Применяется сразу</value></data>
+  <data name="SettingsGlobalHotkeys" xml:space="preserve"><value>Глобальные горячие клавиши</value></data>
+  <data name="SettingsGlobalHotkeysDesc" xml:space="preserve"><value>Работают даже когда окно неактивно</value></data>
+  <data name="SettingsInAppHotkeys" xml:space="preserve"><value>Внутренние горячие клавиши:</value></data>
+  <data name="HotkeyNextTrack" xml:space="preserve"><value>Следующий трек</value></data>
+  <data name="HotkeyPrevTrack" xml:space="preserve"><value>Предыдущий трек</value></data>
+  <data name="SettingsClearCoverCache" xml:space="preserve"><value>Очистить кэш обложек</value></data>
+  <data name="DefaultDevice" xml:space="preserve"><value>(Системное по умолчанию)</value></data>
+
+  <data name="FileFilterAudio" xml:space="preserve"><value>Аудио файлы</value></data>
+  <data name="FileFilterAll" xml:space="preserve"><value>Все файлы</value></data>
+
+  <data name="EqSubtitle" xml:space="preserve"><value>Параметрический эквалайзер</value></data>
+  <data name="EqSaveAs" xml:space="preserve"><value>Сохранить как:</value></data>
+  <data name="EqDeletePresetDesc" xml:space="preserve"><value>Удаляет выбранный пользовательский пресет (встроенные удалить нельзя).</value></data>
+  <data name="EqReset" xml:space="preserve"><value>Сбросить</value></data>
+  <data name="EqResetDesc" xml:space="preserve"><value>Возвращает все полосы и предусиление кривой к ровной линии.</value></data>
+  <data name="EqEnable" xml:space="preserve"><value>Включить</value></data>
+  <data name="EqCurveHint" xml:space="preserve"><value>Клик по графику — поставить точку и тянуть; двойной клик по точке — удалить; ПКМ по точке — меню (тип, слушать гармонику, удалить); колесо над точкой — ширина (Q), Ctrl+колесо — усиление; колесо над срезом — крутизна 12/18/24/30/36/48 дБ/окт; колесо по графику — сжать/растянуть всю кривую; Alt+перетаскивание — масштаб кривой; Shift — движение по одной оси.</value></data>
+  <data name="EqLowCut" xml:space="preserve"><value>НЧ-срез</value></data>
+  <data name="EqHighCut" xml:space="preserve"><value>ВЧ-срез</value></data>
+  <data name="EqBell" xml:space="preserve"><value>Bell</value></data>
+  <data name="EqSolo" xml:space="preserve"><value>Слушать гармонику</value></data>
+  <data name="EqDelete" xml:space="preserve"><value>Удалить точку</value></data>
+  <data name="EqPreset" xml:space="preserve"><value>Пресет:</value></data>
+  <data name="EqPreamp" xml:space="preserve"><value>Предусиление</value></data>
+  <data name="EqPreampDesc" xml:space="preserve"><value>Регулировка общей громкости до эквалайзера. Защищает от клиппинга.</value></data>
+  <data name="EqSave" xml:space="preserve"><value>Сохранить</value></data>
+  <data name="ShowWindow" xml:space="preserve"><value>Показать окно</value></data>
+  <data name="ShowWindowDesc" xml:space="preserve"><value>Открыть окно Bat Player</value></data>
+  <data name="Exit" xml:space="preserve"><value>Выход</value></data>
+  <data name="ExitDesc" xml:space="preserve"><value>Полностью закрыть Bat Player</value></data>
+
+  <data name="ErrorRestoreTrack" xml:space="preserve"><value>Не удалось восстановить последний трек</value></data>
+  <data name="ErrorPlaybackStopped" xml:space="preserve"><value>Воспроизведение остановлено из-за ошибки</value></data>
+  <data name="ErrorWindowInit" xml:space="preserve"><value>Ошибка инициализации окна</value></data>
+  <data name="ErrorStartup" xml:space="preserve"><value>Не удалось запустить приложение</value></data>
+
+  <!-- ===== SoundCloud ===== -->
+  <data name="SoundCloud" xml:space="preserve"><value>SoundCloud</value></data>
+  <data name="SoundCloudLikedCounter" xml:space="preserve"><value>треков с лайком</value></data>
+  <data name="LastSynced" xml:space="preserve"><value>Обновлено</value></data>
+  <data name="YmAccount" xml:space="preserve"><value>Аккаунт</value></data>
+  <data name="SoundCloudNever" xml:space="preserve"><value>никогда</value></data>
+  <data name="ConnectSoundCloud" xml:space="preserve"><value>Подключить</value></data>
+  <data name="DisconnectSoundCloud" xml:space="preserve"><value>Отключить</value></data>
+  <data name="SyncNow" xml:space="preserve"><value>Синхронизировать</value></data>
+  <data name="ScApiPairing" xml:space="preserve"><value>Ожидание подтверждения...</value></data>
+  <data name="NotConnected" xml:space="preserve"><value>Не подключено</value></data>
+  <data name="ConnectedAs" xml:space="preserve"><value>Подключено как</value></data>
+  <data name="SoundCloudDrmProtected" xml:space="preserve"><value>SoundCloud отдаёт этот трек только с DRM-защитой (Widevine) — сторонние плееры воспроизвести его не могут</value></data>
+  <data name="SoundCloudSessionExpired" xml:space="preserve"><value>Сессия SoundCloud недействительна — подключите аккаунт заново в настройках</value></data>
+  <data name="SettingsSoundCloud" xml:space="preserve"><value>Аккаунт SoundCloud</value></data>
+  <data name="SettingsSoundCloudDesc" xml:space="preserve"><value>ℹ Лайки синхронизируются только как метаданные — аудиофайлы не скачиваются. Совпавшие с локальной библиотекой треки играют офлайн, остальные — онлайн-стримингом.</value></data>
+  <data name="SoundCloudProxy" xml:space="preserve"><value>Прокси</value></data>
+  <data name="SoundCloudProxyHint" xml:space="preserve"><value>Прокси (авто / выкл / socks5://host:port)</value></data>
+  <data name="SoundCloudWebviewMissing" xml:space="preserve"><value>Для входа в SoundCloud требуется WebView2 Runtime (Microsoft Edge WebView2). Установите его с сайта Microsoft и попробуйте снова.</value></data>
+  <data name="SoundCloudSyncFailed" xml:space="preserve"><value>Не удалось синхронизировать SoundCloud</value></data>
+  <data name="ZapretSearching" xml:space="preserve"><value>Обход блокировки SoundCloud: ищу рабочую стратегию…</value></data>
+  <data name="ZapretStrategy" xml:space="preserve"><value>Обход блокировки: стратегия {0}/{1}…</value></data>
+  <data name="ZapretFound" xml:space="preserve"><value>Обход найден — {0}</value></data>
+  <data name="ZapretFailed" xml:space="preserve"><value>Обход не сработал — SoundCloud без VPN недоступен</value></data>
+  <data name="ZapretNeedUac" xml:space="preserve"><value>Обходу нужны права администратора (запрос UAC отклонён)</value></data>
+  <data name="SettingsSoundCloudSwitch" xml:space="preserve"><value>Сменить аккаунт</value></data>
+  <data name="SettingsSoundCloudSwitchHint" xml:space="preserve"><value>Выйти на сайте SoundCloud и войти другим аккаунтом</value></data>
+  <data name="SoundCloudSyncing" xml:space="preserve"><value>Синхронизация лайков SoundCloud…</value></data>
+  <data name="SoundCloudDownloading" xml:space="preserve"><value>Загрузка трека…</value></data>
+  <data name="SoundCloudUnavailable" xml:space="preserve"><value>Трек недоступен для прослушивания</value></data>
+  <data name="SoundCloudLocalMatch" xml:space="preserve"><value>Есть в локальной библиотеке</value></data>
+  <data name="SoundCloudEmpty" xml:space="preserve"><value>Пока нет лайков SoundCloud</value></data>
+  <data name="SoundCloudEmptyHint" xml:space="preserve"><value>Подключите аккаунт SoundCloud в настройках и синхронизируйте лайки.</value></data>
+  <data name="SoundCloudLoginTitle" xml:space="preserve"><value>Вход в SoundCloud</value></data>
+  <data name="SoundCloudLoginHint" xml:space="preserve"><value>Войдите в аккаунт SoundCloud — после входа окно закроется автоматически. Данные сессии хранятся только на этом компьютере.</value></data>
+    <!-- ===== VK Music ===== -->
+  <data name="VkMusic" xml:space="preserve"><value>VK Music</value></data>
+  <data name="VkWebviewMissing" xml:space="preserve"><value>Для входа в VK требуется WebView2 Runtime (Microsoft Edge WebView2). Установите его с сайта Microsoft и попробуйте снова.</value></data>
+  <data name="VkAudioPermissionDenied" xml:space="preserve"><value>VK не выдал доступ к аудио — воспроизведение музыки через VK недоступно.</value></data>
+  <data name="VkSyncFailed" xml:space="preserve"><value>Не удалось синхронизировать VK</value></data>
+  <data name="VkSyncing" xml:space="preserve"><value>Синхронизация VK-музыки…</value></data>
+  <data name="VkDownloading" xml:space="preserve"><value>Загрузка трека…</value></data>
+  <data name="VkNever" xml:space="preserve"><value>никогда</value></data>
+  <data name="VkCounter" xml:space="preserve"><value>треков</value></data>
+  <data name="VkEmpty" xml:space="preserve"><value>В VK-музыке пока пусто</value></data>
+  <data name="VkEmptyHint" xml:space="preserve"><value>Подключите аккаунт VK в настройках и синхронизируйте вашу музыку.</value></data>
+  <data name="VkLoginTitle" xml:space="preserve"><value>Вход в VK</value></data>
+  <data name="VkLoginHint" xml:space="preserve"><value>Войдите в аккаунт VK — после входа окно закроется автоматически.</value></data>
+  <data name="VkLocalMatch" xml:space="preserve"><value>Есть в локальной библиотеке</value></data>
+  <data name="VkSessionExpired" xml:space="preserve"><value>Сессия VK истекла — подключитесь заново</value></data>
+  <data name="VkConnected" xml:space="preserve"><value>Подключено</value></data>
+  <data name="SettingsVkDesc" xml:space="preserve"><value>ℹ Музыка VK синхронизируется только как метаданные — аудиофайлы не скачиваются. Совпавшие с локальной библиотекой треки играют офлайн, остальные — онлайн-стримингом.</value></data>
+    <!-- ===== Yandex Music ===== -->
+  <data name="YandexMusic" xml:space="preserve"><value>Яндекс Музыка</value></data>
+  <data name="YmConnect" xml:space="preserve"><value>Подключить</value></data>
+  <data name="YmDisconnect" xml:space="preserve"><value>Отключить</value></data>
+  <data name="YmNotConnected" xml:space="preserve"><value>Не подключено</value></data>
+  <data name="YmConnectedAs" xml:space="preserve"><value>Подключено как</value></data>
+  <data name="YmSyncNow" xml:space="preserve"><value>Синхронизировать</value></data>
+  <data name="YmDeviceIntro" xml:space="preserve"><value>Откройте страницу подтверждения в браузере и введите этот код.</value></data>
+  <data name="YmDeviceCodeHint" xml:space="preserve"><value>Код действует несколько минут — после подтверждения окно закроется само. Токен хранится только на этом компьютере.</value></data>
+  <data name="YmDeviceOpen" xml:space="preserve"><value>Открыть страницу и ввести код</value></data>
+  <data name="YmDeviceRequesting" xml:space="preserve"><value>Получаем код…</value></data>
+  <data name="YmDeviceWaiting" xml:space="preserve"><value>Ожидаем подтверждение…</value></data>
+  <data name="YmDeviceConfirmed" xml:space="preserve"><value>Подтверждено! Сохраняем токен…</value></data>
+  <data name="YmDeviceFailed" xml:space="preserve"><value>Не удалось получить код — проверьте подключение к интернету.</value></data>
+  <data name="YmDeviceRetry" xml:space="preserve"><value>Попробовать ещё раз</value></data>
+  <data name="YmSyncFailed" xml:space="preserve"><value>Не удалось синхронизировать Яндекс Музыку</value></data>
+  <data name="YmSyncing" xml:space="preserve"><value>Синхронизация лайков Яндекс Музыки…</value></data>
+  <data name="YmDownloading" xml:space="preserve"><value>Загрузка трека…</value></data>
+  <data name="YmNever" xml:space="preserve"><value>никогда</value></data>
+  <data name="YmCounter" xml:space="preserve"><value>треков</value></data>
+  <data name="YmEmpty" xml:space="preserve"><value>В Яндекс Музыке пока пусто</value></data>
+  <data name="YmEmptyHint" xml:space="preserve"><value>Подключите аккаунт Яндекс Музыки в настройках и синхронизируйте ваши лайки.</value></data>
+  <data name="YmLoginTitle" xml:space="preserve"><value>Вход в Яндекс Музыку</value></data>
+  <data name="YmAuthDenied" xml:space="preserve"><value>Доступ Яндекс не разрешён — попробуйте снова</value></data>
+  <data name="YmLocalMatch" xml:space="preserve"><value>Есть в локальной библиотеке</value></data>
+  <data name="YmSessionExpired" xml:space="preserve"><value>Сессия Яндекс Музыки истекла — подключитесь заново</value></data>
+  <data name="YmConnected" xml:space="preserve"><value>Подключено</value></data>
+  <data name="YmTrackUnavailable" xml:space="preserve"><value>Трек недоступен на текущем тарифе Яндекс Музыки</value></data>
+  <data name="SettingsYm" xml:space="preserve"><value>Аккаунт Яндекс Музыки</value></data>
+  <data name="SettingsYmDesc" xml:space="preserve"><value>ℹ Лайки Яндекс Музыки синхронизируются только как метаданные — аудиофайлы не скачиваются. Совпавшие с локальной библиотекой треки играют офлайн, остальные — онлайн-стримингом.</value></data>
+<data name="Downloads" xml:space="preserve"><value>Локальные</value></data>
+  <data name="DownloadsEmpty" xml:space="preserve"><value>Пока нет локальных треков</value></data>
+  <data name="DownloadsEmptyHint" xml:space="preserve"><value>Добавьте музыкальные файлы с компьютера — они появятся здесь.</value></data>
+  <data name="DownloadsHint" xml:space="preserve"><value>Локальные треки, добавленные с компьютера</value></data>
+  <data name="StatsTitle" xml:space="preserve"><value>Статистика</value></data>
+  <data name="StatsDay" xml:space="preserve"><value>День</value></data>
+  <data name="StatsWeek" xml:space="preserve"><value>Неделя</value></data>
+  <data name="StatsMonth" xml:space="preserve"><value>Месяц</value></data>
+  <data name="StatsYear" xml:space="preserve"><value>Год</value></data>
+  <data name="StatsAll" xml:space="preserve"><value>Всё время</value></data>
+  <data name="StatsUniqueTracks" xml:space="preserve"><value>Разных треков</value></data>
+  <data name="StatsPlays" xml:space="preserve"><value>Прослушиваний</value></data>
+  <data name="StatsHours" xml:space="preserve"><value>Часов музыки</value></data>
+  <data name="StatsMostReplayed" xml:space="preserve"><value>Чаще на повторе:</value></data>
+  <data name="StatsNone" xml:space="preserve"><value>—</value></data>
+  <data name="StatsTopArtists" xml:space="preserve"><value>Топ-10 исполнителей</value></data>
+  <data name="StatsTopTracks" xml:space="preserve"><value>Топ-10 треков</value></data>
+  <data name="ToggleGridDensity" xml:space="preserve"><value>Плотность сетки карточек (4/8 в ряд)</value></data>
+  <data name="SettingsTheme" xml:space="preserve"><value>Тема</value></data>
+  <data name="ThemeStandard" xml:space="preserve"><value>Стандартная</value></data>
+  <data name="ThemeDarker" xml:space="preserve"><value>Ещё темнее</value></data>
+  <data name="ThemeAccent" xml:space="preserve"><value>Акцентный цвет</value></data>
+  <data name="AccentDefault" xml:space="preserve"><value>Обычный</value></data>
+  <data name="AccentBlue" xml:space="preserve"><value>Синий</value></data>
+  <data name="AccentGreen" xml:space="preserve"><value>Зелёный</value></data>
+  <data name="AccentPurple" xml:space="preserve"><value>Фиолетовый</value></data>
+  <data name="AccentRed" xml:space="preserve"><value>Красный</value></data>
+  <data name="AccentOrange" xml:space="preserve"><value>Оранжевый</value></data>
+  <data name="SettingsCompactGrid" xml:space="preserve"><value>Компактная сетка карточек (8 в ряд)</value></data>
+  <data name="SettingsCompactGridDesc" xml:space="preserve"><value>Больше карточек в строке на страницах библиотеки</value></data>
+  <data name="BackgroundEnable" xml:space="preserve"><value>Включить GIF-фон</value></data>
+  <data name="BackgroundSelect" xml:space="preserve"><value>Выбрать GIF…</value></data>
+  <data name="BackgroundOpacity" xml:space="preserve"><value>Видимость фона</value></data>
+  <data name="BackgroundHint" xml:space="preserve"><value>Применяется после перезапуска. GIF декодируется в фоновом потоке; очень тяжёлые файлы всё же могут влиять на производительность.</value></data>
+  <data name="SettingsCoverShadows" xml:space="preserve"><value>Мягкие тени под обложками</value></data>
+  <data name="SettingsCoverShadowsDesc" xml:space="preserve"><value>Применяется после перезапуска</value></data>
+  <data name="BackgroundBlurEnable" xml:space="preserve"><value>Размыть фон</value></data>
+  <data name="BackgroundBlurDesc" xml:space="preserve"><value>Размытие GIF/видео-фона</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Светлая</value></data>
+  <data name="SettingsNormalizeVolume" xml:space="preserve"><value>Нормализация громкости</value></data>
+  <data name="SettingsApply" xml:space="preserve"><value>Применить</value></data>
+  <data name="SettingsApplyDesc" xml:space="preserve"><value>Применить тему, тени и фон сейчас (музыка не прерывается)</value></data>
+  <!-- ===== Spotify free import (без Web API) ===== -->
+  <data name="SpotifyImportButton" xml:space="preserve"><value>Импорт файла</value></data>
+  <data name="SpotifyImporting" xml:space="preserve"><value>Импорт библиотеки Spotify…</value></data>
+  <data name="SpotifySyncing" xml:space="preserve"><value>Синхронизация лайков Spotify…</value></data>
+  <data name="SpotifyImportFailed" xml:space="preserve"><value>Не удалось импортировать библиотеку Spotify</value></data>
+  <data name="SpotifyImportNoTracks" xml:space="preserve"><value>В выбранном файле не найдено треков Spotify — нужен ZIP экспорта «Скачать ваши данные» с spotify.com или CSV плейлиста.</value></data>
+  <data name="SpotifyImportDone" xml:space="preserve"><value>Библиотека Spotify импортирована: треков — {0}</value></data>
+  <data name="SpotifyEmptyHint" xml:space="preserve"><value>Подключите аккаунт в шапке для синка лайков через Web API (с февраля 2026 Spotify требует для него Premium) — или нажмите «Импорт файла» и выберите бесплатный экспорт данных: spotify.com → Аккаунт → Настройки конфиденциальности → «Скачать ваши данные».</value></data>
+  <data name="WaveNav" xml:space="preserve"><value>Мой микс</value></data>
+  <data name="WaveTitle" xml:space="preserve"><value>Мой микс</value></data>
+  <data name="WaveSubtitle" xml:space="preserve"><value>альфа-тест рекомендаций — работает при подключённой Яндекс Музыке</value></data>
+  <data name="WaveRefresh" xml:space="preserve"><value>Обновить микс</value></data>
+  <data name="WaveGenerating" xml:space="preserve"><value>собираем микс…</value></data>
+  <data name="WaveGeneratingLong" xml:space="preserve"><value>Собираем микс из вашей музыки — это занимает до минуты при первом запуске</value></data>
+  <data name="WaveCounter" xml:space="preserve"><value>треков</value></data>
+  <data name="WaveEmpty" xml:space="preserve"><value>Микс пуст</value></data>
+  <data name="WaveEmptyHint" xml:space="preserve"><value>Микс собирается из вашей музыки: лайков Яндекс Музыки, треков VK, SoundCloud и локальной библиотеки. Подключите Яндекс Музыку в настройках — её граф похожести подбирает кандидатов.</value></data>
+  <data name="WaveNotConnected" xml:space="preserve"><value>Подключите Яндекс Музыку в настройках — без неё микс не собрать</value></data>
+  <data name="WaveFailed" xml:space="preserve"><value>Не удалось собрать микс — попробуйте ещё раз</value></data>
+</root>

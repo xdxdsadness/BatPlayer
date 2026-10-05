@@ -1,0 +1,29 @@
+bin/
+obj/
+publish/
+dist/
+*.user
+.vs/
+*.suo
+*.pdb
+*.log
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Тяжёлые пользовательские фоны (гифки >100 МБ) — в git не входят
+Background/
+*.mp3
+
+# Runtime-артефакты zapret-хелпера
+src/BatPlayer/Tools/zapret/command.txt
+src/BatPlayer/Tools/zapret/status.txt
+# Сторонние бинарники инструментов — в git не входят (см. README: откуда скачать)
+src/BatPlayer/Tools/ffmpeg.exe
+src/BatPlayer/Tools/zapret/bin/
+*.exe
+installer/dist/
+
+# Рабочие файлы ZCode (инструмент агента, не часть проекта)
+.zcodeignore

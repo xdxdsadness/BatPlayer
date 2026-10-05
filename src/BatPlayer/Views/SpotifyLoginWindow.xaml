@@ -1,0 +1,136 @@
+﻿<Window x:Class="BatPlayer.Views.SpotifyLoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         xmlns:loc="clr-namespace:BatPlayer.Localization"
+        Title="Spotify"
+        Width="480"
+        SizeToContent="Height"
+        MaxHeight="700"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BgBrush}"
+        WindowStyle="None"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+        UseLayoutRounding="True">
+
+    <!-- WindowChrome: WindowStyle=None без него оставляет системную DWM-рамку —
+         сверху окна белая полоса (светлая тема Windows). Забираем non-client область
+         целиком: рамка исчезает, ресайз (5px) и DragMove из code-behind живут. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome GlassFrameThickness="0" CaptionHeight="0" ResizeBorderThickness="5" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title bar: заголовок + крестик, перетаскивание за верхнюю полосу -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBrush}"
+                MouseLeftButtonDown="TitleBar_MouseDown">
+            <Grid Margin="16,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Width="20" Height="20" Stretch="Uniform" Margin="0,0,10,0"
+                          Source="pack://application:,,,/Resources/Logos/spotify.png" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Connect to Spotify"
+                               FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Style="{StaticResource IconButton}" Width="28" Height="28"
+                        Click="CancelButton_Click"
+                        ToolTip="{Binding [Close], Source={x:Static loc:Loc.T}}">
+                    <Path Width="14" Height="14" Stretch="Uniform"
+                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          Data="{StaticResource IconClose}"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Main content -->
+        <Grid Grid.Row="1" Margin="32,20,32,24">
+            <StackPanel>
+                <!-- Заголовок -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,14">
+                    <Image Width="36" Height="36" Stretch="Uniform"
+                           Source="pack://application:,,,/Resources/Logos/spotify.png" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Connect to Spotify"
+                               FontSize="17" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center" Margin="12,0,0,0"/>
+                </StackPanel>
+
+                <!-- Инструкция: где взять Client ID -->
+                <StackPanel Margin="0,0,0,14" MaxWidth="400">
+                    <TextBlock FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               Text="To connect, Bat Player needs your own free Client ID from the Spotify Dashboard:"/>
+                    <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               Text="1. Open developer.spotify.com/dashboard and log in.&#x0a;2. Click “Create app” (any name/description).&#x0a;3. In “Redirect URI” add exactly:&#x0a;"/>
+                    <TextBlock Text="http://localhost:8888/callback"
+                               FontSize="11" FontFamily="{StaticResource AppFontMono}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               Margin="14,4,0,0"/>
+                    <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               Text="4. Enable “Web API”, save, then copy the app’s Client ID and paste it below."/>
+                    <TextBlock Margin="0,10,0,0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               Text="Playback works through your local library: synced Spotify tracks are matched with your local files or cached streams."/>
+                    <Button Style="{StaticResource LinkButton}" Margin="0,10,0,0"
+                            HorizontalAlignment="Left"
+                            Click="OpenDashboard_Click">
+                        <Button.Content>
+                            <TextBlock Text="Open Spotify Dashboard →" TextDecorations="Underline"/>
+                        </Button.Content>
+                    </Button>
+                </StackPanel>
+
+                <!-- Client ID: поле всегда доступно — значение можно вписать или
+                     изменить в любой момент (spotify_client.json) -->
+                <StackPanel Margin="0,0,0,14" MaxWidth="400">
+                    <TextBlock Text="Spotify Client ID"
+                               FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                    <TextBox x:Name="ClientIdBox"
+                             Style="{StaticResource DarkTextBox}"
+                             FontFamily="{StaticResource AppFontMono}"
+                             FontSize="11"
+                             ToolTip="Client ID from the Spotify Dashboard"/>
+                </StackPanel>
+
+                <!-- Status text -->
+                <TextBlock x:Name="StatusText"
+                           Text=""
+                           FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                           Foreground="{DynamicResource AccentBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,18"
+                           MaxWidth="400"/>
+
+                <!-- Buttons -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="ConnectButton"
+                            Style="{StaticResource PrimaryButton}"
+                            Padding="24,10" Margin="0,0,8,0"
+                            Click="ConnectButton_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="20" Height="20" Stretch="Uniform" Margin="0,0,8,0"
+                                   Source="pack://application:,,,/Resources/Logos/spotify.png" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="Connect" FontSize="13"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="CancelButton"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="24,10"
+                            Click="CancelButton_Click">
+                        <TextBlock Text="Cancel" FontSize="13"/>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

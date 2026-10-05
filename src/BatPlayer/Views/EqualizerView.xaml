@@ -1,0 +1,130 @@
+﻿<UserControl x:Class="BatPlayer.Views.EqualizerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:BatPlayer.Localization"
+             xmlns:controls="clr-namespace:BatPlayer.Controls"
+            >
+    <!-- Разметка как на остальных страницах: заголовок в шапке, контент ниже.
+         БЕЗ ScrollViewer: колесо на этой странице работает только с графиком,
+         страница не прокручивается — «уезжание» окон исключено физически. -->
+    <!-- IsSharedSizeScope: подписи и правые кнопки в строках «Пресет» и «Сохранить как»
+         делят колонки, поэтому оба поля получаются одинаковой ширины. -->
+    <Grid Grid.IsSharedSizeScope="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header — тот же отступ и размер, что на остальных вкладках -->
+        <StackPanel Grid.Row="0" Margin="32,14,16,10">
+            <TextBlock Text="{Binding [Equalizer], Source={x:Static loc:Loc.T}}" FontSize="20" FontWeight="Medium"/>
+            <TextBlock Text="{Binding [EqSubtitle], Source={x:Static loc:Loc.T}}" FontSize="12" Margin="0,3,0,0"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+        </StackPanel>
+
+        <!-- Строка 1: пресет, вкл/выкл, сброс. Поле пресета фиксированной ширины:
+             на всю карту оно тянется на тысячи пикселей и выглядит пустым — имя
+             пресета длинным не бывает. Кнопки — сразу за полем, не у правого края. -->
+        <Border Grid.Row="1" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="EqLabel"/>
+                    <ColumnDefinition Width="360"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding [EqPreset], Source={x:Static loc:Loc.T}}"
+                           FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}"
+                          ItemsSource="{Binding Presets}"
+                          DisplayMemberPath="Name"
+                          SelectedItem="{Binding SelectedPreset}"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <TextBlock Text="{Binding [EqEnable], Source={x:Static loc:Loc.T}}" FontSize="13"
+                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsEnabled}"/>
+                    <Button Style="{StaticResource PrimaryButton}" Margin="16,0,0,0" Padding="12,7"
+                            VerticalAlignment="Center"
+                            Command="{Binding ResetBandsCommand}"
+                            ToolTip="{Binding [EqResetDesc], Source={x:Static loc:Loc.T}}">
+                        <TextBlock Text="{Binding [EqReset], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Строка 3: график — занимает всё доступное место -->
+        <Border Grid.Row="3" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <controls:EqualizerCurve Grid.Row="0" x:Name="Curve" Bands="{Binding Bands}" MinHeight="260" Margin="0,4,0,0"
+                                         AddNodeRequested="Curve_AddNodeRequested"
+                                         RemoveNodeRequested="Curve_RemoveNodeRequested">
+                    <controls:EqualizerCurve.Style>
+                        <Style TargetType="controls:EqualizerCurve">
+                            <Setter Property="Opacity" Value="1"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </controls:EqualizerCurve.Style>
+                </controls:EqualizerCurve>
+
+                <TextBlock Grid.Row="1" Text="{Binding [EqCurveHint], Source={x:Static loc:Loc.T}}" FontSize="11"
+                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="4,10,4,0" TextWrapping="Wrap"/>
+
+                <Grid Grid.Row="2" Margin="0,14,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding [EqPreamp], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                        <TextBlock Text="{Binding [EqPreampDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                    <Slider Grid.Column="1" Style="{StaticResource CustomSlider}" Width="200"
+                            VerticalAlignment="Center"
+                            Minimum="-12" Maximum="12"
+                            Value="{Binding PreGain, Mode=TwoWay}"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Строка 2: сохранение и удаление своего пресета (сразу под выбором пресета).
+             Поле имени — той же фиксированной ширины, кнопки — сразу за полем -->
+        <Border Grid.Row="2" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="EqLabel"/>
+                    <ColumnDefinition Width="360"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding [EqSaveAs], Source={x:Static loc:Loc.T}}"
+                           FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBox Grid.Column="1" x:Name="PresetNameBox" Style="{StaticResource DarkTextBox}"
+                         VerticalContentAlignment="Center"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <Button Style="{StaticResource AccentButton}" Padding="14,8"
+                            Click="SavePreset_Click">
+                        <TextBlock Text="{Binding [EqSave], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Padding="14,8"
+                            IsEnabled="{Binding CanDeleteSelectedPreset}"
+                            Command="{Binding DeleteSelectedPresetCommand}"
+                            ToolTip="{Binding [EqDeletePresetDesc], Source={x:Static loc:Loc.T}}">
+                        <TextBlock Text="{Binding [EqDelete], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

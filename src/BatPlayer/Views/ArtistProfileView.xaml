@@ -1,0 +1,295 @@
+﻿<UserControl x:Class="BatPlayer.Views.ArtistProfileView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cv="clr-namespace:BatPlayer.Converters"
+              xmlns:loc="clr-namespace:BatPlayer.Localization"
+             xmlns:controls="clr-namespace:BatPlayer.Controls"
+            >
+    <UserControl.Resources>
+        <cv:PathToImageConverter x:Key="Path2Img"/>
+        <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
+        <!-- true, если на карточке — играющий сейчас трек (смена Play/Pause) -->
+        <cv:CurrentTrackPlayingConverter x:Key="IsCurrentTrackPlaying"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header: назад + имя исполнителя + N треков; справа — «Перемешать» -->
+        <Grid Grid.Row="0" Margin="32,14,24,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+            <Button Style="{StaticResource IconButton}" Width="28" Height="28"
+                    HorizontalAlignment="Left" Margin="-6,0,0,0"
+                    Command="{Binding BackCommand}"
+                    ToolTip="{Binding [Back], Source={x:Static loc:Loc.T}}">
+                <Path Width="20" Height="20" Stretch="Uniform"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      Data="{StaticResource IconChevronLeft}"/>
+            </Button>
+            <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Medium" Margin="0,4,0,0"
+                       Foreground="{DynamicResource TextPrimaryBrush}"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding TrackCountText}" FontSize="12" Margin="0,3,0,0"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </StackPanel>
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="12,5"
+                    VerticalAlignment="Center" Command="{Binding ShuffleTracksCommand}">
+                <TextBlock FontSize="12" Text="{Binding [Shuffle], Source={x:Static loc:Loc.T}}"/>
+            </Button>
+        </Grid>
+
+        <!-- Треки артиста: та же сетка карточек, что в библиотеке -->
+        <Grid Grid.Row="1" Margin="24,0,16,4">
+            <ListView ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
+                      ItemsSource="{Binding Tracks}"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      VerticalContentAlignment="Stretch">
+                <!-- На время загрузки список свёрнут: виртуализация не генерирует
+                     контейнеры для старых карточек, при клике по бару нет тройной
+                     работы (создать старые → очистить → создать новые) — переход
+                     без лагов. Без скелетона и fade: чистое появление по готовности. -->
+                <ListView.Style>
+                    <Style TargetType="ListView">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.Style>
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <controls:VirtualizingWrapPanel Columns="{Binding DataContext.GridColumns, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Stretch"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel>
+                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
+                                 SquareBorder: квадрат уже в measure — без двойного
+                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <controls:SquareBorder x:Name="CoverRoot" CornerRadius="8"
+                                    Background="{DynamicResource SecondaryBrush}">
+                                <Grid>
+                                    <!-- Нет обложки: серый силуэт мыши — единый плейсхолдер
+                                         всех баров (CardBatPlaceholder, без вращения) -->
+                                    <Image Style="{StaticResource CardBatPlaceholder}"/>
+                                    <!-- Обложка. LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые -->
+                                    <Border CornerRadius="8" controls:LazyCover.Path="{Binding CoverCachePath}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Opacity" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Path=(controls:LazyCover.HasImage), RelativeSource={RelativeSource Self}}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                     From="0" To="1" BeginTime="0:0:0.25" Duration="0:0:0.3"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Border.Background>
+                                            <ImageBrush Stretch="UniformToFill"/>
+                                        </Border.Background>
+                                    </Border>
+
+                                    <!-- Полупрозрачный белый оверлей: при наведении ИЛИ когда играет этот трек.
+                                         Появление/исчезание — плавный fade 0.15 c, как на остальных страницах. -->
+                                    <Border x:Name="CoverHoverOverlay" CornerRadius="8"
+                                            Background="#40FFFFFF" IsHitTestVisible="False">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Opacity" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMouseOver, ElementName=CoverRoot}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.ExitActions>
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Value="True">
+                                                        <DataTrigger.Binding>
+                                                            <MultiBinding Converter="{StaticResource IsCurrentTrackPlaying}">
+                                                                <Binding/>
+                                                                <Binding Path="DataContext.Player.CurrentTrack" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                <Binding Path="DataContext.Player.IsPlaying" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                            </MultiBinding>
+                                                        </DataTrigger.Binding>
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.ExitActions>
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+
+                                    <!-- Центральная кнопка Play (~32% ширины обложки, как на референсе) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="0.34*"/>
+                                            <ColumnDefinition Width="0.32*"/>
+                                            <ColumnDefinition Width="0.34*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="0.34*"/>
+                                            <RowDefinition Height="0.32*"/>
+                                            <RowDefinition Height="0.34*"/>
+                                        </Grid.RowDefinitions>
+<!-- «+ в плейлист» — центральная кнопка обложки -->
+                                                                                <Button x:Name="CoverPlayButton" Grid.Column="1" Grid.Row="1"
+                                                Cursor="Hand"
+                                                Command="{Binding DataContext.PlayPauseTrackCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Opacity" Value="0"/>
+                                                    <Setter Property="IsHitTestVisible" Value="False"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=CoverRoot}" Value="True">
+                                                            <Setter Property="Opacity" Value="1"/>
+                                                            <Setter Property="IsHitTestVisible" Value="True"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Value="True">
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource IsCurrentTrackPlaying}">
+                                                                    <Binding/>
+                                                                    <Binding Path="DataContext.Player.CurrentTrack" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                    <Binding Path="DataContext.Player.IsPlaying" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
+                                                            <Setter Property="Opacity" Value="1"/>
+                                                            <Setter Property="IsHitTestVisible" Value="True"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Border Background="#B3FFFFFF" CornerRadius="24"/>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="0.30*"/>
+                                                                <ColumnDefinition Width="0.40*"/>
+                                                                <ColumnDefinition Width="0.30*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="0.30*"/>
+                                                                <RowDefinition Height="0.40*"/>
+                                                                <RowDefinition Height="0.30*"/>
+                                                            </Grid.RowDefinitions>
+                                                            <Viewbox Grid.Column="1" Grid.Row="1" Stretch="Uniform">
+                                                                <Path Width="18" Height="18" Stretch="Uniform" Fill="#101010">
+                                                                    <Path.Style>
+                                                                        <Style TargetType="Path">
+                                                                            <Setter Property="Data" Value="{StaticResource IconPlay}"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Value="True">
+                                                                                    <DataTrigger.Binding>
+                                                                                        <MultiBinding Converter="{StaticResource IsCurrentTrackPlaying}">
+                                                                                            <Binding/>
+                                                                                            <Binding Path="DataContext.Player.CurrentTrack" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                            <Binding Path="DataContext.Player.IsPlaying" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                        </MultiBinding>
+                                                                                    </DataTrigger.Binding>
+                                                                                    <Setter Property="Data" Value="{StaticResource IconPause}"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Path.Style>
+                                                                </Path>
+                                                            </Viewbox>
+                                                        </Grid>
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </controls:SquareBorder>
+
+                            <!-- Строка 1: сердечко + название -->
+                            <Grid Margin="2,8,2,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
+                                      VerticalAlignment="Center" Margin="0,0,6,0">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Data" Value="{StaticResource IconFavoriteOutline}"/>
+                                            <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                    <Setter Property="Data" Value="{StaticResource IconFavorite}"/>
+                                                    <Setter Property="Fill" Value="{DynamicResource FavoriteBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayTitle}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+
+                            <!-- Строка 2: исполнитель -->
+                            <TextBlock Text="{Binding DisplayArtist}" FontSize="12" Margin="2,3,2,0"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+                <ListView.InputBindings>
+                    <MouseBinding Gesture="LeftDoubleClick"
+                                  Command="{Binding PlayTrackCommand}"
+                                  CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                </ListView.InputBindings>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
+                        <EventSetter Event="MouseDoubleClick" Handler="TrackItem_DoubleClick"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,42 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <FontFamily x:Key="AppFont">Segoe UI Variable, Segoe UI, Inter, sans-serif</FontFamily>
+    <FontFamily x:Key="AppFontDisplay">Segoe UI Variable Display, Segoe UI, Inter, sans-serif</FontFamily>
+    <!-- Моноширинный прежде для таймлайна шрифт заменён на обычный системный:
+         Cascadia/Consolas выглядели «терминально» (перечёркнутый ноль), пользователь
+         попросил проще. Время фиксированного формата HH:MM выравнивание держит -->
+    <FontFamily x:Key="AppFontMono">Segoe UI Variable, Segoe UI, Consolas, monospace</FontFamily>
+
+    <!-- Компактная шкала: базовый кегль 13 (был 14) — интерфейс плотнее, надписи легче -->
+    <sys:Double x:Key="FontSizeTiny">11</sys:Double>
+    <sys:Double x:Key="FontSizeSmall">12</sys:Double>
+    <sys:Double x:Key="FontSizeBody">13</sys:Double>
+    <sys:Double x:Key="FontSizeMedium">15</sys:Double>
+    <sys:Double x:Key="FontSizeLarge">18</sys:Double>
+    <sys:Double x:Key="FontSizeXLarge">24</sys:Double>
+    <sys:Double x:Key="FontSizeDisplay">40</sys:Double>
+
+    <sys:Double x:Key="LineHeightBody">20</sys:Double>
+    <sys:Double x:Key="LineHeightHeading">28</sys:Double>
+
+    <Style x:Key="BodyText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+    </Style>
+
+    <Style x:Key="SecondaryText" TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSmall}"/>
+    </Style>
+
+    <Style x:Key="HeadingText" TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
+        <Setter Property="FontFamily" Value="{StaticResource AppFontDisplay}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeLarge}"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+</ResourceDictionary>

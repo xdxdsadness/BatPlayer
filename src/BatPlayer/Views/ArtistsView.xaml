@@ -1,0 +1,169 @@
+﻿<UserControl x:Class="BatPlayer.Views.ArtistsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cv="clr-namespace:BatPlayer.Converters"
+              xmlns:loc="clr-namespace:BatPlayer.Localization"
+             xmlns:controls="clr-namespace:BatPlayer.Controls"
+            >
+    <UserControl.Resources>
+        <cv:PathToImageConverter x:Key="Path2Img"/>
+        <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
+        <cv:InverseIntToVisibilityConverter x:Key="InverseInt2Vis"/>
+        <!-- Контейнер карточки артиста: TrackCardStyle без переопределения шаблона —
+             hover-scale и пружина нажатия из общего стиля работают здесь так же, как на
+             карточках треков и плейлистов (раньше голый ContentPresenter их отключал). -->
+        <Style x:Key="ArtistCardStyle" TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
+            <EventSetter Event="MouseLeftButtonUp" Handler="ArtistCard_Click"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock x:Name="PageHeader" Grid.Row="0" Text="{Binding Title}" FontSize="20" FontWeight="Medium"
+                   Margin="32,14,24,8" ClipToBounds="True"
+                    Foreground="{DynamicResource TextPrimaryBrush}"/>
+
+        <!-- Карточки артистов: сетка как в библиотеке — 4 в ряд, квадратная обложка -->
+        <Grid Grid.Row="1" Margin="24,0,16,4">
+            <ListView controls:ScrollHeaderCollapse.Header="{Binding ElementName=PageHeader}" ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
+                      ItemsSource="{Binding Artists}"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      VerticalContentAlignment="Stretch">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <controls:VirtualizingWrapPanel Columns="4" HorizontalAlignment="Stretch"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel>
+                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
+                                 SquareBorder: квадрат уже в measure — без двойного
+                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <controls:SquareBorder CornerRadius="8"
+                                    Background="{DynamicResource SecondaryBrush}">
+                                <Grid>
+                                    <!-- Плейсхолдер: серый силуэт мыши — единый плейсхолдер
+                                         всех баров (CardBatPlaceholder, без вращения) -->
+                                    <Image Style="{StaticResource CardBatPlaceholder}"/>
+                                    <!-- Обложка поверх плейсхолдера; прячется, если обложки нет.
+                                         LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые. -->
+                                    <Border CornerRadius="8" controls:LazyCover.Path="{Binding CoverPath}">
+                                        <Border.Background>
+                                            <ImageBrush Stretch="UniformToFill"/>
+                                        </Border.Background>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Opacity" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CoverPath}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Path=(controls:LazyCover.HasImage), RelativeSource={RelativeSource Self}}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                     From="0" To="1" BeginTime="0:0:0.25" Duration="0:0:0.3"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                    <!-- Hover-оверлей строго на обложке (без Play/Pause); прячется вместе с обложкой.
+                                         Появление/исчезание — плавный fade 0.15 с, как у карточек треков. -->
+                                    <Border CornerRadius="8" Background="#40FFFFFF" IsHitTestVisible="False">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Opacity" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.ExitActions>
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CoverPath}" Value="{x:Null}">
+                                                        <!-- Анимацией, а не сеттером: активная hold-end
+                                                             анимация hover-триггера перебивает сеттеры,
+                                                             и оверлей светился бы над плейсхолдером -->
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15" FillBehavior="Stop"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <Setter Property="Opacity" Value="0"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                            </controls:SquareBorder>
+
+                            <!-- Имя исполнителя (без платформенных значков: артисты — общие) -->
+                            <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold" Margin="2,8,2,0"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <!-- N треков -->
+                            <TextBlock Text="{Binding TracksText}" FontSize="12" Margin="2,3,2,0"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource ArtistCardStyle}"/>
+                </ListView.ItemContainerStyle>
+            </ListView>
+        </Grid>
+
+<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
+             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
+             при переключении задний фон не «прыгает» -->
+        <Border Grid.Row="1" Background="Transparent" Margin="24,0,24,12"
+                Visibility="{Binding Artists.Count, Converter={StaticResource InverseInt2Vis}}"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Path Grid.Row="0" Width="64" Height="64" Stretch="Uniform" Margin="0,0,0,16"
+                      HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                      Fill="{DynamicResource TextInactiveBrush}" Data="{StaticResource IconArtist}"/>
+                <StackPanel Grid.Row="1" HorizontalAlignment="Center" MaxWidth="460">
+                    <TextBlock Text="{Binding [EmptyLibrary], Source={x:Static loc:Loc.T}}"
+                               FontSize="20" FontWeight="Medium"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextAlignment="Center"/>
+                    <TextBlock Text="{Binding [EmptyLibraryHint], Source={x:Static loc:Loc.T}}"
+                               FontSize="13" Margin="0,8,0,0"
+                               Foreground="{DynamicResource TextInactiveBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

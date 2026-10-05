@@ -1,0 +1,672 @@
+﻿<UserControl x:Class="BatPlayer.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:BatPlayer.Localization"
+            
+            >
+    <UserControl.Resources>
+        <cv:BoolToVisibilityConverter x:Key="Bool2Vis" xmlns:cv="clr-namespace:BatPlayer.Converters"/>
+        <cv:InverseBoolToVisibilityConverter x:Key="InvBool2Vis" xmlns:cv="clr-namespace:BatPlayer.Converters"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header: Apply выровнен по правому краю колонки контента. Обёртка —
+             StackPanel с той же шириной (MaxWidth=880) и тем же выравниванием,
+             что у колонки карточек в ScrollViewer ниже, и в контейнере с теми же
+             отступами (24/16): правый край кнопки всегда совпадает с правым
+             краем карточек при любой ширине окна. Заголовок остаётся на 32px. -->
+        <Grid Grid.Row="0" Margin="24,14,16,8">
+            <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Medium"
+                       Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"
+                       HorizontalAlignment="Left" Margin="8,0,0,0"/>
+            <StackPanel MaxWidth="880" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <!-- Right margin 10: компенсация сдвига карточек скроллбаром (8px
+                     внутри ScrollViewer сужает вьюпорт и смещает колонку влево). -->
+                <Button Style="{StaticResource AccentButton}" Padding="16,7" Margin="0,0,10,0" HorizontalAlignment="Right"
+                        Click="ApplySettings_Click"
+                        ToolTip="{Binding [SettingsApplyDesc], Source={x:Static loc:Loc.T}}">
+                    <TextBlock Text="{Binding [SettingsApply], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" Margin="24,0,16,12"
+                      PreviewMouseWheel="SettingsScroll_PreviewMouseWheel"
+                      ScrollChanged="SettingsScroll_ScrollChanged">
+            <StackPanel MaxWidth="880" HorizontalAlignment="Stretch">
+
+                <!-- ===== General ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsGeneral], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsStartWithWindows], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsStartWithWindowsDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding StartWithWindows}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsMinimizeToTray], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsMinimizeToTrayDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding MinimizeToTray}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsCloseToTray], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsCloseToTrayDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding CloseToTray}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsAutoResume], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsAutoResumeDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding AutoResumePlayback}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsConfirmDeletion], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsConfirmDeletionDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding ConfirmDeletion}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Playback ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsPlayback], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsAudioDevice], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsAudioDeviceDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}" MinWidth="240"
+                                      ItemsSource="{Binding AudioDevices}"
+                                      SelectedItem="{Binding SelectedAudioDevice}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsWasapi], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsWasapiDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding UseWasapiExclusive}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsGapless], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsGaplessDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding GaplessPlayback}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsCrossfade], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsCrossfadeDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Slider Width="140" Minimum="0" Maximum="8000"
+                                        Value="{Binding CrossfadeDurationMs}" IsSnapToTickEnabled="True" TickFrequency="500"/>
+                                <CheckBox Margin="12,0,0,0" Style="{StaticResource ToggleSwitch}"
+                                          IsChecked="{Binding CrossfadeEnabled}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsReplayGain], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsReplayGainDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding ReplayGainEnabled}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [SettingsNormalizeVolume], Source={x:Static loc:Loc.T}}" FontSize="13" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding NormalizeVolume}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsSmoothVolume], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsSmoothVolumeDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding SmoothVolumeChanges}"/>
+                        </Grid>
+
+                        <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
+                            <TextBlock Text="{Binding [SettingsAudioInfo], Source={x:Static loc:Loc.T}}"
+                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Hotkeys ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsHotkeys], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsGlobalHotkeys], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsGlobalHotkeysDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding UseGlobalHotkeys}"/>
+                        </Grid>
+
+                        <TextBlock Text="{Binding [SettingsInAppHotkeys], Source={x:Static loc:Loc.T}}" FontSize="13" Margin="0,12,0,4"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [PlayPause], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="Space" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </Grid>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [HotkeyNextTrack], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="." FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </Grid>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [HotkeyPrevTrack], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="," FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </Grid>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [Search], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="Ctrl + F" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Interface ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsInterface], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsSidebar], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsSidebarDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding SidebarVisible}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsAnimations], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsAnimationsDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding AnimationsEnabled}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsCompactGrid], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsCompactGridDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}" MinWidth="120"
+                                      SelectedValuePath="Content" SelectedValue="{Binding SelectedGridColumns}">
+                                <ComboBoxItem Content="4"/>
+                                <ComboBoxItem Content="6"/>
+                                <ComboBoxItem Content="8"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsCoverShadows], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsCoverShadowsDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding CoverShadows}"/>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsLanguage], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsLanguageDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}" MinWidth="180"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding SelectedLanguage}">
+                                <ComboBoxItem Content="English" Tag="en"/>
+                                <ComboBoxItem Content="Русский" Tag="ru"/>
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Theme & background ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsTheme], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [SettingsTheme], Source={x:Static loc:Loc.T}}" FontSize="13" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}" MinWidth="180"
+                                      SelectedValuePath="Tag" SelectedValue="{Binding SelectedThemeMode}">
+                                <ComboBoxItem Content="{Binding [ThemeStandard], Source={x:Static loc:Loc.T}}" Tag="standard"/>
+                                <ComboBoxItem Content="{Binding [ThemeDarker], Source={x:Static loc:Loc.T}}" Tag="darker"/>
+                                <ComboBoxItem Content="{Binding [ThemeLight], Source={x:Static loc:Loc.T}}" Tag="light"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding [ThemeAccent], Source={x:Static loc:Loc.T}}" FontSize="13" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBox}" MinWidth="180"
+                                      SelectedValuePath="Tag" SelectedValue="{Binding SelectedAccentColor}">
+                                <ComboBoxItem Content="{Binding [AccentDefault], Source={x:Static loc:Loc.T}}" Tag="default"/>
+                                <ComboBoxItem Content="{Binding [AccentBlue], Source={x:Static loc:Loc.T}}" Tag="blue"/>
+                                <ComboBoxItem Content="{Binding [AccentGreen], Source={x:Static loc:Loc.T}}" Tag="green"/>
+                                <ComboBoxItem Content="{Binding [AccentPurple], Source={x:Static loc:Loc.T}}" Tag="purple"/>
+                                <ComboBoxItem Content="{Binding [AccentRed], Source={x:Static loc:Loc.T}}" Tag="red"/>
+                                <ComboBoxItem Content="{Binding [AccentOrange], Source={x:Static loc:Loc.T}}" Tag="orange"/>
+                            </ComboBox>
+                        </Grid>
+
+                                            </StackPanel>
+                </Border>
+
+                <!-- ===== SoundCloud ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <!-- PNG через Image + UniformToFill — как у карточки Spotify ниже.
+                                 Раньше здесь был векторный DrawingImage в ImageBrush со
+                                 Stretch=Uniform: 143x64 в квадрате 28x28letterbox'ился до ~12px
+                                 высоты, и тонкие штрихи логотипа на некоторых DPI/масштабах
+                                 пропадали целиком («иконка пропала»). -->
+                            <Border Width="28" Height="28" CornerRadius="7" Margin="0,0,8,0">
+                                <Image Source="pack://application:,,,/Resources/Logos/soundcloud.png"
+                                       Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Border>
+                            <TextBlock Text="{Binding [SettingsSoundCloud], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding SoundCloudStatusText}" FontSize="13"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                        <!-- Официальный SoundCloud API: pairing-подключение -->
+                        <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6"
+                                Padding="10,8" Margin="0,0,0,10">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="SoundCloud API" FontSize="13" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="12,5"
+                                            Command="{Binding ConnectScApiCommand}"
+                                            Visibility="{Binding ScApiConnected, Converter={StaticResource InvBool2Vis}}">
+                                        <TextBlock Text="Подключить API" FontSize="12"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="12,5"
+                                            Command="{Binding DisconnectScApiCommand}"
+                                            Visibility="{Binding ScApiConnected, Converter={StaticResource Bool2Vis}}">
+                                        <TextBlock Text="Отключить API" FontSize="12"/>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="{Binding ScApiStatusText}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                <!-- Пустой код не рисует ничего — конвертер не нужен
+                                     (Null2Vis живёт в ресурсах MainWindow и отсюда
+                                     StaticResource'ом не виден: настройки падали). -->
+                                <TextBlock Text="{Binding ScApiPairingCode}" FontSize="14" FontWeight="SemiBold"
+                                           FontFamily="{StaticResource AppFontMono}" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding ConnectSoundCloudCommand}"
+                                    Visibility="{Binding IsSoundCloudConnected, Converter={StaticResource InvBool2Vis}}">
+                                <TextBlock Text="{Binding [ConnectSoundCloud], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding DisconnectSoundCloudCommand}"
+                                    Visibility="{Binding IsSoundCloudConnected, Converter={StaticResource Bool2Vis}}">
+                                <TextBlock Text="{Binding [DisconnectSoundCloud], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <!-- Смена аккаунта: полный сброс сессии + профиля WebView2 и
+                                 чистое окно входа. Обычная пара «Отключить → Подключить»
+                                 автологинилась обратно в тот же аккаунт. -->
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding SwitchSoundCloudAccountCommand}"
+                                    Visibility="{Binding IsSoundCloudConnected, Converter={StaticResource Bool2Vis}}"
+                                    ToolTip="{Binding [SettingsSoundCloudSwitchHint], Source={x:Static loc:Loc.T}}">
+                                <TextBlock Text="{Binding [SettingsSoundCloudSwitch], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                    Command="{Binding SyncSoundCloudCommand}"
+                                    ToolTip="{Binding [SyncNow], Source={x:Static loc:Loc.T}}">
+                                <Path Width="16" Height="16" Stretch="Uniform"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Data="{StaticResource IconSync}"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SoundCloudProxy], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SoundCloudProxyHint], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1" Style="{StaticResource DarkTextBox}" MinWidth="240" MaxWidth="300"
+                                     VerticalAlignment="Center"
+                                     Text="{Binding SoundCloudProxy, UpdateSourceTrigger=LostFocus}"/>
+                        </Grid>
+
+                        <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6" Padding="10,8" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding [SettingsSoundCloudDesc], Source={x:Static loc:Loc.T}}"
+                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Spotify ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Width="28" Height="28" CornerRadius="7" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/Logos/spotify.png"
+                                                Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="Spotify" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding SpotifyStatusText}" FontSize="13"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding ConnectSpotifyCommand}"
+                                    Visibility="{Binding IsSpotifyConnected, Converter={StaticResource InvBool2Vis}}">
+                                <TextBlock Text="Connect" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding DisconnectSpotifyCommand}"
+                                    Visibility="{Binding IsSpotifyConnected, Converter={StaticResource Bool2Vis}}">
+                                <TextBlock Text="Disconnect" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                    Command="{Binding SyncSpotifyCommand}"
+                                    ToolTip="{Binding [SyncNow], Source={x:Static loc:Loc.T}}">
+                                <Path Width="16" Height="16" Stretch="Uniform"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Data="{StaticResource IconSync}"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6" Padding="10,8" Margin="0,4,0,0">
+                            <TextBlock Text="Sync your Spotify Liked Songs with Bat Player. Tracks are matched with your local library for playback."
+                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Yandex Music ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Width="28" Height="28" CornerRadius="7" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/Logos/yandex.png"
+                                                Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="{Binding [SettingsYm], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding YmStatusText}" FontSize="13"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding ConnectYmCommand}"
+                                    Visibility="{Binding IsYmConnected, Converter={StaticResource InvBool2Vis}}">
+                                <TextBlock Text="{Binding [YmConnect], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding DisconnectYmCommand}"
+                                    Visibility="{Binding IsYmConnected, Converter={StaticResource Bool2Vis}}">
+                                <TextBlock Text="{Binding [YmDisconnect], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                    Command="{Binding SyncYmCommand}"
+                                    ToolTip="{Binding [YmSyncNow], Source={x:Static loc:Loc.T}}">
+                                <Path Width="16" Height="16" Stretch="Uniform"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      Data="{StaticResource IconSync}"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6" Padding="10,8" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding [SettingsYmDesc], Source={x:Static loc:Loc.T}}"
+                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Library ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsLibrary], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="{Binding [SettingsMusicFolders], Source={x:Static loc:Loc.T}}" FontSize="13" Margin="0,0,0,6"/>
+
+                        <ItemsControl ItemsSource="{Binding LibraryFolders}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding}" FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Style="{StaticResource IconButton}" Margin="8,0,0,0"
+                                                Command="{Binding DataContext.RemoveLibraryFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Path Width="12" Height="12" Stretch="Uniform"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  Data="{StaticResource IconClose}"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding AddLibraryFolderCommand}">
+                                <TextBlock Text="{Binding [AddFolder], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                    Command="{Binding ScanNowCommand}">
+                                <TextBlock Text="{Binding [SettingsScanNow], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Grid Margin="0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SettingsScanOnStartup], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                                <TextBlock Text="{Binding [SettingsScanOnStartupDesc], Source={x:Static loc:Loc.T}}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      IsChecked="{Binding ScanOnStartup}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Maintenance ===== -->
+                <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsMaintenance], Source={x:Static loc:Loc.T}}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                        <Button Style="{StaticResource PrimaryButton}" Padding="12,6" HorizontalAlignment="Left"
+                                Command="{Binding ClearCoverCacheCommand}">
+                            <TextBlock Text="{Binding [SettingsClearCoverCache], Source={x:Static loc:Loc.T}}" FontSize="13"/>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
