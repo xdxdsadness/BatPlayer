@@ -502,6 +502,12 @@ public partial class MainWindow : Window
     // прогрузки обложек (GC, очередь применов) кадры пропускались и вращение
     // «микрофризило». Нативный анимационный конвейер ест минимальный слот UI-потока.
 
+    // Аналитический трекинг угла: чтение RotateTransform.Angle при активной анимации
+    // возвращало БАЗОВОЕ значение (не анимированное) — при паузе лого «откидывало назад»
+    // к старту цикла. Угол считается по времени старта цикла: надёжно и без кадров.
+    private double _spinBaseAngle;
+    private DateTime _spinCycleStartUtc;
+
     private void UpdateBatSpin()
     {
         if (_vm.Player.IsPlaying)
@@ -510,6 +516,8 @@ public partial class MainWindow : Window
             _batSpinning = true;
             // От текущего базового угла: после выбега паузы логотип замер не на нуле.
             var from = BatSpinAngle.Angle;
+            _spinBaseAngle = from;
+            _spinCycleStartUtc = DateTime.UtcNow;
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty,
                 new DoubleAnimation(from, from + 360, TimeSpan.FromSeconds(360 / BatSpinSpeedDegPerSec))
                 {
@@ -519,13 +527,15 @@ public partial class MainWindow : Window
         else if (_batSpinning)
         {
             _batSpinning = false;
-            // Выбег: читаем ТЕКУЩИЙ анимированный угол, фиксируем его базой и
-            // докручиваем декелерацией. FillBehavior=Stop вернёт значение к базе.
-            var current = BatSpinAngle.Angle;
+            // Текущий угол — аналитически: база цикла + прошедшее время × скорость.
+            var cycleSec = 360.0 / BatSpinSpeedDegPerSec;
+            var elapsed = (DateTime.UtcNow - _spinCycleStartUtc).TotalSeconds;
+            var current = _spinBaseAngle + (elapsed % cycleSec) / cycleSec * 360;
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty, null);
             BatSpinAngle.Angle = current;
+            // Инерция выбега: ~170° с плавным затуханием (как прежняя экспонента с tau=0.45с).
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty,
-                new DoubleAnimation(current, current + 70, TimeSpan.FromMilliseconds(450))
+                new DoubleAnimation(current, current + 170, TimeSpan.FromMilliseconds(1100))
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
                     FillBehavior = FillBehavior.Stop,

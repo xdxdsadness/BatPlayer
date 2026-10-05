@@ -367,9 +367,10 @@
 
 
             <!-- ============ Player Bar ============ -->
+            <!-- Без рамки: верхняя линия бара рисовалась поверх нижнего края карточек
+                 и читалась как «линия, перекрывающая треки» -->
             <Border Grid.Row="2" Background="Transparent"
-                    CornerRadius="0,0,12,12"
-                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+                    CornerRadius="0,0,12,12">
                 <Grid Margin="16,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
