@@ -344,7 +344,8 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
     /// name+description+website (как CLI sc-api-auth.mjs).</summary>
     private const string AppName = "Bat Player";
     private const string AppDescription = "Personal desktop music player: plays the user's own SoundCloud likes and library via the official API";
-    private const string AppWebsite = "https://github.com/danil";
+    // TODO: перед публикацией заменить на адрес своего репозитория/сайта.
+    private const string AppWebsite = "https://github.com/your-github-username/BatPlayer";
 
     /// <summary>
     /// Регистрация (или получение уже существующего) собственного приложения —
