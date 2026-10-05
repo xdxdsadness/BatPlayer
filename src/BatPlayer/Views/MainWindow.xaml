@@ -367,8 +367,13 @@
 
 
             <!-- ============ Player Bar ============ -->
+            <!-- Разделитель = верхняя граница бара (y=720): карточки клипуются ровно по
+                 ней (ContentHost заканчивается на границе строк), аватарка отцентрована
+                 в 80px строке → по 8px над и под ней. Замер давал: линия на 722.5 давала
+                 4.5px над аватаркой против 9px под ней — «снизу больше, чем сверху». -->
             <Border Grid.Row="2" Background="Transparent"
-                    CornerRadius="0,0,12,12">
+                    CornerRadius="0,0,12,12"
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
                 <Grid Margin="16,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -702,13 +707,6 @@
                         Value="{Binding Player.Volume, Mode=TwoWay}"
                         LostMouseCapture="VolumeSlider_LostMouseCapture"/>
             </Border>
-
-            <!-- Разделитель плеера: ровно посередине между краем контента и содержимым
-                 бара (контент бара начинается на 8px ниже верха строки, линия — на 4px:
-                 по 4px сверху и снизу). Раньше линия была самой верхней границей бара и
-                 прилипала к обрезанным карточкам, читаясь как «перекрывающая треки». -->
-            <Border Grid.Row="2" Height="1" VerticalAlignment="Top" Margin="0,4,0,0"
-                    Background="{DynamicResource BorderBrush}" IsHitTestVisible="False"/>
 <!-- Просмотрщик обложки: клик по аватарке в плеер-баре (повторный клик по аватарке
                  или клик в любом месте — закрывает; крестика больше нет).
                  Фон — нейтральная полупрозрачная вуаль без цвета (окно приглушается,
