@@ -189,9 +189,14 @@
 
                     <!-- Индикатор обхода блокировки SoundCloud (zapret): виден, пока идёт
                          перебор стратегий (спиннер) и несколько секунд после финала
-                         (найдена/не найдена). Плашка как у синк-бейджа SC-страницы. -->
-                    <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Margin="0,0,16,0" Background="#CC232428" CornerRadius="10" Padding="10,5"
+                         (найдена/не найдена). Плашка как у синк-бейджа SC-страницы.
+                         Слева, сразу после логотипа: между ним и поиском ~240px пустого
+                         места при ЛЮБОЙ ширине окна (поиск начинается с фикс. отступа
+                         252) — плашка не может наехать ни на поиск, ни на кнопки справа.
+                         MaxWidth 230 обрезает длинные тексты до этой зоны. -->
+                    <Border Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Margin="8,0,0,0" Background="#CC232428" CornerRadius="10" Padding="10,5"
+                            MaxWidth="230"
                             Visibility="{Binding BypassStatusText, Converter={StaticResource Null2Vis}}"
                             ToolTip="{Binding BypassStatusText}">
                         <StackPanel Orientation="Horizontal">
@@ -229,7 +234,7 @@
                             </Image>
                             <TextBlock Text="{Binding BypassStatusText}" FontSize="11.5"
                                        VerticalAlignment="Center" Foreground="#FFE8E8E8"
-                                       MaxWidth="340" TextTrimming="CharacterEllipsis"/>
+                                       MaxWidth="196" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Border>
 
