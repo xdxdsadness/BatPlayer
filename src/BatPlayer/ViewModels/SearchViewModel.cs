@@ -50,12 +50,13 @@ public partial class SearchViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Play(Track track)
+    private void Play(Track? track)
     {
-        // Явный клик по результату поиска: SC-runtime-карточка, провалившая резолв
-        // ранее в этой сессии (IsAvailable=false), пробуется снова — сеть/VPN могли
-        // вернуться; неудача покажет чистую ошибку без перескоков (ResolveFailurePolicy).
-        if (track != null && track.Source == Track.SourceSoundCloud && !track.IsAvailable)
+        if (track == null) return;
+        // Explicit click on a search result: retry an SC runtime card whose resolve
+        // failed earlier in this session (IsAvailable=false) — network/VPN may be
+        // back; failure shows a clean error without jumps (ResolveFailurePolicy).
+        if (track.Source == Track.SourceSoundCloud && !track.IsAvailable)
             track.IsAvailable = true;
         _audio.PlayTrack(track, Results);
     }

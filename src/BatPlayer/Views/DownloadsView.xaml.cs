@@ -9,7 +9,7 @@ public partial class DownloadsView : UserControl
 {
     public DownloadsView() => InitializeComponent();
 
-    // Клик по карточке: играем mp3 из кэша (повторный клик по играющему — пауза/возобновление).
+    // Card click: play the cached mp3 (clicking a playing track again pauses/resumes).
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is not ListViewItem item) return;
@@ -20,7 +20,7 @@ public partial class DownloadsView : UserControl
         e.Handled = true;
     }
 
-    // «+ в плейлист»: трек карточки (локальный или runtime-карточка платформы).
+    // "+ add to playlist": track from the card (local or platform runtime card).
     private void AddToPlaylist_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { DataContext: Models.Track track })

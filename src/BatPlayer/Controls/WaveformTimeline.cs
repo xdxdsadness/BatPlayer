@@ -10,17 +10,17 @@ using BatPlayer.Services;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Таймлайн в стиле SoundCloud: волновая форма трека (реальные пики амплитуды),
-/// пройденная часть подсвечена акцентом, впереди — приглушённая, позиция —
-/// вертикальная линия. Клик в любой точке перематывает; зажатая кнопка —
-/// playhead следует за курсором, финальный seek при отпускании.
-/// Пики считаются в фоне (WaveformCache) и кэшируются на сессию.
+/// SoundCloud-style timeline: the track's waveform (real amplitude peaks), the played
+/// part highlighted with the accent, the rest dimmed, the position — a vertical line.
+/// A click anywhere seeks; holding the button — the playhead follows the cursor, with
+/// the final seek on release. Peaks are computed in the background (WaveformCache)
+/// and cached for the session.
 ///
-/// Плавность: геометрия полосок строится ОДИН РАЗА на пару (пики, размер) и
-/// замораживается — тик позиции перерисовывает два DrawGeometry + playhead
-/// (дешёвый кадр), а между тиками таймера позиции playhead интерполируется
-/// на каждом кадре рендера (CompositionTarget.Rendering), так что линия
-/// движется непрерывно, а не ступеньками 4 раза в секунду.
+/// Smoothness: the bars' geometry is built ONCE per (peaks, size) pair and frozen — a
+/// position tick redraws two DrawGeometry calls + the playhead (a cheap frame), and
+/// between position-timer ticks the playhead is interpolated on every render frame
+/// (CompositionTarget.Rendering), so the line moves continuously instead of stepping
+/// 4 times a second.
 /// </summary>
 public sealed class WaveformTimeline : FrameworkElement
 {
@@ -64,8 +64,8 @@ public sealed class WaveformTimeline : FrameworkElement
     private const double BarStep = 3.0;
     private const double PlayheadWidth = 2.0;
 
-    /// <summary>Максимальная дистанция интерполяции после тика: дальше — трек на паузе
-    /// или тик потерялся, playhead замирает на последней позиции.</summary>
+    /// <summary>Max interpolation distance after a tick: beyond it the track is paused
+    /// or a tick was lost; the playhead freezes at the last position.</summary>
     private const double MaxInterpolationSeconds = 0.45;
 
     private float[] _peaks = Array.Empty<float>();
@@ -74,30 +74,30 @@ public sealed class WaveformTimeline : FrameworkElement
     private double _dragFrac;
     private long _lastDragSeekTick;
 
-    // Кэш геометрии полосок: пересобирается только при смене пиков/размера.
+    // Bars geometry cache: rebuilt only when the peaks/size change.
     private Geometry? _barsGeometry;
     private float[]? _geoPeaks;
     private double _geoW = -1, _geoH = -1;
 
-    // Интерполяция позиции между тиками таймера.
+    // Position interpolation between timer ticks.
     private DateTime _lastTickUtc = DateTime.MinValue;
     private double _lastTickPosition;
-    // Доля ширины, на которой нарисован playhead в последний раз: OnFrame гоняет
-    // перерисовку только когда playhead реально сдвинулся хотя бы на пиксель.
-    // Раньше invalidate был КАЖДЫЙ кадр рендера, пока играет трек, — полный
-    // OnRender (две отрисовки геометрии полосок + клип) 60 раз в секунду.
+    // The width fraction where the playhead was last drawn: OnFrame triggers a redraw
+    // only when the playhead actually moved by at least a pixel. Previously the
+    // invalidate ran EVERY render frame while the track played — a full OnRender
+    // (two bars-geometry draws + clip) 60 times a second.
     private double _drawnPlayheadFrac = -1;
 
     public WaveformTimeline()
     {
         SizeChanged += (_, _) => { _barsGeometry = null; _drawnPlayheadFrac = -1; InvalidateVisual(); };
-        // Подписка на покадровый рендер живёт только у ЗАГРУЖЕННОГО контрола:
-        // конструкторная подписка не отвязывалась никогда, и каждое открытие/закрытие
-        // окна NowPlaying оставляло мёртвый OnFrame, который тикал в рендер-цикле
-        // вечно (и инвалидовал отсоединённое дерево, пока у него были пики).
+        // The per-frame render subscription lives only on a LOADED control: the
+        // constructor subscription never unhooked, and every NowPlaying window
+        // open/close left a dead OnFrame ticking in the render loop forever
+        // (and invalidating the detached tree while it still had peaks).
         Loaded += (_, _) =>
         {
-            CompositionTarget.Rendering -= OnFrame; // защита от дубля Loaded
+            CompositionTarget.Rendering -= OnFrame; // guard against double Loaded
             CompositionTarget.Rendering += OnFrame;
         };
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnFrame;
@@ -125,19 +125,19 @@ public sealed class WaveformTimeline : FrameworkElement
             if (token.IsCancellationRequested) return;
             ctl._peaks = peaks;
             ctl._barsGeometry = null;
-            try { ctl.Dispatcher.Invoke(ctl.InvalidateVisual); } catch { /* окно закрыто */ }
+            try { ctl.Dispatcher.Invoke(ctl.InvalidateVisual); } catch { /* window closed */ }
         }, CancellationToken.None);
     }
 
     private void OnFrame(object? sender, EventArgs e)
     {
-        // Движущийся кадр нужен только пока интерполяция жива (играет) и есть что рисовать.
+        // A moving frame is only needed while the interpolation is alive (playing) and there's something to draw.
         if (_peaks.Length == 0 || DurationSeconds <= 0.5) return;
         if ((DateTime.UtcNow - _lastTickUtc).TotalMilliseconds > MaxInterpolationSeconds * 1000) return;
 
-        // Порог по пикселям: перерисовываемся, только если playhead сдвинулся
-        // с прошлой отрисовки хотя бы на 0.75 px (при 60 fps шаг между кадрами
-        // обычно < 0.5 px — большинство кадров пропускается без потерь в глазах).
+        // Pixel threshold: redraw only if the playhead moved at least 0.75 px since the
+        // last draw (at 60 fps the inter-frame step is usually < 0.5 px — most frames
+        // are skipped with no visible loss).
         var frac = DurationSeconds > 0 ? DisplayPosition / DurationSeconds : 0;
         if (_drawnPlayheadFrac >= 0 &&
             Math.Abs(frac - _drawnPlayheadFrac) * ActualWidth < 0.75) return;
@@ -154,9 +154,9 @@ public sealed class WaveformTimeline : FrameworkElement
         }
     }
 
-    /// <summary>Позиция с межтиковой интерполяцией: тик приходит 10 раз в секунду,
-    /// между ними позиция линейно догоняет (не дальше MaxInterpolationSeconds —
-    /// на паузе интерполяция гаснет).</summary>
+    /// <summary>Position with inter-tick interpolation: the tick arrives 10 times a second;
+    /// in between the position linearly catches up (no further than MaxInterpolationSeconds —
+    /// on pause the interpolation dies out).</summary>
     private double DisplayPosition
     {
         get
@@ -203,7 +203,7 @@ public sealed class WaveformTimeline : FrameworkElement
         if (w <= 0 || h <= 0) return;
 
         var mid = h / 2;
-        var playedBrush = PlayedBrush ?? (Brush)FindResourceThemed("AccentBrush");
+        var playedBrush = PlayedBrush ?? (Brush?)FindResourceThemed("AccentBrush") ?? Brushes.Transparent;
         var unplayedBrush = UnplayedBrush ?? new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
         var playheadBrush = PlayheadBrush ?? Brushes.White;
 
@@ -213,7 +213,7 @@ public sealed class WaveformTimeline : FrameworkElement
         var playheadX = _dragging ? _dragFrac * w : frac * w;
         _drawnPlayheadFrac = playheadX / Math.Max(1, w);
 
-        // Пустой трек / пики ещё не готовы: плоская линия + playhead.
+        // Empty track / peaks not ready yet: a flat line + playhead.
         if (_peaks.Length == 0)
         {
             dc.DrawRectangle(unplayedBrush, null, new Rect(0, mid - 1, w, 2));
@@ -223,8 +223,8 @@ public sealed class WaveformTimeline : FrameworkElement
 
         EnsureBarsGeometry(w, h);
 
-        // Непройденная волна целиком, поверх — клипом пройденная часть (полоска у
-        // playhead окрашивается плавно, без ступеньки целой полоски).
+        // The unplayed wave as a whole, with the played part on top via a clip (the bar
+        // at the playhead colors smoothly, without a whole-bar step).
         dc.DrawGeometry(unplayedBrush, null, _barsGeometry);
         if (playheadX > 0)
         {
@@ -233,7 +233,7 @@ public sealed class WaveformTimeline : FrameworkElement
             dc.Pop();
         }
 
-        // Точка воспроизведения.
+        // Playhead.
         dc.DrawRectangle(playheadBrush, null, new Rect(playheadX - PlayheadWidth / 2, 1, PlayheadWidth, h - 2));
     }
 
@@ -242,7 +242,7 @@ public sealed class WaveformTimeline : FrameworkElement
         try { return Application.Current?.TryFindResource(key); } catch { return null; }
     }
 
-    // ========================= мышь =========================
+    // ========================= Mouse =========================
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -261,8 +261,8 @@ public sealed class WaveformTimeline : FrameworkElement
         _dragFrac = Math.Clamp(e.GetPosition(this).X / Math.Max(1, ActualWidth), 0, 1);
         InvalidateVisual();
 
-        // Непрерывный seek при зажатой кнопке с троттлингом ~150 мс —
-        // финальный seek всё равно выполняется при отпускании.
+        // Continuous seek while the button is held, throttled to ~150ms —
+        // the final seek runs on release anyway.
         var now = Environment.TickCount64;
         if (now - _lastDragSeekTick < 150) return;
         _lastDragSeekTick = now;
@@ -281,7 +281,7 @@ public sealed class WaveformTimeline : FrameworkElement
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
-        // Отмена перетаскивания (Alt+Tab и т.п.): playhead возвращается к позиции.
+        // Drag canceled (Alt+Tab etc.): the playhead returns to the position.
         if (_dragging)
         {
             _dragging = false;

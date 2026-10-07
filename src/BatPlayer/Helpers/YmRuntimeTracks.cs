@@ -6,30 +6,30 @@ using BatPlayer.Models;
 namespace BatPlayer.Helpers;
 
 /// <summary>
-/// Построение runtime-треков Track из строк ym_tracks (карточки Home, Яндекс Музыка, поиск).
-/// Такие треки существуют только в памяти: БД tracks не пишется, Id — отрицательные
-/// (-1 - index), чтобы гарантированно не пересекаться с локальными long-Id. Чтобы Id
-/// не пересекались и с SC/VK-карточками в том же списке, нумерация продолжается после них
-/// (startIndex — см. LibraryViewModel.LoadAsync / ApplySearchAsync).
-/// Поле Track.ScId при Source="yandex" хранит ym_id (универсальный PlatformId — см. Track).
+/// Builds runtime Track objects from ym_tracks rows (Home, Yandex Music, search cards).
+/// Such tracks exist only in memory: the tracks DB is not written, and Ids are negative
+/// (-1 - index) so they can never collide with local long Ids. To also avoid collisions
+/// with SC/VK cards in the same list, numbering continues after them
+/// (startIndex — see LibraryViewModel.LoadAsync / ApplySearchAsync).
+/// Track.ScId with Source="yandex" holds ym_id (the universal PlatformId — see Track).
 /// </summary>
 public static class YmRuntimeTracks
 {
     /// <summary>
-    /// Карточка YM-трека для списков: FilePath пуст — реальный файл (локальный матч или
-    /// mp3 из кэша) резолвится при клике; CoverCachePath — локальная обложка из кэша.
-    /// IsFavorite = false: лайков YM в этой модели нет, страница Favorites их не получает.
-    /// IsAvailable = row.Available: тарифно-недоступные треки помечаются плееру.
-    /// DateAdded = время лайка: общая сортировка держит свежелайкнутые над старыми.
+    /// YM track card for lists: FilePath is empty — the real file (local match or cached
+    /// mp3) is resolved on click; CoverCachePath is the local cached cover.
+    /// IsFavorite defaults to false: the Favorites page excludes YM unless callers pass true.
+    /// IsAvailable = row.Available: tariff-unavailable tracks are flagged to the player.
+    /// DateAdded = like time: the unified sorting keeps freshly liked above older ones.
     /// </summary>
     public static Track BuildRuntimeTrack(YmTrackRow row, int index, bool isFavorite = false)
         => BuildRuntimeTrack(row.YmId, row.Title, row.Artist, row.DurationMs,
             row.ArtworkLocalPath, row.Available, index, isFavorite,
             TrackTimestamps.ParseUtc(row.LikedAt));
 
-    /// <summary>Карточка по полям YM-трека (перегрузка для YmCard на странице Яндекс Музыки).
-    /// isFavorite: карточки-ЛАЙКИ (страница ЯМ, «Фавориты») — true — сердечко в плеере
-    /// горит; карточки-рекомендации волны — false (они не лайкнуты).</summary>
+    /// <summary>Card from YM track fields (overload for YmCard on the Yandex Music page).
+    /// isFavorite: like cards (YM page, Favorites) = true so the player heart is lit;
+    /// wave recommendation cards = false (they are not liked).</summary>
     public static Track BuildRuntimeTrack(string ymId, string title, string artist, long durationMs,
                                           string? artworkLocalPath, bool available, int index,
                                           bool isFavorite = false, DateTime addedAtUtc = default)
@@ -49,12 +49,11 @@ public static class YmRuntimeTracks
         };
 
     /// <summary>
-    /// YM-часть списка библиотеки по фильтру страницы: «All» (Home) и «Favorites» —
-    /// лайки ЯМ и есть фавориты платформы. «Recent» (недавно добавленные) и «Played»
-    /// — пусто: у Яндекс Музыки в этой модели нет дат добавления, а прослушки на
-    /// «Played» приходят из play_log (MergeRecentlyPlayed). Порядок rows (порядок
-    /// лайков) сохраняется. startIndex — смещение нумерации runtime-Id.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// YM part of the library list for the page filter: "All" (Home) and "Favorites" —
+    /// YM likes are the platform's favorites. "Recent" (newly added) and "Played" are
+    /// empty: Yandex Music has no added dates in this model, and "Played" plays come
+    /// from play_log (MergeRecentlyPlayed). The rows order (like order) is preserved.
+    /// startIndex offsets the runtime-Id numbering.
     /// </summary>
     public static List<Track> BuildYmAppend(string filterMode, IReadOnlyList<YmTrackRow> rows, int startIndex)
     {
@@ -69,27 +68,12 @@ public static class YmRuntimeTracks
     }
 
     /// <summary>
-    /// YM-часть поиска: строки с совпадением title/artist (регистронезависимо) —
-    /// runtime-карточки В КОНЦЕ списка (после локальных, SC- и VK-совпадений). FilePath пуст:
-    /// файл резолвится на клике через AudioService.FilePathResolver. Пустой/пропущенный
-    /// запрос — пустой результат (поиск означает непустую строку). Чистая функция —
-    /// покрыта юнит-тестами.
+    /// YM part of search: rows matching title/artist (case-insensitive) become runtime
+    /// cards at the END of the list (after local, SC and VK matches). FilePath is empty:
+    /// resolved on click via AudioService.FilePathResolver. An empty/missing query yields
+    /// an empty result (search means a non-empty string).
     /// </summary>
     public static List<Track> FilterWithYm(int startIndex, IReadOnlyList<YmTrackRow> rows, string? query)
-    {
-        var result = new List<Track>();
-        if (string.IsNullOrWhiteSpace(query)) return result;
-
-        var index = startIndex;
-        foreach (var row in rows)
-        {
-            if (row.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
-             || row.Artist.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add(BuildRuntimeTrack(row, index));
-                index++;
-            }
-        }
-        return result;
-    }
+        => RuntimeTrackFilter.Filter(startIndex, rows, query,
+            r => r.Title, r => r.Artist, (r, i) => BuildRuntimeTrack(r, i));
 }

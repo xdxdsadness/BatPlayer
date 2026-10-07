@@ -11,10 +11,10 @@ using BatPlayer.Services;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Страница «Загрузки»: локальные треки библиотеки — файлы, добавленные с компьютера
-/// (Source=local), отсортированные по дате добавления (новые сверху). Скачанные SC-треки
-/// остаются на вкладке SoundCloud (лайки). Клик играет трек; очередь — все локальные
-/// треки страницы, поэтому Previous/Next ходят по всему списку.
+/// Downloads page: the library's local tracks — files added from the computer
+/// (Source=local), sorted by date added (newest first). Downloaded SC tracks stay
+/// on the SoundCloud tab (likes). Click plays a track; the queue is all local tracks
+/// of the page, so Previous/Next walk the whole list.
 /// </summary>
 public partial class DownloadsViewModel : PageViewModel, ISearchablePage
 {
@@ -23,11 +23,11 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
 
     public ObservableCollection<Track> Tracks { get; } = new();
 
-    // === Универсальный поиск (строка в шапке окна) ===
+    // === Universal search (the bar in the window header) ===
     private List<Track> _allTracks = new();
     private string _searchQuery = string.Empty;
 
-    /// <summary>Фильтр списка по названию и исполнителю; пустой запрос — полный список.</summary>
+    /// <summary>Filters the list by title and artist; an empty query shows the full list.</summary>
     public void ApplySearch(string? query)
     {
         _searchQuery = query ?? string.Empty;
@@ -49,7 +49,7 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
     [ObservableProperty] private string _counterText = string.Empty;
     [ObservableProperty] private string _hintText = string.Empty;
 
-    /// <summary>Ошибки для тоста главного окна (MainViewModel.ErrorMessage).</summary>
+    /// <summary>Errors for the main window toast (MainViewModel.ErrorMessage).</summary>
     public event EventHandler<string>? ErrorOccurred;
 
     public DownloadsViewModel(LibraryService library, AudioService audio)
@@ -58,7 +58,7 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
         _audio = audio;
         Title = Loc.Get("Downloads");
 
-        // VM живёт столько же, сколько приложение, поэтому отписка не нужна.
+        // VM lives as long as the app, so no unsubscribe is needed.
         Loc.LanguageChanged += (_, _) =>
         {
             Title = Loc.Get("Downloads");
@@ -66,12 +66,12 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
         };
     }
 
-    /// <summary>Вызывается из MainViewModel.Navigate("Downloads"): пересобрать список.</summary>
+    /// <summary>Called from MainViewModel.Navigate("Downloads"): rebuild the list.</summary>
     public async Task OnNavigatedAsync()
     {
-        // Карточки прежнего содержимого гасим сразу, до запроса: иначе до завершения
-        // загрузки под шапкой висели карточки прошлого визита. IsLoading прячет
-        // пустое состояние, чтобы оно не мигало на время очистки.
+        // Clear the previous cards up front, before the query: otherwise the previous
+        // visit's cards stayed visible under the header until loading finished.
+        // IsLoading hides the empty state so it does not flash during the clear.
         IsLoading = true;
         Tracks.Clear();
         RefreshTexts();
@@ -82,7 +82,7 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
     {
         try
         {
-            // Локальные треки из БД (Source=local): недавно добавленные сверху.
+            // Local tracks from the DB (Source=local): recently added on top.
             _allTracks = await _library.GetAllTracksAsync(SortColumn.DateAdded, SortDirection.Descending);
             RebuildTracks();
         }
@@ -96,12 +96,12 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
         }
     }
 
-    /// <summary>«Пустая страница»: загрузка завершена и треков нет — иначе заглушка
-    /// мигала бы на время очистки/загрузки списка.</summary>
+    /// <summary>"Empty page": loading finished and there are no tracks — otherwise the
+    /// placeholder would flash during the clear/load.</summary>
     public bool ShowEmptyState => !IsLoading && Tracks.Count == 0;
 
-    /// <summary>Перемешать список загрузок; если играет трек из этого списка —
-    /// очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the downloads list; if a track from this list is playing,
+    /// the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShuffleTracks() =>
         Helpers.CardsShuffler.Shuffle(Tracks, _audio,
@@ -114,9 +114,9 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Клик по карточке: играет трек (SC-карточки на страницу не попадают — FilePath
-    /// у локальных всегда задан); повторный клик по играющему — пауза/возобновление.
-    /// Очередь = локальные треки страницы.
+    /// Card click: plays the track (SC cards never reach this page — FilePath is always
+    /// set for local ones); clicking the playing track again pauses/resumes.
+    /// Queue = the page's local tracks.
     /// </summary>
     [RelayCommand]
     private Task PlayPauseTrack(Track? track)
@@ -133,7 +133,7 @@ public partial class DownloadsViewModel : PageViewModel, ISearchablePage
         }
         catch (Exception ex)
         {
-            // Файл могли удалить между построением списка и кликом.
+            // The file may have been deleted between building the list and the click.
             Logger.Error(ex, "Downloads play failed");
             ErrorOccurred?.Invoke(this, $"{Loc.Get("ErrorPlayback")}: {ex.Message}");
         }

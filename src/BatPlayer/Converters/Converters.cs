@@ -12,11 +12,11 @@ using BatPlayer.Models;
 namespace BatPlayer.Converters;
 
 /// <summary>
-/// true, если платформенная карточка (SoundCloud/VK/Яндекс Музыка) — текущий трек плеера
-/// и он сейчас играет. Значения: [0] id карточки на платформе (ScId/VkId/YmId, строка),
-/// [1] ScId текущего трека плеера, [2] IsPlaying, [3] Source текущего трека;
-/// parameter — ожидаемый источник ("soundcloud"/"vk"/"yandex"): id разных платформ
-/// числовые и могут совпадать, сравниваем только внутри одной платформы.
+/// True when the platform card (SoundCloud/VK/Yandex Music) is the player's current
+/// track and it is playing. Values: [0] card platform id (ScId/VkId/YmId, string),
+/// [1] ScId of the player's current track, [2] IsPlaying, [3] current track's Source;
+/// parameter is the expected source ("soundcloud"/"vk"/"yandex"): platform ids are
+/// numeric and can coincide, so comparison happens within one platform only.
 /// </summary>
 public sealed class PlatformCardPlayingConverter : IMultiValueConverter
 {
@@ -37,11 +37,11 @@ public sealed class PlatformCardPlayingConverter : IMultiValueConverter
 }
 
 /// <summary>
-/// true, если трек карточки — текущий трек плеера и он сейчас играет.
-/// Значения: [0] Track карточки, [1] CurrentTrack плеера, [2] IsPlaying.
-/// Сравнение — через Track.IsSameTrackAs: у runtime-карточек платформ Id
-/// отрицательные и совпадают между разными списками (Home/Favorites/страницы
-/// платформ), поэтому сверяем источник + id на платформе (ScId), а не Id.
+/// True when the card's track is the player's current track and it is playing.
+/// Values: [0] card Track, [1] player CurrentTrack, [2] IsPlaying.
+/// Compares via Track.IsSameTrackAs: platform runtime cards have negative Ids that
+/// coincide across lists (Home/Favorites/platform pages), so source + platform id
+/// (ScId) are compared instead of Id.
 /// </summary>
 public sealed class CurrentTrackPlayingConverter : IMultiValueConverter
 {
@@ -58,9 +58,9 @@ public sealed class CurrentTrackPlayingConverter : IMultiValueConverter
 }
 
 /// <summary>
-/// true, если играет очередь ЭТОГО плейлиста — карточка показывает Pause вместо Play
-/// и держит hover-оверлей, как карточка играющего трека. Значения: [0] Id плейлиста
-/// карточки, [1] CurrentPlaylistId плеера, [2] IsPlaying.
+/// True when THIS playlist's queue is playing — the card shows Pause instead of Play
+/// and keeps the hover overlay like a playing track card. Values: [0] card playlist Id,
+/// [1] player CurrentPlaylistId, [2] IsPlaying.
 /// </summary>
 public sealed class PlaylistCardPlayingConverter : IMultiValueConverter
 {
@@ -148,42 +148,8 @@ public sealed class TimeSpanToStringConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>
-/// Загрузка обложки по http(s)-ссылке (обложки SoundCloud). BitmapImage качает файл
-/// асинхронно сам, если создан на UI-потоке и не заморожен (Freeze() убил бы докачку).
-/// Кэш по URL: без него прокрутка списка перекачивала бы каждую обложку заново.
-/// </summary>
-public sealed class UrlToImageConverter : IValueConverter
-{
-    private const int MaxCacheEntries = 600;
-
-    private static readonly ConcurrentDictionary<string, BitmapImage> Cache =
-        new(StringComparer.Ordinal);
-
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is not string url || string.IsNullOrEmpty(url)) return DependencyProperty.UnsetValue;
-        if (Cache.TryGetValue(url, out var cached)) return cached;
-        try
-        {
-            // Без DecodePixelWidth: WPF декодирует по месту (обложки ~500px, список небольшой).
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.UriSource = new Uri(url, UriKind.Absolute);
-            bmp.CacheOption = BitmapCacheOption.None; // async download; OnLoad заблокировал бы UI
-            bmp.EndInit();
-            if (Cache.Count >= MaxCacheEntries) Cache.Clear();
-            Cache[url] = bmp;
-            return bmp;
-        }
-        catch { return DependencyProperty.UnsetValue; }
-    }
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}
-
-/// <summary>Строка → Visible, если совпадает с parameter (без учёта регистра); иначе Collapsed.
-/// Бейджи платформы: Source трека ("soundcloud"/"vk"/"yandex") против ожидаемого.</summary>
+/// <summary>String → Visible when it equals parameter (case-insensitive); otherwise Collapsed.
+/// Platform badges: track Source ("soundcloud"/"vk"/"yandex") vs the expected one.</summary>
 public sealed class StringEqualsToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -194,7 +160,7 @@ public sealed class StringEqualsToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>false → Visible, true → Collapsed (пара к BoolToVisibilityConverter).</summary>
+/// <summary>false → Visible, true → Collapsed (inverse of BoolToVisibilityConverter).</summary>
 public sealed class InverseBoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -207,7 +173,7 @@ public sealed class VolumeToIconConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        // Громкость пришла double (0..100); принимаем на всякий случай и целые типы.
+        // Volume arrives as double (0..100); integer types are accepted just in case.
         var v = value switch
         {
             double d => d,
@@ -225,15 +191,14 @@ public sealed class VolumeToIconConverter : IValueConverter
 }
 
 /// <summary>
-/// Путь к картинке обложки -> BitmapImage с кэшем и пониженным разрешением декодирования.
-/// Раньше каждый вызов декодировал ПОЛНОРАЗМЕРНУЮ обложку с диска: карточки библиотеки,
-/// профили, артисты — сотни картинок по 1-3МБ => сотни МБ RAM и фризы при скролле.
-/// Теперь:
-/// - статический кэш по пути файла (одни и те же обложки шарятся между всеми view);
-/// - DecodePixelWidth = 400: обложки в сетке ≤ ~450px, для 48-64px мини-обложек тем более;
-/// - CacheOption.OnLoad + Freeze: файл не держится открытым, BitmapImage потокобезопасен;
-/// - лимит ~300 записей: при переполнении кэш сбрасывается целиком — OnLoad позволяет
-///   безопасно перечитать с диска.
+/// Cover image path -> BitmapImage with a cache and reduced decode resolution.
+/// Previously every call decoded the FULL-SIZE cover from disk: library cards, profiles,
+/// artists — hundreds of 1-3MB images => hundreds of MB of RAM and scroll freezes.
+/// Now:
+/// - static cache keyed by file path (the same cover is shared across all views);
+/// - DecodePixelWidth = 400: grid covers are <= ~450px, mini covers 48-64px even less;
+/// - CacheOption.OnLoad + Freeze: the file is not held open, BitmapImage is thread-safe;
+/// - ~300 entry limit: on overflow the cache is cleared — OnLoad allows a safe re-read.
 /// </summary>
 public sealed class PathToImageConverter : IValueConverter
 {
@@ -270,8 +235,8 @@ public sealed class PathToImageConverter : IValueConverter
 }
 
 /// <summary>
-/// Подгоняет высоту списка под целое число строк, чтобы нижняя строка не обрезалась.
-/// value — доступная высота (double), parameter — "rowHeight,headerHeight" (напр. "41,32").
+/// Snaps the list height to a whole number of rows so the bottom row is not clipped.
+/// value is the available height (double), parameter is "rowHeight,headerHeight" (e.g. "41,32").
 /// </summary>
 public sealed class SnapToRowsConverter : IValueConverter
 {
@@ -280,7 +245,7 @@ public sealed class SnapToRowsConverter : IValueConverter
         if (value is not double h || double.IsNaN(h) || h <= 0)
             return double.NaN;
 
-        // Параметры: высота строки, высота заголовка [, резерв под пейджер]
+        // Parameters: row height, header height [, pager reserve]
         var parts = (parameter as string)?.Split(',') ?? new[] { "41", "32" };
         var row = double.TryParse(parts[0], System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out var r) ? r : 41;
         var header = double.TryParse(parts.Length > 1 ? parts[1] : "32", System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out var hd) ? hd : 32;
@@ -334,11 +299,11 @@ public sealed class RepeatModeToIconConverter : IValueConverter
 }
 
 /// <summary>
-/// Двусторонний биндинг enum-свойства VM (например, StatsViewModel.Period) на
-/// IsChecked группы RadioButton: parameter — имя значения (CommandParameter).
-/// Convert: true, если значение свойства совпадает с parameter.
-/// ConvertBack: сброс галочки (false) не должен переписывать VM — Binding.DoNothing;
-/// установка галочки парсит parameter в enum того же типа, что и текущее значение.
+/// Two-way binding of a VM enum property (e.g. StatsViewModel.Period) to the IsChecked
+/// of a RadioButton group: parameter is the value name (CommandParameter).
+/// Convert: true when the property value equals parameter.
+/// ConvertBack: unchecking (false) must not overwrite the VM — Binding.DoNothing;
+/// checking parses parameter into the enum type of the current value.
 /// </summary>
 public sealed class EnumEqualsToBoolConverter : IValueConverter
 {
@@ -356,11 +321,11 @@ public sealed class EnumEqualsToBoolConverter : IValueConverter
 }
 
 /// <summary>
-/// bool (IsChecked переключателя) → смещение бегунка по X в пикселях: выключено — 0,
-/// включено — 20 (Track 42 − Thumb 16 − поля 3+3). Биндинг даёт верное положение
-/// сразу при загрузке (в т.ч. для включённых по умолчанию), а триггеры шаблона
-/// анимируют X поверх биндинга с FillBehavior=Stop — по завершении значение
-/// возвращается к биндингу уже нового состояния.
+/// bool (switch IsChecked) → thumb X offset in pixels: off = 0, on = 20
+/// (Track 42 - Thumb 16 - margins 3+3). The binding gives the correct position right at
+/// load (including checked-by-default), while the template triggers animate X on top of
+/// the binding with FillBehavior=Stop — when done, the value returns to the binding of
+/// the new state.
 /// </summary>
 public sealed class BoolToSwitchOffsetConverter : IValueConverter
 {

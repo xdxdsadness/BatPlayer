@@ -13,9 +13,9 @@
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
         UseLayoutRounding="True">
 
-    <!-- WindowChrome: WindowStyle=None без него оставляет системную DWM-рамку —
-         сверху окна белая полоса (светлая тема Windows). Забираем non-client область
-         целиком: рамка исчезает, ресайз (5px) и DragMove из code-behind живут. -->
+    <!-- WindowChrome: WindowStyle=None without it leaves the system DWM frame —
+         a white strip at the top of the window. Taking over the whole non-client
+         area removes the frame while keeping resize (5px) and DragMove. -->
     <WindowChrome.WindowChrome>
         <WindowChrome GlassFrameThickness="0" CaptionHeight="0" ResizeBorderThickness="5" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
@@ -26,7 +26,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Title bar: заголовок + крестик, перетаскивание за верхнюю полосу -->
+        <!-- Title bar: heading + close button, drag by the top strip -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBrush}"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid Margin="16,0">
@@ -52,7 +52,7 @@
         <!-- Main content -->
         <Grid Grid.Row="1" Margin="32,20,32,24">
             <StackPanel>
-                <!-- Заголовок -->
+                <!-- Heading -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,14">
                     <Image Width="36" Height="36" Stretch="Uniform"
                            Source="pack://application:,,,/Resources/Logos/spotify.png" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -62,7 +62,7 @@
                                VerticalAlignment="Center" Margin="12,0,0,0"/>
                 </StackPanel>
 
-                <!-- Инструкция: где взять Client ID -->
+                <!-- Instructions: where to get the Client ID -->
                 <StackPanel Margin="0,0,0,14" MaxWidth="400">
                     <TextBlock FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
                                TextWrapping="Wrap" TextAlignment="Left"
@@ -89,8 +89,8 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Client ID: поле всегда доступно — значение можно вписать или
-                     изменить в любой момент (spotify_client.json) -->
+                <!-- Client ID: the field is always available — the value can be entered or
+                     changed at any time (spotify_client.json) -->
                 <StackPanel Margin="0,0,0,14" MaxWidth="400">
                     <TextBlock Text="Spotify Client ID"
                                FontSize="12" FontWeight="SemiBold"

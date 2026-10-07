@@ -9,18 +9,18 @@ using BatPlayer.Services.Spotify;
 namespace BatPlayer.Views;
 
 /// <summary>
-/// Окно входа в Spotify — OAuth 2.0 Authorization Code Flow с PKCE.
+/// Spotify login window — OAuth 2.0 Authorization Code Flow with PKCE.
 ///
-/// Последовательность:
-/// 1. Client ID: поле в этом окне всегда редактируемо; значение хранится в
-///    spotify_client.json. Без своего Client ID Spotify отклоняет авторизацию
-///    с «client_id: Invalid» — инструкция, где его взять, есть в окне.
-/// 2. Генерация code_verifier и code_challenge
-/// 3. Открытие браузера для авторизации (accounts.spotify.com/authorize)
-/// 4. Запуск локального HTTP сервера на localhost:8888
-/// 5. Ожидание callback от Spotify с authorization code
-/// 6. Обмен code на access_token + refresh_token
-/// 7. Сохранение токенов в spotify_auth.json
+/// Sequence:
+/// 1. Client ID: the field in this window is always editable; the value is stored in
+///    spotify_client.json. Without a valid Client ID Spotify rejects authorization
+///    with "client_id: Invalid" — the window explains where to get one.
+/// 2. Generate code_verifier and code_challenge
+/// 3. Open the browser for authorization (accounts.spotify.com/authorize)
+/// 4. Start a local HTTP server on localhost:8888
+/// 5. Wait for Spotify's callback with the authorization code
+/// 6. Exchange the code for access_token + refresh_token
+/// 7. Save the tokens to spotify_auth.json
 /// </summary>
 public partial class SpotifyLoginWindow : Window
 {
@@ -34,8 +34,8 @@ public partial class SpotifyLoginWindow : Window
     {
         InitializeComponent();
         _spotify = spotify;
-        // Поле всегда открыто и предзаполнено сохранённым значением —
-        // Client ID можно вписать или изменить перед каждым подключением.
+        // The field is always open and pre-filled with the saved value —
+        // the Client ID can be entered or changed before each connection.
         ClientIdBox.Text = SpotifyService.GetClientId();
         Closed += (_, _) =>
         {
@@ -71,7 +71,7 @@ public partial class SpotifyLoginWindow : Window
     {
         if (_finished) return;
 
-        // 0. Client ID: сохраняем текущее значение поля (можно менять каждый раз).
+        // 0. Client ID: save the current field value (can be changed each time).
         var clientId = ClientIdBox.Text.Trim();
         if (clientId.Length == 0)
         {
@@ -86,11 +86,11 @@ public partial class SpotifyLoginWindow : Window
 
         try
         {
-            // 1. Генерация PKCE параметров
+            // 1. Generate PKCE parameters
             var (authUrl, codeVerifier) = SpotifyService.GenerateAuthUrl();
             _codeVerifier = codeVerifier;
 
-            // 2. Запуск локального HTTP сервера
+            // 2. Start the local HTTP server
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add("http://localhost:8888/");
 
@@ -108,7 +108,7 @@ public partial class SpotifyLoginWindow : Window
 
             StatusText.Text = "Opening browser for authorization...";
 
-            // 3. Открытие браузера
+            // 3. Open the browser
             try
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -125,14 +125,14 @@ public partial class SpotifyLoginWindow : Window
 
             StatusText.Text = "Waiting for authorization...";
 
-            // 4. Ожидание callback
+            // 4. Wait for the callback
             var context = await _httpListener.GetContextAsync();
 
-            // Получаем параметры из query string
+            // Read the parameters from the query string
             var code = context.Request.QueryString["code"];
             var error = context.Request.QueryString["error"];
 
-            // Отправляем ответ браузеру
+            // Send the response to the browser
             var response = context.Response;
             string responseString;
 
@@ -199,7 +199,7 @@ public partial class SpotifyLoginWindow : Window
                 return;
             }
 
-            // 5. Обмен code на токены
+            // 5. Exchange the code for tokens
             StatusText.Text = "Exchanging code for token...";
             var success = await _spotify.ExchangeCodeForTokenAsync(code, _codeVerifier, _cts.Token);
 
@@ -211,7 +211,7 @@ public partial class SpotifyLoginWindow : Window
                 return;
             }
 
-            // 6. Успех!
+            // 6. Success!
             _finished = true;
             StatusText.Text = "✓ Connected successfully!";
             Logger.Info("Spotify authorization successful");
@@ -221,7 +221,7 @@ public partial class SpotifyLoginWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            // Client ID не настроен — поле и так всегда открыто, подсказываем текстом.
+            // Client ID not configured — the field is always open anyway; the error text guides the user.
             Logger.Warn($"Spotify login: {ex.Message}");
             StatusText.Text = ex.Message;
             ClientIdBox.Focus();
@@ -229,7 +229,7 @@ public partial class SpotifyLoginWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // Окно закрыто пользователем
+            // Window closed by the user
         }
         catch (Exception ex)
         {

@@ -4,30 +4,30 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты парсинга прокси: строка ProxyServer из WinINET-реестра (форматы VPN-клиентов
-/// "socks=127.0.0.1:10808", bare "host:port", "http=...;https=...") и пользовательская
-/// настройка SoundCloudProxy ("socks5://host:port" и т.п.). Функции чистые — без сети и реестра.
+/// Proxy parsing tests: the ProxyServer string from the WinINET registry (VPN-client
+/// formats like "socks=127.0.0.1:10808", bare "host:port", "http=...;https=...") and the
+/// user SoundCloudProxy setting ("socks5://host:port" etc.). Pure functions — no network.
 /// </summary>
 public class SoundCloudProxyConfigTests
 {
     // ==================== ParseSystemProxy (ProxyServer) ====================
 
     [Theory]
-    // Реальный кейс пользователя: локальный SOCKS5 от VPN.
+    // Real user case: local SOCKS5 from a VPN.
     [InlineData("socks=127.0.0.1:10808", "socks5", "127.0.0.1", 10808)]
-    // Bare-строка — WinINET трактует её как HTTP-прокси.
+    // Bare string — WinINET treats it as an HTTP proxy.
     [InlineData("127.0.0.1:10808", "http", "127.0.0.1", 10808)]
     [InlineData("proxy.local:3128", "http", "proxy.local", 3128)]
-    // Протокольный список: для https-трафика берём https= (сам прокси HTTP CONNECT).
+    // Protocol list: https= wins for https traffic.
     [InlineData("http=10.0.0.2:3128;https=10.0.0.2:3129", "http", "10.0.0.2", 3129)]
     [InlineData("https=10.0.0.2:3129", "http", "10.0.0.2", 3129)]
     [InlineData("http=10.0.0.2:3128", "http", "10.0.0.2", 3128)]
-    // socks= приоритетнее http=, служебные сегменты игнорируются.
+    // socks= beats http=; service segments are ignored.
     [InlineData("ftp=1.1.1.1:21;socks=127.0.0.1:10808;<local>", "socks5", "127.0.0.1", 10808)]
     [InlineData("http=192.168.1.10:8080;socks=192.168.1.10:1080", "socks5", "192.168.1.10", 1080)]
-    // Пробелы вокруг сегментов допустимы.
+    // Whitespace around segments is allowed.
     [InlineData("  socks=proxy.vpn:10808  ", "socks5", "proxy.vpn", 10808)]
-    // IPv6-хост в скобках.
+    // Bracketed IPv6 host.
     [InlineData("[::1]:10808", "http", "[::1]", 10808)]
     public void ParseSystemProxy_ValidFormats_ReturnsEndpoint(
         string input, string scheme, string host, int port)
@@ -45,20 +45,20 @@ public class SoundCloudProxyConfigTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("<local>")]
-    [InlineData("no-port-here")]         // порт обязателен
-    [InlineData("socks=host")]           // без порта
-    [InlineData("socks=host:")]          // пустой порт
-    [InlineData("socks=host:0")]         // порт вне диапазона
+    [InlineData("no-port-here")]         // port required
+    [InlineData("socks=host")]           // no port
+    [InlineData("socks=host:")]          // empty port
+    [InlineData("socks=host:0")]         // port out of range
     [InlineData("socks=host:99999")]
-    [InlineData("socks=host:abc")]       // нечисловой порт
-    [InlineData("gopher=host:70")]       // протокол не подходит для HTTPS-трафика
+    [InlineData("socks=host:abc")]       // non-numeric port
+    [InlineData("gopher=host:70")]       // protocol unsuitable for https traffic
     [InlineData("socks=")]
     public void ParseSystemProxy_InvalidInput_ReturnsNull(string? input)
     {
         Assert.Null(SoundCloudProxyConfig.ParseSystemProxy(input));
     }
 
-    // ==================== ParseUserProxy (настройка) =====================
+    // ==================== ParseUserProxy (user setting) =====================
 
     [Theory]
     [InlineData("socks5://127.0.0.1:10808", "socks5", "127.0.0.1", 10808)]
@@ -66,7 +66,7 @@ public class SoundCloudProxyConfigTests
     [InlineData("SOCKS5://127.0.0.1:10808", "socks5", "127.0.0.1", 10808)]
     [InlineData("http://proxy.local:3128", "http", "proxy.local", 3128)]
     [InlineData("https://proxy.local:3128", "https", "proxy.local", 3128)]
-    [InlineData("127.0.0.1:10808", "http", "127.0.0.1", 10808)] // без схемы → http
+    [InlineData("127.0.0.1:10808", "http", "127.0.0.1", 10808)] // no scheme → http
     [InlineData(" socks5://127.0.0.1:10808 ", "socks5", "127.0.0.1", 10808)]
     public void ParseUserProxy_ValidFormats_ReturnsEndpoint(
         string input, string scheme, string host, int port)
@@ -83,18 +83,18 @@ public class SoundCloudProxyConfigTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("off")]                                // "выключено" разбирает вызывающий, не парсер
-    [InlineData("socks5://host")]                      // без порта
-    [InlineData("socks5://host:0")]                    // порт вне диапазона
-    [InlineData("ftp://host:21")]                      // схема не поддерживается
-    [InlineData("socks5://user:pass@host:1080")]        // credentials не поддерживаются
-    [InlineData("socks5://")]                          // пустой хост
+    [InlineData("off")]                                // "off" is handled by the caller, not the parser
+    [InlineData("socks5://host")]                      // no port
+    [InlineData("socks5://host:0")]                    // port out of range
+    [InlineData("ftp://host:21")]                      // unsupported scheme
+    [InlineData("socks5://user:pass@host:1080")]        // credentials not supported
+    [InlineData("socks5://")]                          // empty host
     public void ParseUserProxy_InvalidInput_ReturnsNull(string? input)
     {
         Assert.Null(SoundCloudProxyConfig.ParseUserProxy(input));
     }
 
-    // ========================= Вспомогательные ==========================
+    // ========================= Helpers ==========================
 
     [Fact]
     public void Format_RendersSchemeHostPort()
@@ -107,7 +107,7 @@ public class SoundCloudProxyConfigTests
     [Fact]
     public void TryCreateWebProxy_Socks5AndHttp_CreatesWebProxy()
     {
-        // .NET 8 поддерживает socks5:// в WebProxy/SocketsHttpHandler — создание не бросает.
+        // .NET 8 supports socks5:// in WebProxy/SocketsHttpHandler — creation does not throw.
         var socks = SoundCloudProxyConfig.TryCreateWebProxy(("socks5", "127.0.0.1", 10808));
         var http = SoundCloudProxyConfig.TryCreateWebProxy(("http", "127.0.0.1", 8080));
 

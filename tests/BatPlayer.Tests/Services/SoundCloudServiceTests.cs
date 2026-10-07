@@ -7,10 +7,9 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты разбора ответов неофициального API SoundCloud и выбора стрима.
-/// Фикстура ниже повторяет реальный ответ /users/{id}/likes: обёртка с created_at,
-/// вложенный track, соседний элемент-плейлист, transcodings progressive + hls,
-/// next_href — полный URL с курсором (пагинация по времени лайка).
+/// Tests for unofficial SoundCloud API response parsing and stream picking. The fixture
+/// mirrors a real /users/{id}/likes response: created_at wrapper, nested track, a playlist
+/// sibling, progressive + hls transcodings, full-URL next_href cursor (like-time pagination).
 /// </summary>
 public class SoundCloudServiceTests
 {
@@ -72,7 +71,7 @@ public class SoundCloudServiceTests
 
         Assert.NotNull(response);
         Assert.Equal(3, response!.Collection.Count);
-        // next_href — полный URL /users/{id}/likes с курсором в offset (пагинация по времени лайка).
+        // next_href is a full /users/{id}/likes URL with a cursor in offset.
         Assert.NotNull(response.NextHref);
         Assert.Contains("users/1234567/likes", response.NextHref);
         Assert.Contains("offset=", response.NextHref);
@@ -90,7 +89,7 @@ public class SoundCloudServiceTests
         var response = SoundCloudService.ParseLikesJson(LikesFixture)!;
         var rows = SoundCloudService.ExtractLikeRows(response, "2026-09-15T00:00:00Z");
 
-        // Элемент collection[].playlist не даёт строки БД.
+        // collection[].playlist items yield no DB rows.
         Assert.Equal(2, rows.Count);
 
         var first = rows[0];
@@ -100,18 +99,18 @@ public class SoundCloudServiceTests
         Assert.Equal(213456, first.DurationMs);
         Assert.Equal("https://soundcloud.com/neon-fox/midnight-drive", first.PermalinkUrl);
         Assert.True(first.Streamable);
-        // liked_at — created_at обёртки (дата лайка), а не дата загрузки трека.
+        // liked_at is the wrapper created_at (like date), not the track upload date.
         Assert.Equal("2026-08-01T10:15:00Z", first.LikedAt);
         Assert.Equal("2026-09-15T00:00:00Z", first.SyncedAt);
-        // Обложка апгрейдится с -large до -t500x500.
+        // Artwork upgraded from -large to -t500x500.
         Assert.Contains("-t500x500.jpg", first.ArtworkUrl);
 
         var second = rows[1];
         Assert.Equal("445566778", second.ScId);
-        // username пустой -> берём full_name.
+        // empty username → fall back to full_name.
         Assert.Equal("Ivan Petrov", second.Artist);
         Assert.False(second.Streamable);
-        // Уже большой размер — без изменений.
+        // Already large — unchanged.
         Assert.Contains("-t500x500.jpg", second.ArtworkUrl);
     }
 
@@ -168,12 +167,12 @@ public class SoundCloudServiceTests
             SoundCloudService.AppendClientId("https://api-v2.soundcloud.com/me", "abc"));
         Assert.Equal("https://api-v2.soundcloud.com/me?limit=200&client_id=abc",
             SoundCloudService.AppendClientId("https://api-v2.soundcloud.com/me?limit=200", "abc"));
-        // Не дублируем, если client_id уже в ссылке (transcoding url приходит с ним).
+        // No duplicate when client_id is already in the url.
         Assert.Equal("https://x/y?client_id=existing",
             SoundCloudService.AppendClientId("https://x/y?client_id=existing", "abc"));
     }
 
-    // ======================= oauth_token из cookies =======================
+    // ======================= oauth_token from cookies =======================
 
     [Fact]
     public void ExtractOAuthToken_ReadsPairFromCookieString()
@@ -184,10 +183,10 @@ public class SoundCloudServiceTests
     [Fact]
     public void ExtractOAuthToken_HandlesPositionsAndWhitespace()
     {
-        // Первый cookie в строке, лишние пробелы вокруг пары и значения.
+        // First cookie in the string; extra spaces around pair and value.
         Assert.Equal("tok123", SoundCloudService.ExtractOAuthToken("oauth_token=tok123; _sc_session=x"));
         Assert.Equal("tok  x", SoundCloudService.ExtractOAuthToken("  oauth_token = tok  x ; y=1"));
-        // Регистр имени пары не важен; похожее имя с префиксом не совпадает.
+        // Pair name is case-insensitive; prefix-lookalike does not match.
         Assert.Equal("V", SoundCloudService.ExtractOAuthToken("OAUTH_TOKEN=V"));
         Assert.Null(SoundCloudService.ExtractOAuthToken("not_oauth_token=V"));
     }
@@ -196,7 +195,7 @@ public class SoundCloudServiceTests
     public void ExtractOAuthToken_NoToken_ReturnsNull()
     {
         Assert.Null(SoundCloudService.ExtractOAuthToken("a=1; b=2"));
-        Assert.Null(SoundCloudService.ExtractOAuthToken("oauth_token=")); // пустое значение
+        Assert.Null(SoundCloudService.ExtractOAuthToken("oauth_token=")); // empty value
         Assert.Null(SoundCloudService.ExtractOAuthToken(null));
         Assert.Null(SoundCloudService.ExtractOAuthToken(""));
     }
@@ -206,7 +205,7 @@ public class SoundCloudServiceTests
     [Fact]
     public void ExtractClientId_FromQuotedJsonInMinifiedJs()
     {
-        // Реалистичный кусок ассета: конфиг плеера внутри минифицированного бандла.
+        // Realistic asset snippet: player config inside a minified bundle.
         const string js = """
             !function(e){var t={api:"https://api-v2.soundcloud.com",client_id:"1a2B3c4D5e6F7g8H9i0Jk",app:"sc-web"};e.config=t}(window);
             """;
@@ -235,7 +234,7 @@ public class SoundCloudServiceTests
     {
         Assert.Null(SoundCloudClientIdProvider.ExtractClientId("var a = 1; // no id here"));
         Assert.Null(SoundCloudClientIdProvider.ExtractClientId(""));
-        // Слишком короткий id не считается валидным.
+        // Too-short id is not valid.
         Assert.Null(SoundCloudClientIdProvider.ExtractClientId("client_id:\"short\""));
     }
 
@@ -286,7 +285,7 @@ public class SoundCloudServiceTests
             Assert.Equal("oauth_token=secret; _sc_cookie=1", service.GetCookies());
             Assert.Equal(syncedAt, service.GetLastSyncedUtc());
 
-            // Disconnect удаляет файл сессии.
+            // Disconnect deletes the session file.
             service.Disconnect();
             Assert.False(service.HasAuthFile);
         }
@@ -299,20 +298,20 @@ public class SoundCloudServiceTests
     [Fact]
     public void AuthStore_UserId_PersistsAcrossLoadSave()
     {
-        // UserId (кэш GET /me) должен пережить перезапись auth-файла при сохранении last_synced.
+        // UserId (GET /me cache) must survive auth-file rewrite when saving last_synced.
         var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
             "obsidian_sc_auth_" + System.Guid.NewGuid().ToString("N") + ".json");
         try
         {
             var store = new SoundCloudAuthStore(path);
             var file = store.Load();
-            Assert.Null(file.UserId); // пустой файл — UserId ещё нет
+            Assert.Null(file.UserId); // empty file — no UserId yet
 
             file.UserId = "1234567";
             file.Cookies = "oauth_token=secret; _sc_cookie=1";
             store.Save(file);
 
-            // Перезапись других полей не теряет UserId (Load → мутация → Save).
+            // Rewriting other fields keeps UserId (Load → mutate → Save).
             var reloaded = store.Load();
             reloaded.LastSyncedAtUtc = "2026-09-15T00:00:00Z";
             store.Save(reloaded);
@@ -325,9 +324,9 @@ public class SoundCloudServiceTests
         }
     }
 
-    // ==================== AAC HLS (качество веб-плеера) ====================
+    // ==================== AAC HLS (web-player quality) ====================
 
-    /// <summary>Реальный набор транскодингов 2025+: AAC sq/lq, mp3 hls, progressive mp3.</summary>
+    /// <summary>Real 2025+ transcodings: AAC sq/lq, mp3 hls, progressive mp3.</summary>
     private const string AacTranscodingsFixture = """
         {
           "id": 2203706807,
@@ -365,15 +364,15 @@ public class SoundCloudServiceTests
             ]}}
             """)!;
 
-        // Только lq AAC (96 kbps ≈ mp3 128 по качеству): берём его, mp3-варианты
-        // не путаем с AAC по mime.
+        // Only lq AAC (96 kbps ≈ mp3 128): take it; mp3 variants are not confused
+        // with AAC by mime.
         Assert.Equal("https://x/aac-lq", SoundCloudService.PickHlsAacUrl(track));
     }
 
     [Fact]
     public void PickHlsAacUrl_NoAacTranscoding_ReturnsNull()
     {
-        // Старый/усечённый ответ: только mp3-варианты.
+        // Old/truncated response: mp3-only variants.
         var track = SoundCloudService.ParseTrackJson("""
             {"id":1,"media":{"transcodings":[
               {"url":"https://x/hls-mp3","format":{"protocol":"hls","mime_type":"audio/mpeg"}},
@@ -387,7 +386,7 @@ public class SoundCloudServiceTests
     [Fact]
     public void PickHlsAacUrl_ProgressiveAac_IsIgnored()
     {
-        // AAC вне HLS (progressive audio/mp4) не подходит для склейки сегментов.
+        // Non-HLS AAC (progressive audio/mp4) is unusable for segment concat.
         var track = SoundCloudService.ParseTrackJson("""
             {"id":1,"media":{"transcodings":[
               {"url":"https://x/aac-prog","format":{"protocol":"progressive","mime_type":"audio/mp4"}}
@@ -422,7 +421,7 @@ public class SoundCloudServiceTests
         Assert.Equal(3, pl.Segments.Count);
         Assert.Equal("https://cdn.hls/hi/playlist/seg0.m4s", pl.Segments[0]);
         Assert.Equal("https://cdn.hls/hi/playlist/seg2.m4s", pl.Segments[2]);
-        // Сумма EXTINF — точная длительность для патча fMP4.
+        // EXTINF sum is the exact duration for fMP4 patching.
         Assert.Equal(9.984 + 10.011 + 2.005, pl.TotalSeconds, 3);
     }
 
@@ -456,8 +455,7 @@ public class SoundCloudServiceTests
             """,
             new System.Uri("https://cdn/playlist.m3u8"))!;
 
-        // Без EXT-X-MAP init нет (каскад отвергнет склейку), без запятой в EXTINF
-        // длительность всё равно считана.
+        // No EXT-X-MAP → no init; duration still read despite the missing comma.
         Assert.Null(pl.InitUrl);
         Assert.Single(pl.Segments);
         Assert.Equal(3.0, pl.TotalSeconds, 3);
@@ -465,10 +463,9 @@ public class SoundCloudServiceTests
 }
 
 /// <summary>
-/// Отбор играбельной копии DRM-трека (/search/tracks): оригинал исключается,
-/// slowed/instrumental-варианты фильтруются, побеждает копия с совпадающей
-/// длительностью без рекламной модели. Фикстура повторяет реальный ответ поиска
-/// по «ksuuvi jiggy» (оригинал AD_SUPPORTED, копия от Didi — BLACKBOX).
+/// Picking a playable copy of a DRM track (/search/tracks): the original is excluded,
+/// slowed/instrumental variants are filtered, and the copy with matching duration and no
+/// ad model wins. Fixture mirrors a real search for "ksuuvi jiggy".
 /// </summary>
 public class SoundCloudReuploadRankingTests
 {
@@ -491,13 +488,13 @@ public class SoundCloudReuploadRankingTests
             SearchFixture, "jiggy (feat. xaviersobased)", "ksuuvi",
             durationMs: 102852, excludeScId: "1960321179");
 
-        // Копия с совпадающей длительностью и без рекламной модели — первая;
-        // укороченная копия z0kas проходит, но после неё.
+        // Copy with matching duration and no ad model ranks first; the shorter z0kas
+        // copy passes but lands after it.
         Assert.Equal(1961998451, ranked[0].Id);
         Assert.Contains(ranked, r => r.Id == 2313227855);
         Assert.Equal(2, ranked.Count);
 
-        // Фильтры: оригинал, slowed, instrumental, не-streamable и AD-копии не в списке.
+        // Filters: original, slowed, instrumental, non-streamable and AD copies excluded.
         Assert.DoesNotContain(ranked, r => r.Id == 1960321179);
         Assert.DoesNotContain(ranked, r => r.Id == 2093601288);
         Assert.DoesNotContain(ranked, r => r.Id == 2019821309);
@@ -508,8 +505,8 @@ public class SoundCloudReuploadRankingTests
     [Fact]
     public void RankReuploadCandidates_TooFarDuration_Rejected()
     {
-        // Копия с расхождением длительности больше 10 c — не кандидат (чужая версия:
-        // ускорение/обрезка), даже если название и артист совпадают.
+        // Duration mismatch over 10s — not a candidate (someone else's version),
+        // even with matching title and artist.
         var fixture = """
             {"collection":[
               {"id":3000000001,"title":"struggle gang","duration":87275,"streamable":true,"playback_count":5000,"policy":"MONETIZE","monetization_model":"BLACKBOX","user":{"username":"someone"},"media":{"transcodings":[]}}
@@ -524,10 +521,9 @@ public class SoundCloudReuploadRankingTests
 }
 
 /// <summary>
-/// Жизненный цикл диагностики веб-сессии: сохранение новых cookies (вход/переподключение
-/// аккаунта) сбрасывает флаг «сессия истекла» и поднимает SessionChanged — по нему
-/// MainViewModel чистит чёрный список провалов резолва (MONETIZE-треки, помеченные
-/// мёртвыми при протухшей сессии, ретраятся сразу).
+/// Web-session diagnostics lifecycle: saving fresh cookies (sign-in/reconnect) resets the
+/// "session expired" flag and raises SessionChanged, which MainViewModel uses to clear the
+/// resolve-failure blacklist (MONETIZE tracks marked dead on an expired session are retried).
 /// </summary>
 public class SoundCloudSessionTests
 {

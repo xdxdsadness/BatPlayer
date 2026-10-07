@@ -9,9 +9,9 @@
         <cv:PathToImageConverter x:Key="Path2Img"/>
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
         <cv:InverseIntToVisibilityConverter x:Key="InverseInt2Vis"/>
-        <!-- Контейнер карточки артиста: TrackCardStyle без переопределения шаблона —
-             hover-scale и пружина нажатия из общего стиля работают здесь так же, как на
-             карточках треков и плейлистов (раньше голый ContentPresenter их отключал). -->
+        <!-- Artist card container: TrackCardStyle without overriding the template —
+             hover-scale and the press spring from the shared style work here just
+             like on track and playlist cards (a bare ContentPresenter disabled them). -->
         <Style x:Key="ArtistCardStyle" TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
             <EventSetter Event="MouseLeftButtonUp" Handler="ArtistCard_Click"/>
         </Style>
@@ -28,7 +28,7 @@
                    Margin="32,14,24,8" ClipToBounds="True"
                     Foreground="{DynamicResource TextPrimaryBrush}"/>
 
-        <!-- Карточки артистов: сетка как в библиотеке — 4 в ряд, квадратная обложка -->
+        <!-- Artist cards: grid like the library — 4 per row, square cover -->
         <Grid Grid.Row="1" Margin="24,0,16,4">
             <ListView controls:ScrollHeaderCollapse.Header="{Binding ElementName=PageHeader}" ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
                       ItemsSource="{Binding Artists}"
@@ -42,17 +42,17 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel>
-                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
-                                 SquareBorder: квадрат уже в measure — без двойного
-                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <!-- Square cover (1:1) spanning the card width.
+                                 SquareBorder already makes it square in measure — no second
+                                 layout pass from a self-binding Height=ActualWidth. -->
                             <controls:SquareBorder CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
-                                    <!-- Плейсхолдер: серый силуэт мыши — единый плейсхолдер
-                                         всех баров (CardBatPlaceholder, без вращения) -->
+                                    <!-- Placeholder: gray bat silhouette — the single placeholder
+                                         used by all bars (CardBatPlaceholder, no rotation) -->
                                     <Image Style="{StaticResource CardBatPlaceholder}"/>
-                                    <!-- Обложка поверх плейсхолдера; прячется, если обложки нет.
-                                         LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые. -->
+                                    <!-- Cover over the placeholder; hidden when there is no cover.
+                                         LazyCover decodes 8 at a time in the background; only visible covers load while scrolling. -->
                                     <Border CornerRadius="8" controls:LazyCover.Path="{Binding CoverPath}">
                                         <Border.Background>
                                             <ImageBrush Stretch="UniformToFill"/>
@@ -78,8 +78,8 @@
                                             </Style>
                                         </Border.Style>
                                     </Border>
-                                    <!-- Hover-оверлей строго на обложке (без Play/Pause); прячется вместе с обложкой.
-                                         Появление/исчезание — плавный fade 0.15 с, как у карточек треков. -->
+                                    <!-- Hover overlay strictly on the cover (no Play/Pause); hides with the cover.
+                                         Fade in/out 0.15 s, like the track cards. -->
                                     <Border CornerRadius="8" Background="#40FFFFFF" IsHitTestVisible="False">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -103,9 +103,9 @@
                                                         <Setter Property="Opacity" Value="1"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding CoverPath}" Value="{x:Null}">
-                                                        <!-- Анимацией, а не сеттером: активная hold-end
-                                                             анимация hover-триггера перебивает сеттеры,
-                                                             и оверлей светился бы над плейсхолдером -->
+                                                        <!-- Animated, not a setter: an active hold-end animation of the
+                                                             hover trigger overrides setters,
+                                                             so the overlay would glow over the placeholder -->
                                                         <DataTrigger.EnterActions>
                                                             <BeginStoryboard>
                                                                 <Storyboard>
@@ -122,11 +122,11 @@
                                 </Grid>
                             </controls:SquareBorder>
 
-                            <!-- Имя исполнителя (без платформенных значков: артисты — общие) -->
+                            <!-- Artist name (no platform badges: artists are shared) -->
                             <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold" Margin="2,8,2,0"
                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                        TextTrimming="CharacterEllipsis"/>
-                            <!-- N треков -->
+                            <!-- N tracks -->
                             <TextBlock Text="{Binding TracksText}" FontSize="12" Margin="2,3,2,0"
                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"/>
@@ -139,9 +139,9 @@
             </ListView>
         </Grid>
 
-<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
-             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
-             при переключении задний фон не «прыгает» -->
+<!-- Empty state: the icon is pinned to the page CENTER (its bottom edge sits
+             16px above the center), the text grows downward — the icon point is
+             identical in every bar, so the background does not "jump" on switching -->
         <Border Grid.Row="1" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding Artists.Count, Converter={StaticResource InverseInt2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

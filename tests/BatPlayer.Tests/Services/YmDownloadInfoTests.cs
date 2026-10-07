@@ -4,15 +4,14 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты разбора download-info Яндекс Музыки: парсер (YmJsonParser.ParseDownloadInfo)
-/// и выбор лучшего варианта (YmService.PickBestOption). Регрессия: в современной
-/// раскладке поле downloadInfoUrl — дескриптор вместо готовой ссылки (Url пуст) —
-/// PickBestOption раньше отбрасывал такие варианты, и трек не играл вовсе.
-/// Чистые функции — сеть не используется.
+/// Tests for Yandex Music download-info parsing (YmJsonParser.ParseDownloadInfo) and
+/// best-option picking (YmService.PickBestOption). Regression: in the modern layout
+/// downloadInfoUrl is a descriptor with empty Url, which PickBestOption used to drop.
+/// Pure functions — no network.
 /// </summary>
 public class YmDownloadInfoTests
 {
-    /// <summary>Реальная раскладка API (2025+): result[] с downloadInfoUrl и bitrateInKbps.</summary>
+    /// <summary>Real API layout (2025+): result[] with downloadInfoUrl and bitrateInKbps.</summary>
     private const string ModernLayout = """
         {"result":[
           {"codec":"mp3","gain":false,"preview":false,

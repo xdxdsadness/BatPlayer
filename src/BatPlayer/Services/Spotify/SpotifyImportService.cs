@@ -12,27 +12,28 @@ using BatPlayer.Database;
 namespace BatPlayer.Services.Spotify;
 
 /// <summary>
-/// Импорт библиотеки Spotify БЕЗ Web API (с февраля 2026 Development Mode в
-/// Spotify Dashboard требует Premium — бесплатный путь лежит мимо API):
+/// Imports a Spotify library WITHOUT the Web API (since Feb 2026, Spotify Dashboard
+/// Development Mode requires Premium — the free path bypasses the API). Sources:
+/// 1. The official account export "Download your data" (spotify.com -> Account ->
+///    Privacy settings): a ZIP with YourLibrary.json (liked tracks) and
+///    Playlist*.json (playlist tracks).
+/// 2. CSV files from third-party exporters (Exportify, TuneMyMusic, etc.).
 ///
-/// 1. Официальный экспорт аккаунта «Download your data» (spotify.com → Аккаунт →
-///    Настройки конфиденциальности): ZIP с YourLibrary.json (лайкнутые треки)
-///    и Playlist*.json (треки плейлистов).
-/// 2. CSV сторонних экспортёров (Exportify, TuneMyMusic и т.п.).
+/// Spotify's export formats changed over the years, so the parser is tolerant.
+/// The result goes into the same spotify_tracks table as the Web API sync — the
+/// page, matching and playback work unchanged.
 ///
-/// Формат полей в экспорте Spotify менялся годами, поэтому парсер толерантный:
-/// trackName/track, artistName/artist, albumName/album, trackUri/uri.
-/// Результат кладётся в тот же spotify_tracks, что и синк Web API, — страница,
-/// матчинг и воспроизведение работают без изменений.
+/// Column names in the exports vary (trackName/track, artistName/artist,
+/// albumName/album, trackUri/uri) and are matched by normalized names.
 /// </summary>
 public static class SpotifyImportService
 {
     private static readonly JsonDocumentOptions DocOpts = new();
 
     /// <summary>
-    /// Разобрать файл экспорта (.zip / .json / .csv) в строки репозитория.
-    /// Бросает InvalidDataException/FormatException с человеческим сообщением,
-    /// если формат не опознан.
+    /// Parses an export file (.zip / .json / .csv) into repository rows.
+    /// Throws InvalidDataException/FormatException with a readable message
+    /// when the format is not recognized.
     /// </summary>
     public static List<SpotifyTrackRow> ParseFile(string path)
     {
@@ -64,7 +65,7 @@ public static class SpotifyImportService
                         }
                     }
 
-                    // Экспорт без YourLibrary.json: лайки неотличимы, берём треки плейлистов.
+                    // Export without YourLibrary.json: likes are indistinguishable, take playlist tracks.
                     if (libraryCount == 0 && playlistCount == 0)
                         throw new InvalidDataException(
                             "ZIP does not contain YourLibrary.json or Playlist*.json — " +
@@ -141,9 +142,9 @@ public static class SpotifyImportService
     }
 
     /// <summary>
-    /// Playlist*.json в двух вариантах: { "playlists": [ { "items": [...] } ] } и
-    /// одиночный { "items"|"contents": [...] }. Элементы — либо { "track": {...} },
-    /// либо плоские объекты с теми же полями.
+    /// Playlist*.json comes in two shapes: { "playlists": [ { "items": [...] } ] } and
+    /// a single { "items"|"contents": [...] }. Items are either { "track": {...} }
+    /// or flat objects with the same fields.
     /// </summary>
     private static int ParsePlaylistJson(JsonElement root, Dictionary<string, SpotifyTrackRow> byId)
     {
@@ -172,7 +173,7 @@ public static class SpotifyImportService
         var count = 0;
         foreach (var item in items.EnumerateArray())
         {
-            // Элементы плейлиста: { "track": {...} | null, "episode": {...}|null, "localTrack": {...}|null }
+            // Playlist items: { "track": {...} | null, "episode": {...}|null, "localTrack": {...}|null }
             if (item.ValueKind == JsonValueKind.Object)
             {
                 if (HasNonNull(item, "episode") || HasNonNull(item, "localTrack"))
@@ -196,8 +197,8 @@ public static class SpotifyImportService
     // ============================ CSV ===================================
 
     /// <summary>
-    /// Минимальный RFC4180-парсер: кавычки, запятые и переносы внутри кавычек.
-    /// Колонки мапятся по нормализованным именам (Exportify/TuneMyMusic/Soundiiz).
+    /// Minimal RFC4180 parser: quotes, commas and newlines inside quotes.
+    /// Columns are mapped by normalized names (Exportify/TuneMyMusic/Soundiiz).
     /// </summary>
     private static void ParseCsv(string content, Dictionary<string, SpotifyTrackRow> byId)
     {
@@ -293,7 +294,7 @@ public static class SpotifyImportService
                 rows.Add(cells);
                 cells = new List<string>();
                 if (rows.Count == 1 && rows[0].Count == 1 && rows[0][0].Length == 0)
-                    rows.Clear(); // пустая первая строка
+                    rows.Clear(); // empty first row
             }
             else
             {
@@ -314,7 +315,7 @@ public static class SpotifyImportService
 
         var uri = GetString(el, "trackUri") ?? GetString(el, "uri");
         if (uri != null && !uri.StartsWith("spotify:track:", StringComparison.OrdinalIgnoreCase))
-            return false; // эпизоды, локальные файлы, подкасты
+            return false; // episodes, local files, podcasts
 
         var title = GetString(el, "trackName") ?? GetString(el, "track") ?? GetString(el, "name");
         var artist = GetString(el, "artistName") ?? GetString(el, "artist");
@@ -363,13 +364,13 @@ public static class SpotifyImportService
         const string prefix = "spotify:track:";
         var idx = value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
         if (idx >= 0) value = value[(idx + prefix.Length)..];
-        else if (value.Contains(':')) return null; // spotify:episode: / spotify:local: / прочее
+        else if (value.Contains(':')) return null; // spotify:episode: / spotify:local: / other
 
         value = value.Split('?', '/')[0];
         return value.Length is > 0 and <= 64 ? value : null;
     }
 
-    /// <summary>Стабильный суррогатный ID для строк без URI: spotify_id — PRIMARY KEY.</summary>
+    /// <summary>Stable surrogate id for rows without a URI: spotify_id is the PRIMARY KEY.</summary>
     private static string SynthId(string artist, string title, string album)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -384,7 +385,7 @@ public static class SpotifyImportService
         if (string.IsNullOrWhiteSpace(value)) return 0;
         value = value.Trim();
 
-        // "3:45" / "1:03:12" → мс
+        // "3:45" / "1:03:12" -> milliseconds
         if (value.Contains(':'))
         {
             if (TimeSpan.TryParseExact(value, new[] { @"hh\:mm\:ss", @"m\:ss" },
@@ -396,7 +397,7 @@ public static class SpotifyImportService
         if (!int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var num))
             return 0;
 
-        // Экспортёры пишут и секунды, и мс; треки короче 10 секунд не бывают.
+        // Exporters write both seconds and milliseconds; tracks are never shorter than 10 s.
         return num < 10000 ? num * 1000 : num;
     }
 }

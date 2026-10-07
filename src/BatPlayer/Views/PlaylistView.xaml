@@ -13,7 +13,7 @@
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
         <cv:InverseBoolToVisibilityConverter x:Key="InvBool2Vis"/>
         <cv:InverseIntToVisibilityConverter x:Key="InvInt2Vis"/>
-        <!-- Играет ли очередь ЭТОГО плейлиста (Pause-состояние карточки) -->
+        <!-- Whether THIS playlist's queue is playing (card Pause state) -->
         <cv:PlaylistCardPlayingConverter x:Key="IsCurrentPlaylistPlaying"/>
     </UserControl.Resources>
 
@@ -47,21 +47,21 @@
             </Button>
         </Grid>
 
-        <!-- ===== Сетка плейлистов (как у остальных баров) ===== -->
+        <!-- ===== Playlists grid (like the other bars) ===== -->
         <Grid Grid.Row="1" Margin="24,0,16,4"
               Visibility="{Binding IsDetailView, Converter={StaticResource InvBool2Vis}}">
             <ListView Background="Transparent" BorderThickness="0"
                       ItemsSource="{Binding Playlists}"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <!-- Контейнер без стандартного chrome ListView: дефолтный шаблон
-                     подсвечивал карточку системным синим при наведении/выделении.
-                     Hover рисует сама карточка в DataTemplate. -->
+                <!-- Container without the standard ListView chrome: the default template
+                     highlighted the card with system blue on hover/selection.
+                     Hover is drawn by the card itself in the DataTemplate. -->
                 <ListView.ItemContainerStyle>
-                    <!-- TrackCardStyle: те же поля 8,4,8,24 и растягивание по слоту,
-                         что у карточек библиотеки и платформ — расстояния совпадают,
-                         а при смене плотности сетки карточки пережимаются вместе со слотом
-                         (прежний корневой StackPanel с Width-биндингом на собственную
-                         обложку залипал на старой ширине и «сжимал» карточки). -->
+                    <!-- TrackCardStyle: same margins 8,4,8,24 and stretch-to-slot as the
+                         library and platform cards — spacing matches, and when the grid
+                         density changes the cards resize with the slot (the previous root
+                         StackPanel with a Width binding to its own cover stuck at the old
+                         width and "squeezed" the cards). -->
                     <Style TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}"/>
                 </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>
@@ -71,11 +71,11 @@
                 </ListView.ItemsPanel>
                 <ListView.ItemTemplate>
                     <DataTemplate>
-                        <!-- Без Width-биндинга на собственную обложку: слот ширины даёт
-                             контейнер ListViewItem (Stretch) — как на платформенных страницах -->
+                        <!-- No Width binding to its own cover: the ListViewItem container
+                             provides the width slot (Stretch) — as on the platform pages -->
                         <StackPanel Cursor="Hand">
-                            <!-- Квадратная обложка (1:1). SquareBorder: квадрат уже в
-                                 measure — без двойного прохода компоновки self-биндинга. -->
+                            <!-- Square cover (1:1). SquareBorder: square already at
+                                 measure — no double layout pass from a self-binding. -->
                             <controls:SquareBorder x:Name="PlCoverRoot" CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
@@ -101,7 +101,7 @@
                                             <ImageBrush Stretch="UniformToFill"/>
                                         </Border.Background>
                                     </Border>
-                                    <!-- Нет обложки: серый силуэт мыши — как на остальных страницах -->
+                                    <!-- No cover: gray bat silhouette — as on the other pages -->
                                     <Image Width="64" Stretch="Uniform"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
                                            Source="pack://application:,,,/Resources/batlogo_gray.png"
@@ -129,8 +129,8 @@
                                                         </DataTrigger.ExitActions>
                                                         <Setter Property="Opacity" Value="1"/>
                                                     </DataTrigger>
-                                                    <!-- Оверлей держится, пока играет очередь ЭТОГО
-                                                         плейлиста — как у карточки играющего трека -->
+                                                    <!-- The overlay holds while THIS playlist's queue
+                                                         plays — like the playing track card -->
                                                     <DataTrigger Value="True">
                                                         <DataTrigger.Binding>
                                                             <MultiBinding Converter="{StaticResource IsCurrentPlaylistPlaying}">
@@ -186,7 +186,7 @@
                                                         <Setter Property="Opacity" Value="1"/>
                                                         <Setter Property="IsHitTestVisible" Value="True"/>
                                                     </DataTrigger>
-                                                    <!-- Кнопка видна и без наведения, пока играет этот плейлист -->
+                                                    <!-- The button is visible without hover while this playlist plays -->
                                                     <DataTrigger Value="True">
                                                         <DataTrigger.Binding>
                                                             <MultiBinding Converter="{StaticResource IsCurrentPlaylistPlaying}">
@@ -217,10 +217,10 @@
                                         </Button.Style>
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
-                                                <!-- Как у карточек на остальных страницах: кнопка
-                                                     накрывает обложку целиком (зона наведения), но
-                                                     белая плашка 40% сидит в СРЕДНЕЙ ячейке 3x3,
-                                                     а не растягивается на всю обложку -->
+                                                <!-- Like the cards on other pages: the button
+                                                     covers the whole cover (hover zone), but the
+                                                     40% white plate sits in the MIDDLE cell of 3x3
+                                                     instead of stretching over the cover -->
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="0.34*"/>
@@ -234,8 +234,8 @@
                                                     </Grid.RowDefinitions>
                                                     <Grid Grid.Column="1" Grid.Row="1">
                                                         <Border Background="#B3FFFFFF" CornerRadius="24"/>
-                                                        <!-- Вложенная сетка: иконка = 40% плашки,
-                                                             как у карточек SC/YM/VK/Spotify -->
+                                                        <!-- Nested grid: icon = 40% of the plate,
+                                                             like the SC/YM/VK/Spotify cards -->
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="0.30*"/>
@@ -253,7 +253,7 @@
                                                                         <Style TargetType="Path">
                                                                             <Setter Property="Data" Value="{StaticResource IconPlay}"/>
                                                                             <Style.Triggers>
-                                                                                <!-- Play → Pause, пока играет очередь этого плейлиста -->
+                                                                                <!-- Play → Pause while this playlist's queue plays -->
                                                                                 <DataTrigger Value="True">
                                                                                     <DataTrigger.Binding>
                                                                                         <MultiBinding Converter="{StaticResource IsCurrentPlaylistPlaying}">
@@ -278,7 +278,7 @@
                                 </Grid>
                             </controls:SquareBorder>
 
-                            <!-- Название + действия + N треков -->
+                            <!-- Title + actions + N tracks -->
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -339,7 +339,7 @@
             </ListView>
         </Grid>
 
-        <!-- ===== Детали плейлиста (треки) ===== -->
+        <!-- ===== Playlist details (tracks) ===== -->
         <Grid Grid.Row="1" Visibility="{Binding IsDetailView, Converter={StaticResource Bool2Vis}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -413,7 +413,7 @@
                                         <Border Width="48" Height="48" CornerRadius="6"
                                                 Background="{DynamicResource SecondaryBrush}">
                                             <Grid>
-                                                <!-- Нет обложки: серый силуэт мыши -->
+                                                <!-- No cover: gray bat silhouette -->
                                                 <Image Width="24" Stretch="Uniform"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Source="pack://application:,,,/Resources/batlogo_gray.png" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -479,9 +479,9 @@
             </Grid>
         </Grid>
 
-        <!-- Пустое состояние: нет ни одного плейлиста. Иконка прижата к ЦЕНТРУ страницы
-             (нижний край — за 16px до центра), текст растёт вниз от центра — точка иконки
-             та же, что у остальных баров, при переключении задний фон не «прыгает» -->
+        <!-- Empty state: no playlists yet. The icon is pinned to the page CENTER
+             (its bottom edge sits 16px above the center), the text grows downward —
+             the icon point matches the other bars, so the background does not "jump" -->
         <Border Grid.Row="1" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding IsDetailView, Converter={StaticResource InvBool2Vis}}"
                 IsHitTestVisible="False"

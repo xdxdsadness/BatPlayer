@@ -6,10 +6,11 @@ using Microsoft.Data.Sqlite;
 namespace BatPlayer.Database;
 
 /// <summary>
-/// Одна запись трека VK: только метаданные (скачивание аудио не предусмотрено).
-/// vk_id — "{owner_id}_{id}" (VK-идентификатор трека уникален только в паре с владельцем),
-/// храним TEXT. Временные mp3-ссылки из каталога al_audio в БД НЕ пишутся: они живут недолго и
-/// разрешаются заново в памяти при стриминге (VkService.GetPlayableStreamAsync).
+/// One VK track row: metadata only (no audio downloading).
+/// vk_id is "{owner_id}_{id}" (a VK track id is unique only together with its owner),
+/// stored as TEXT. Temporary mp3 URLs from the al_audio catalog are NOT persisted:
+/// they expire quickly and are re-resolved in memory at streaming time
+/// (VkService.GetPlayableStreamAsync).
 /// </summary>
 public sealed class VkTrackRow
 {
@@ -19,18 +20,18 @@ public sealed class VkTrackRow
     public long DurationMs { get; set; }
     public string ArtworkUrl { get; set; } = string.Empty;
 
-    /// <summary>Хеш ссылки на поток (reload_audio строит mp3-ссылку из него).</summary>
+    /// <summary>Stream URL hash (reload_audio builds the mp3 URL from it).</summary>
     public string UrlHash { get; set; } = string.Empty;
 
-    /// <summary>Путь обложки в локальном кэше (artworks_cache/vk_{vk_id}.jpg); null — ещё не скачана.</summary>
+    /// <summary>Cover path in the local cache (artworks_cache/vk_{vk_id}.jpg); null = not downloaded yet.</summary>
     public string? ArtworkLocalPath { get; set; }
 
     public string SyncedAt { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// Репозиторий таблицы vk_tracks. Upsert по vk_id, выдача в порядке добавления (rowid):
-/// порядок каталога al_audio сохраняется при первом синке, новые треки дописываются в конец.
+/// Repository for the vk_tracks table. Upsert by vk_id, ordered by insertion (rowid):
+/// the al_audio catalog order is kept from the first sync; new tracks are appended.
 /// </summary>
 public sealed class VkTracksRepository
 {
@@ -39,10 +40,10 @@ public sealed class VkTracksRepository
     public VkTracksRepository(SqliteConnection conn) => _conn = conn;
 
     /// <summary>
-    /// Пакетный upsert: повторная синхронизация не дублирует записи. У уже существующей
-    /// строки synced_at СОХРАНЯЕТСЯ прежний: это «дата добавления трека в библиотеку»
-    /// (единая сортировка «новые сверху» в LibraryViewModel), а не дата последнего синка —
-    /// иначе каждый пересинк поднимал бы весь каталог VK над остальными источниками.
+    /// Batch upsert: re-syncing does not duplicate rows. For existing rows synced_at
+    /// is KEPT as-is: it means "date the track was added to the library" (unified
+    /// newest-first sorting in LibraryViewModel), not the last sync date — otherwise
+    /// every re-sync would lift the whole VK catalog above the other sources.
     /// </summary>
     public async Task UpsertBatchAsync(IEnumerable<VkTrackRow> rows)
     {
@@ -60,7 +61,7 @@ public sealed class VkTracksRepository
         await _conn.ExecuteAsync(sql, rows);
     }
 
-    /// <summary>Все треки VK в порядке добавления (порядок библиотеки из al_audio).</summary>
+    /// <summary>All VK tracks in insertion order (al_audio library order).</summary>
     public async Task<List<VkTrackRow>> GetAllAsync()
     {
         var rows = await _conn.QueryAsync<VkTrackRow>(
@@ -68,7 +69,7 @@ public sealed class VkTracksRepository
         return rows.AsList();
     }
 
-    /// <summary>Трек по vk_id или null — резолверу плеера нужна строка для получения стрима.</summary>
+    /// <summary>Track by vk_id, or null — the player resolver needs the row to obtain a stream.</summary>
     public async Task<VkTrackRow?> GetByVkIdAsync(string vkId)
         => await _conn.QueryFirstOrDefaultAsync<VkTrackRow>(
             "SELECT * FROM vk_tracks WHERE vk_id = @vkId", new { vkId });
@@ -80,8 +81,8 @@ public sealed class VkTracksRepository
         => await _conn.ExecuteAsync("DELETE FROM vk_tracks");
 
     /// <summary>
-    /// Путь локальной обложки для трека. Отдельно от UpsertBatch: пере-синк метаданных
-    /// не должен сбрасывать уже скачанные пути.
+    /// Local artwork path for a track. Separate from UpsertBatch: a metadata re-sync
+    /// must not reset already-downloaded paths.
     /// </summary>
     public async Task SetArtworkLocalPathAsync(string vkId, string? path)
         => await _conn.ExecuteAsync(

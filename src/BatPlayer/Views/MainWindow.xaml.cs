@@ -78,7 +78,7 @@ public partial class MainWindow : Window
 
             DataContext = _vm;
             InitializeComponent();
-            // Просмотрщик обложки закрывается кликом в любом месте оверлея.
+            // The cover viewer closes on a click anywhere in the overlay.
             CoverViewerHost.MouseLeftButtonDown += (_, _) => CloseCoverViewer();
             PreviewKeyDown += (_, e) =>
             {
@@ -91,13 +91,13 @@ public partial class MainWindow : Window
             ApplyWindowGeometry();
 
             ContentHost.SizeChanged += (_, _) => ApplyContentClip();
-            // Название плеера + значок платформы: текст занимает ширину хоста минус
-            // значок (16px + 6px отступ) — значок прижат к названию, «…» резервирует место.
+            // Player title + platform icon: text width is the host width minus the icon
+            // (16px + 6px margin) — the icon hugs the title; "…" reserves the space.
             PlayerTextHost.SizeChanged += (_, _) =>
                 PlayerTitleText.MaxWidth = Math.Max(40, PlayerTextHost.ActualWidth - 24);
             Loaded += (_, _) => ApplyContentClip();
 
-            // В развёрнутом виде скруглённые углы окна просвечивают — делаем их прямыми.
+            // When maximized the rounded window corners show through — make them square.
             StateChanged += (_, _) => ApplyCornerRadii();
             SizeChanged += (_, _) => ApplyRootClip();
 
@@ -105,14 +105,14 @@ public partial class MainWindow : Window
             _vm.RequestNowPlaying += (_, _) => ToggleNowPlaying();
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             _vm.Player.PropertyChanged += OnPlayerBarPropertyChanged;
-            // Стартовая синхронизация: если обложка восстановленного трека уже в VM,
-            // проявляем её в слое (иначе слои останутся прозрачными до смены трека).
+            // Initial sync: if the restored track's cover is already in the VM, fade it
+            // into the layer (otherwise the layers stay transparent until the track changes).
             OnBarCoverImageChanged();
 
-            // Залипшие hover-состояния после модальных диалогов (Add to playlist и т.п.):
-            // пока окно disabled, WPF не обрабатывает уход мыши, и IsMouseOver карточек
-            // остаётся true — подложки «залипают». При возврате фокуса ресинхронизируем
-            // мышь — WPF пересчитает IsMouseOver у всех элементов.
+            // Stuck hover states after modal dialogs ("Add to playlist" etc.): while the
+            // window is disabled WPF doesn't process mouse-leave, so card IsMouseOver stays
+            // true and highlights stick. On focus return, re-sync the mouse — WPF recomputes
+            // IsMouseOver for all elements.
             Activated += (_, _) => Mouse.PrimaryDevice?.Synchronize();
 
             KeyDown += OnGlobalKeyDown;
@@ -128,7 +128,7 @@ public partial class MainWindow : Window
                 {
                     _hotkeys.Initialize(this);
                     await _vm.InitializeAsync(_restorePlayback);
-                    // Восстановленное воспроизведение — раскручиваем логотип сразу.
+                    // Restored playback — spin the logo right away.
                     UpdateBatSpin();
                 }
                 catch (Exception ex)
@@ -147,10 +147,9 @@ public partial class MainWindow : Window
 
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {        // Анимируем по ActivePage, а не CurrentPage: «Главная», «Недавно
-        // прослушанные», «Любимые» — одна VM библиотеки, CurrentPage при таких
-        // переходах не менялся, и анимация срабатывала не на всех переходах.
-        // ActivePage меняется ровно один раз на каждый переход.
+    {        // Animate on ActivePage, not CurrentPage: Home, Recently played and Favorites
+        // are one library VM — CurrentPage didn't change on such transitions, so the
+        // animation missed some of them. ActivePage changes exactly once per transition.
         if (e.PropertyName == nameof(MainViewModel.ActivePage))
         {
             AnimatePageChange();
@@ -158,7 +157,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // ==== Логотип на кнопке Play/Pause: состояние вращения ====
+    // ==== Play/Pause button logo: spin state ====
     private const double BatSpinSpeedDegPerSec = 400;
     private bool _batSpinning;
 
@@ -184,10 +183,10 @@ public partial class MainWindow : Window
         UpdateBatSpin();
     }
 
-    // ===== Кроссфейд обложки в плеер-баре =====
-    // Два слоя (BarCoverLayerA/B): новый кадр кладётся в скрытый слой, слои
-    // меняются прозрачностью навстречу — смена трека без резкой подмены.
-    // Слои прозрачны и когда обложки нет — сквозь них видна мышь-плейсхолдер.
+    // ===== Cover cross-fade in the player bar =====
+    // Two layers (BarCoverLayerA/B): the new frame goes into the hidden layer and the
+    // layers cross-fade — track changes without an abrupt swap. The layers are transparent
+    // when there is no cover — the mouse placeholder shows through.
     private Border? _barCoverFront;
     private BitmapImage? _lastBarCover;
     private int _barCoverGen;
@@ -203,9 +202,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        // LoadCoverAsync сперва сбрасывает обложку и лишь затем грузит новую:
-        // не мигаем плейсхолдером между треками — растворяем слои, только если
-        // новая обложка не приехала в течение короткого окна.
+        // LoadCoverAsync first clears the cover and only then loads the new one:
+        // don't flash the placeholder between tracks — fade the layers out only if
+        // the new cover hasn't arrived within a short window.
         var gen = ++_barCoverGen;
         _ = Task.Run(async () =>
         {
@@ -237,9 +236,9 @@ public partial class MainWindow : Window
 
     private static void FadeBarLayer(Border layer, double to)
     {
-        // Snapshot ДО снятия анимации: BeginAnimation(null) откатывает прозрачность
-        // к базовой (0) — без фиксации текущего значения уходящий слой исчезал бы
-        // одним кадром, и кроссфейд выглядел как резкая подмена.
+        // Snapshot BEFORE removing the animation: BeginAnimation(null) reverts opacity
+        // to its base value (0) — without pinning the current value the outgoing layer
+        // would vanish in one frame and the cross-fade would look like an abrupt swap.
         var current = layer.Opacity;
         layer.BeginAnimation(UIElement.OpacityProperty, null);
         layer.Opacity = current;
@@ -250,18 +249,18 @@ public partial class MainWindow : Window
             });
     }
 
-    // ===== Контекстные действия страницы в шапке окна =====
-    // Кнопки активной страницы (Shuffle/Sync/Refresh/Import) живут в тайтл-баре и
-    // сменяются вместе с ней. Появление/скрытие мгновенные: fade + выезд справа
-    // читались как «провисание» — шторка уже сворачивается, а кнопки ещё доехали не были.
+    // ===== Page context actions in the window header =====
+    // Active page buttons (Shuffle/Sync/Refresh/Import) live in the title bar and switch
+    // with it. Show/hide is instant: fade + slide-in from the right read as "lagging" —
+    // the curtain was already collapsing while the buttons were still arriving.
     private bool _headerCollapsed;
 
     private void UpdatePageActions()
     {
         if (PageActionsHost == null || _vm == null) return;
 
-        // Страница открывается сверху: шторка развёрнута, действия живут в её шапке,
-        // в тайтл-баре их нет. При скролле (шторка свернулась) они появляются здесь.
+        // The page opens at the top: the curtain is expanded and its actions live in the
+        // page header, not in the title bar. On scroll (curtain collapsed) they appear here.
         _headerCollapsed = false;
         RebuildPageActions();
         ApplyActionsVisibility();
@@ -341,15 +340,15 @@ public partial class MainWindow : Window
     private Button MakeConnectedAction(object vm, System.Windows.Input.ICommand command, string iconKey, string tooltipKey)
     {
         var b = MakePageAction(command, iconKey, tooltipKey);
-        b.DataContext = vm; // IsConnected решает, активна ли синхронизация
+        b.DataContext = vm; // IsConnected decides whether sync is enabled
         b.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("IsConnected"));
         return b;
     }
 
     private System.Windows.Shapes.Path MakeActionIcon(Button owner, string iconKey)
     {
-        // 15px — размер иконок соседних кнопок тайтл-бара (плотность сетки, файлы,
-        // папка, настройки): кнопки страниц не выделяются габаритом после переезда.
+        // 15px matches the icon size of the neighboring title-bar buttons (grid density,
+        // files, folder, settings): page buttons don't stand out in size after the move.
         var path = new System.Windows.Shapes.Path
         {
             Width = 15,
@@ -368,21 +367,18 @@ public partial class MainWindow : Window
 
     private int _tintSeq;
     private bool _tintFrontIsA;
-    private Color[]? _lastTintColors;
-    private System.Windows.Threading.DispatcherTimer? _tintRefreshDelay;
-    private bool _tintLifeStarted;
 
-    /// <summary>Окрас окна: фон — обложка играющего трека, размытая программно
-    /// (цепочка даунскейлов — честное усреднение, без BlurEffect: GPU-блюр WPF
-    /// рендерится в пониженном разрешении и даёт зернистые пиксели). Затемнённая.
-    /// Смена трека — плавный кроссфейд двух слоёв.</summary>
+    /// <summary>Window tint: the background is the playing track's cover, blurred
+    /// programmatically (a downscale chain — honest averaging, no BlurEffect: WPF's GPU
+    /// blur renders at reduced resolution and gives grainy pixels). Dimmed. Track changes
+    /// use a smooth two-layer cross-fade.</summary>
     private async void UpdateTrackTint(BitmapSource? img)
     {
-        if (TintImgA == null || TintImgB == null) return; // окно ещё не готово
+        if (TintImgA == null || TintImgB == null) return; // window not ready yet
         var seq = ++_tintSeq;
 
         var blurred = await Task.Run(() => PreBlurCover(img));
-        if (blurred == null || seq != _tintSeq) return; // трек уже сменился
+        if (blurred == null || seq != _tintSeq) return; // the track already changed
 
         var incoming = _tintFrontIsA ? TintImgB : TintImgA;
         var outgoing = _tintFrontIsA ? TintImgA : TintImgB;
@@ -396,10 +392,10 @@ public partial class MainWindow : Window
             new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(600)));
     }
 
-    /// <summary>Программное размытие: сепарабельный box-blur (3 прохода по строкам
-    /// и столбцам со скользящим окном ≈ гауссиана) по пиксельному буферу обложки.
-    /// Гладкое «матовое стекло» без мозаики: настоящий фильтр, а не ресемплинг.
-    /// Результат — Frozen bitmap. Фон: Task.Run.</summary>
+    /// <summary>Programmatic blur: a separable box-blur (3 passes over rows and columns
+    /// with a sliding window ≈ Gaussian) over the cover's pixel buffer. Smooth "frosted
+    /// glass" without mosaic: a real filter, not resampling. The result is a Frozen
+    /// bitmap. Runs on Task.Run.</summary>
     private static BitmapSource? PreBlurCover(BitmapSource? src)
     {
         try
@@ -411,7 +407,7 @@ public partial class MainWindow : Window
             var px = new byte[stride * h];
             src.CopyPixels(px, stride, 0);
 
-            // Радиус 12 при 256px ≈ блюр 60 при 1280 (как прежний BlurEffect 70).
+            // Radius 12 at 256px ≈ blur 60 at 1280 (like the previous BlurEffect 70).
             BoxBlur(px, w, h, 12, 3);
 
             var bmp = BitmapSource.Create(w, h, 96, 96,
@@ -425,8 +421,8 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Сепарабельный box-blur: passes проходов по строкам и столбцам со
-    /// скользящим окном (O(1) на пиксель). 3 прохода box ≈ гауссиана.</summary>
+    /// <summary>Separable box-blur: passes over rows and columns with a sliding window
+    /// (O(1) per pixel). 3 box passes ≈ Gaussian.</summary>
     private static void BoxBlur(byte[] px, int w, int h, int radius, int passes)
     {
         var tmp = new byte[px.Length];
@@ -494,17 +490,17 @@ public partial class MainWindow : Window
         }
     }
 
-    // ===== Логотип на кнопке Play/Pause: вращение =====
-    // Играет — логотип крутится с постоянной скоростью; пауза — короткий выбег и стоп.
-    // Вращение ведёт ШТАТНАЯ DoubleAnimation (RepeatBehavior=Forever): у неё НЕТ
-    // пользовательского кода на каждый кадр. Прежний вариант висел на
-    // CompositionTarget.Rendering и выставлял угол руками, из-за чего в моменты
-    // прогрузки обложек (GC, очередь применов) кадры пропускались и вращение
-    // «микрофризило». Нативный анимационный конвейер ест минимальный слот UI-потока.
+    // ===== Play/Pause button logo: spinning =====
+    // Playing — the logo spins at a constant speed; paused — a short run-out and stop.
+    // Spinning is driven by a NATIVE DoubleAnimation (RepeatBehavior=Forever): it has NO
+    // per-frame user code. The previous version hooked CompositionTarget.Rendering and set
+    // the angle manually, so during cover loading spikes (GC, apply queue) frames were
+    // dropped and the spin "micro-froze". The native animation pipeline takes a minimal
+    // UI-thread slot.
 
-    // Аналитический трекинг угла: чтение RotateTransform.Angle при активной анимации
-    // возвращало БАЗОВОЕ значение (не анимированное) — при паузе лого «откидывало назад»
-    // к старту цикла. Угол считается по времени старта цикла: надёжно и без кадров.
+    // Analytic angle tracking: reading RotateTransform.Angle while an animation is active
+    // returned the BASE value (not the animated one) — on pause the logo "jumped back" to
+    // the cycle start. The angle is computed from the cycle start time: reliable and frame-free.
     private double _spinBaseAngle;
     private DateTime _spinCycleStartUtc;
 
@@ -512,10 +508,10 @@ public partial class MainWindow : Window
     {
         if (_vm.Player.IsPlaying)
         {
-            if (_batSpinning) return; // уже крутится нативной анимацией — не перезапускать
+            if (_batSpinning) return; // already spinning via the native animation — don't restart
             _batSpinning = true;
-            // От текущего базового угла (после выбега паузы логотип замер не на нуле).
-            // Нормализация по модулю 360: вращение модульно, а копиться угол не должен.
+            // From the current base angle (after the pause run-out the logo isn't at zero).
+            // Normalized mod 360: spinning is modular and the angle must not accumulate.
             var from = BatSpinAngle.Angle % 360;
             if (from < 0) from += 360;
             _spinBaseAngle = from;
@@ -529,18 +525,17 @@ public partial class MainWindow : Window
         else if (_batSpinning)
         {
             _batSpinning = false;
-            // Текущий угол — аналитически: база цикла + прошедшее время × скорость.
+            // Current angle analytically: cycle base + elapsed time × speed.
             var cycleSec = 360.0 / BatSpinSpeedDegPerSec;
             var elapsed = (DateTime.UtcNow - _spinCycleStartUtc).TotalSeconds;
             var current = _spinBaseAngle + (elapsed % cycleSec) / cycleSec * 360;
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty, null);
             BatSpinAngle.Angle = current;
-            // Инерция выбега: ~170° с плавным затуханием (как прежняя экспонента tau=0.45с).
-            // БЕЗ FillBehavior.Stop: Stop по завершении выбега возвращал значение к базе —
-            // лого визуально ОТСКАКИВАЛО назад на 170° через секунду после паузы
-            // (жалоба: «разворачивает, а не по инерции перестаёт двигаться»).
-            // HoldEnd держит конечный угол; следующий запуск продолжит с него
-            // (угол нормализуется по модулю 360 при старте).
+            // Run-out inertia: ~170° with smooth decay (like the previous exponential tau=0.45s).
+            // NO FillBehavior.Stop: Stop returned the value to base when the run-out finished —
+            // the logo visibly BOUNCED back 170° a second after pausing (complaint: "it flips
+            // around instead of stopping by inertia"). HoldEnd keeps the final angle; the next
+            // start continues from it (the angle is normalized mod 360 at start).
             BatSpinAngle.BeginAnimation(RotateTransform.AngleProperty,
                 new DoubleAnimation(current, current + 170, TimeSpan.FromMilliseconds(1100))
                 {
@@ -549,20 +544,20 @@ public partial class MainWindow : Window
         }
     }
 
-    // ===== Громкость: вертикальный слайдер в popup над кнопкой =====
-    // Popup открывается наведением на кнопку громкости и закрывается с короткой
-    // задержкой после ухода мыши (время переехать с кнопки на popup). Перетаскивание
-    // ползунка закрытие блокирует: mouse capture держит мышь даже за границами popup,
-    // закрытие откладывается до LostMouseCapture.
+    // ===== Volume: vertical slider in a popup above the button =====
+    // The popup opens on hovering the volume button and closes after a short delay once
+    // the mouse leaves (time to move from the button to the popup). Slider dragging blocks
+    // closing: mouse capture holds the mouse even outside the popup, so closing is
+    // deferred to LostMouseCapture.
 
     private System.Windows.Threading.DispatcherTimer? _volumeCloseTimer;
 
-    // Панель громкости открыта (оверлей внутри бара, не Popup — тот открывался
-    // «отдельно от окна» при сбое таргета/перетаскивании окна).
+    // Volume panel open (an overlay inside the bar, not a Popup — that one opened
+    // "detached from the window" on target failure/window drag).
     private bool _volumePanelOpen;
 
-    // Идёт анимация закрытия: наведение в этот момент отменяет закрытие —
-    // иначе панель доигрывала fade до нуля и «не всплывала» при повторном наведении.
+    // A close animation is in progress: hovering now cancels the close — otherwise the
+    // panel played its fade to zero and "didn't pop up" on the next hover.
     private bool _volumePanelClosing;
 
     private void VolumeButton_MouseEnter(object sender, MouseEventArgs e)
@@ -584,7 +579,7 @@ public partial class MainWindow : Window
 
     private void VolumeSlider_LostMouseCapture(object sender, MouseEventArgs e) => ScheduleVolumeClose();
 
-    /// <summary>Открытие панели: «выплывание» вверх — лёгкий подъём + fade.</summary>
+    /// <summary>Panel opening: floats up — a slight rise + fade.</summary>
     private void ShowVolumePanel()
     {
         _volumePanelOpen = true;
@@ -600,9 +595,9 @@ public partial class MainWindow : Window
 
     private void ScheduleVolumeClose()
     {
-        // 450 мс — время переехать с кнопки на панель через зазор; при драге бегунка
-        // панель держится открытой (thumb держит mouse capture), закрывается после
-        // отпускания по LostMouseCapture.
+        // 450ms — time to move from the button to the panel across the gap; while the thumb
+        // is dragged the panel stays open (the thumb holds mouse capture) and closes after
+        // release via LostMouseCapture.
         _volumeCloseTimer ??= new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(450)
@@ -615,15 +610,15 @@ public partial class MainWindow : Window
     private void VolumeCloseTimer_Tick(object? sender, EventArgs e)
     {
         _volumeCloseTimer?.Stop();
-        // Мышь вернулась на кнопку/панель или drag продолжается — остаёмся открытыми;
-        // при drag-е закрытие придёт по LostMouseCapture.
+        // The mouse returned to the button/panel or a drag is ongoing — stay open;
+        // while dragging, closing comes via LostMouseCapture.
         if (VolumeSlider.IsMouseCaptureWithin || VolumePopupPanel.IsMouseOver || VolumeButton.IsMouseOver)
             return;
         CloseVolumePanelAnimated();
     }
 
-    /// <summary>Закрытие панели с коротким fade-out и сползанием вниз: без него панель
-    /// исчезала мгновенно, что рядом с «выплыванием» при открытии выглядело обрывом.</summary>
+    /// <summary>Panel close with a short fade-out and downward slide: without it the panel
+    /// vanished instantly, which next to the "float in" on open looked like a cut-off.</summary>
     private void CloseVolumePanelAnimated()
     {
         if (!_volumePanelOpen || _volumePanelClosing) return;
@@ -640,7 +635,7 @@ public partial class MainWindow : Window
         {
             _volumePanelClosing = false;
             _volumePanelOpen = false;
-            // За время fade-out мышь успела вернуться — оставляем открытой.
+            // The mouse made it back during the fade-out — keep the panel open.
             if (VolumeSlider.IsMouseCaptureWithin || VolumePopupPanel.IsMouseOver || VolumeButton.IsMouseOver)
             {
                 ResetVolumePanelVisual();
@@ -652,8 +647,8 @@ public partial class MainWindow : Window
         };
     }
 
-    /// <summary>Отмена идущего закрытия (мышь вернулась): анимация гасится, панель
-    /// мгновенно возвращается в открытое состояние.</summary>
+    /// <summary>Cancel a running close (mouse returned): the animation is silenced and the
+    /// panel instantly returns to the open state.</summary>
     private void CancelVolumePanelClosing()
     {
         if (!_volumePanelClosing) return;
@@ -662,8 +657,8 @@ public partial class MainWindow : Window
         VolumePopupPanel.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Сброс прозрачности/сдвига панели после закрытия: следующее открытие
-    /// анимирует их от исходных значений (0 → 1, 10 → 0).</summary>
+    /// <summary>Reset the panel's opacity/offset after closing: the next opening animates
+    /// them from the original values (0 → 1, 10 → 0).</summary>
     private void ResetVolumePanelVisual()
     {
         VolumePopupPanel.BeginAnimation(UIElement.OpacityProperty, null);
@@ -672,18 +667,18 @@ public partial class MainWindow : Window
         VolumePopupSlide.Y = 0;
     }
 
-    // ===== Просмотрщик обложки: клик по обложке в плеер-баре =====
-    // Оверлей внутри окна: фон — та же обложка, растянутая и размытая (BlurEffect)
-    // под затемнением; сама обложка — крупно, без искажений. Клик в любом месте
-    // (включая повторный клик по аватарке) закрывает — крестика больше нет.
-    // Полный размер декодируется асинхронно (256px версия бара мылится).
+    // ===== Cover viewer: click on the player bar cover =====
+    // Overlay inside the window: the background is the same cover, stretched and blurred
+    // (BlurEffect) under a dimmer; the cover itself is large and undistorted. A click
+    // anywhere (including a second click on the avatar) closes it — no close button.
+    // The full size is decoded asynchronously (the bar's 256px version would blur).
     private bool _coverViewerOpen;
 
     private int _coverViewerSeq;
 
     private void BarCover_Click(object sender, MouseButtonEventArgs e)
     {
-        // Аватарка — тоггл: открытый просмотрщик закрывается тем же кликом.
+        // The avatar is a toggle: an open viewer is closed by the same click.
         if (_coverViewerOpen)
         {
             CloseCoverViewer();
@@ -710,7 +705,7 @@ public partial class MainWindow : Window
 
         ApplyCoverViewerImage(img);
 
-        // Полноразмерный декод в фоне: мини-версия (256px) замещается, когда готова.
+        // Full-size decode in the background: replaces the mini version (256px) when ready.
         var path = _vm.Player.CurrentTrack?.CoverCachePath;
         if (!string.IsNullOrEmpty(path) && File.Exists(path))
         {
@@ -730,7 +725,7 @@ public partial class MainWindow : Window
                         if (seq == _coverViewerSeq) ApplyCoverViewerImage(bmp);
                     });
                 }
-                catch { /* остаётся мини-версия */ }
+                catch { /* keep the mini version */ }
             });
         }
     }
@@ -757,26 +752,17 @@ public partial class MainWindow : Window
     }
 
 
-    /// <summary>Скругляет углы внутренней области контента, как в оригинальном приложении.</summary>
-    /// <summary>«+ в плейлист» из плеера: добавляет играющий сейчас трек.</summary>
+    /// <summary>"+ add to playlist" from the player: adds the currently playing track.</summary>
     private void AddToPlaylistFromPlayer_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (_vm.Player.CurrentTrack is Models.Track track)
             Views.PlaylistDialogs.AddTrackToPlaylist(track);
     }
 
-    /// <summary>
-    /// Бегущая строка: если текст не влезает в свою колонку — плавно прокатываем
-    /// его туда-обратно (TranslateTransform), влезает — анимация снимается.
-    /// </summary>
-
-    /// <summary>Элемент ограничен родителем (ActualWidth), контент — DesiredSize:
-    /// разница и есть вылезание; катаем туда-обратно, влезает — без анимации.</summary>
-
     private void ApplyContentClip()
     {
-        // Внутренний интерфейс скруглён со всех сторон; под срезом — подложка темы
-        // (RootBorder), а не рабочий стол. В развёрнутом виде углы прямые.
+        // The inner UI is rounded on all sides; beneath the clip is the theme backing
+        // (RootBorder), not the desktop. Corners are square when maximized.
         var r = WindowState == WindowState.Maximized ? 0 : 12;
         ContentHost.Clip = new RectangleGeometry(
             new Rect(0, 0, ContentHost.ActualWidth, ContentHost.ActualHeight), r, r);
@@ -791,9 +777,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Весь контент (включая GIF/видео-фон) обрезается по скруглению окна: уголки
-    /// фона не вылезают за рамку, а под внутренними скруглениями остаётся подложка
-    /// приложения (RootBorder), а не рабочий стол Windows.
+    /// All content (including the GIF/video background) is clipped to the window rounding:
+    /// background corners don't stick out past the frame, and beneath the inner rounding is
+    /// the app backing (RootBorder), not the Windows desktop.
     /// </summary>
     private void ApplyRootClip()
     {
@@ -803,13 +789,13 @@ public partial class MainWindow : Window
             WindowState == WindowState.Maximized ? 0 : 12);
     }
 
-    /// <summary>Переход при смене страницы: короткий фейд без перемещения.</summary>
+    /// <summary>Page-change transition: a short fade without movement.</summary>
     private void AnimatePageChange()
     {
         if (!_settings.Current.AnimationsEnabled) return;
 
-        // Только короткий фейд, без слайда: прежний горизонтальный сдвиг 32px
-        // «смещал» область с карточками и читался как прыжок контента.
+        // Only a short fade, no slide: the previous 32px horizontal shift "moved" the
+        // card area and read as a content jump.
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease };
         PageHost.BeginAnimation(UIElement.OpacityProperty, fade);
@@ -831,9 +817,9 @@ public partial class MainWindow : Window
     private void SaveWindowGeometry()
     {
         if (_isClosing) return;
-        // Дебаунс: DragMove/resize шлют SizeChanged/LocationChanged десятки раз в секунду,
-        // и каждая мутация гоняла бы сериализацию settings.json на диск. Копим изменения,
-        // пишем не чаще раза в полсекунды; финальный сохранение — в OnClosing.
+        // Debounce: DragMove/resize fire SizeChanged/LocationChanged dozens of times per
+        // second, and each change would serialize settings.json to disk. Accumulate the
+        // changes and write at most once every half second; the final save is in OnClosing.
         lock (_geometryGate)
         {
             _geometryDirty = true;
@@ -923,8 +909,8 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            // Очистка строки снимает фильтр активной страницы (SearchText маршрутизируется
-            // в MainViewModel); фокус из поля убираем.
+            // Clearing the box resets the active page's filter (SearchText routes to
+            // MainViewModel); focus is moved out of the box.
             SearchBox.Clear();
             Keyboard.ClearFocus();
         }
@@ -970,7 +956,7 @@ public partial class MainWindow : Window
         });
     }
 
-    /// <summary>Принудительное закрытие при пересоздании окна (минуя «свернуть в трей»).</summary>
+    /// <summary>Forced close on window recreation (bypassing "close to tray").</summary>
     public void DestroyForRecreate()
     {
         _hotkeys.UnregisterAll();
@@ -980,11 +966,11 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        // Неотписанный таймер геометрии: применяем накопленные изменения до сохранения.
+        // The geometry timer is still running: apply the accumulated changes before saving.
         _geometrySaveTimer?.Stop();
         GeometrySaveTimer_Tick(null, EventArgs.Empty);
 
-        // Пересоздание окна: закрываемся по-настоящему, минуя «свернуть в трей».
+        // Window recreation: close for real, bypassing "close to tray".
         if (_isClosing)
         {
             await App.Services.GetRequiredService<AudioService>().SaveStateAsync();
@@ -992,7 +978,7 @@ public partial class MainWindow : Window
             return;
         }
         // X button and taskbar "Close window" hide to tray; the process only
-        // exits via tray menu "Выход" (which sets App.IsExiting first).
+        // exits via the tray menu "Exit" (which sets App.IsExiting first).
         if (_settings.Current.CloseToTray && !App.IsExiting)
         {
             e.Cancel = true;

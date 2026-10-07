@@ -7,9 +7,9 @@ using Microsoft.Data.Sqlite;
 namespace BatPlayer.Database;
 
 /// <summary>
-/// Одна запись лайка SoundCloud: только метаданные (скачивание аудио не предусмотрено).
-/// sc_id — строковый ID трека в SoundCloud (в API он числовой, но храним как TEXT:
-/// строковый PK не зависит от разрядности и совпадает с formatом permalink-ссылок).
+/// One SoundCloud like row: metadata only (no audio downloading).
+/// sc_id is the string track ID in SoundCloud (numeric in the API, stored as TEXT:
+/// a string PK avoids width issues and matches permalink URL formats).
 /// </summary>
 public sealed class SoundCloudLikeRow
 {
@@ -19,7 +19,7 @@ public sealed class SoundCloudLikeRow
     public long DurationMs { get; set; }
     public string ArtworkUrl { get; set; } = string.Empty;
 
-    /// <summary>Путь обложки в локальном кэше (artworks_cache/{scId}.jpg); null — ещё не скачана.</summary>
+    /// <summary>Cover path in the local cache (artworks_cache/{scId}.jpg); null = not downloaded yet.</summary>
     public string? ArtworkLocalPath { get; set; }
 
     public string PermalinkUrl { get; set; } = string.Empty;
@@ -29,7 +29,7 @@ public sealed class SoundCloudLikeRow
 }
 
 /// <summary>
-/// Репозиторий таблицы soundcloud_likes. Upsert по sc_id, выдача в порядке liked_at DESC.
+/// Repository for the soundcloud_likes table. Upsert by sc_id, ordered by liked_at DESC.
 /// </summary>
 public sealed class SoundCloudLikesRepository
 {
@@ -37,7 +37,7 @@ public sealed class SoundCloudLikesRepository
 
     public SoundCloudLikesRepository(SqliteConnection conn) => _conn = conn;
 
-    /// <summary>Пакетный upsert: повторная синхронизация не дублирует записи.</summary>
+    /// <summary>Batch upsert: re-syncing does not duplicate rows.</summary>
     public async Task UpsertBatchAsync(IEnumerable<SoundCloudLikeRow> rows)
     {
         var sql = """
@@ -58,7 +58,7 @@ public sealed class SoundCloudLikesRepository
         await _conn.ExecuteAsync(sql, rows);
     }
 
-    /// <summary>Все лайки в порядке даты лайка (новые сверху).</summary>
+    /// <summary>All likes ordered by like date (newest first).</summary>
     public async Task<List<SoundCloudLikeRow>> GetAllAsync()
     {
         var rows = await _conn.QueryAsync<SoundCloudLikeRow>(
@@ -73,8 +73,8 @@ public sealed class SoundCloudLikesRepository
         => await _conn.ExecuteAsync("DELETE FROM soundcloud_likes");
 
     /// <summary>
-    /// Путь локальной обложки для лайка. Отдельно от UpsertBatch: пере-синк метаданных
-    /// не должен сбрасывать уже скачанные пути.
+    /// Local artwork path for a like. Separate from UpsertBatch: a metadata re-sync
+    /// must not reset already-downloaded paths.
     /// </summary>
     public async Task SetArtworkLocalPathAsync(string scId, string? path)
         => await _conn.ExecuteAsync(

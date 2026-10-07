@@ -8,11 +8,11 @@ public partial class EqualizerView : UserControl
 {
     public EqualizerView() => InitializeComponent();
 
-    /// <summary>Двойной клик по графику эквалайзера: добавить полосу в точке клика.</summary>
+    /// <summary>Double-click on the EQ curve: add a band at the click point.</summary>
     private void Curve_AddNodeRequested(object? sender, (double Freq, double Gain) e)
         => (DataContext as ViewModels.EqualizerViewModel)?.AddBandCommand.Execute(e);
 
-    /// <summary>Двойной клик по узлу графика: удалить полосу.</summary>
+    /// <summary>Double-click on a curve node: remove the band.</summary>
     private void Curve_RemoveNodeRequested(object? sender, int index)
         => (DataContext as ViewModels.EqualizerViewModel)?.RemoveBandCommand.Execute(index);
 

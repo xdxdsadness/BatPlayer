@@ -3,12 +3,12 @@ using System;
 namespace BatPlayer.Models;
 
 /// <summary>
-/// Один трек в библиотеке. Маппится на таблицу tracks в SQLite.
+/// One track in the library. Maps to the SQLite tracks table.
 /// </summary>
 public sealed class Track
 {
-    // Значения, которые старые версии писали в БД вместо пустых тегов.
-    // Не меняются: в существующих записях они лежат в artist/album.
+    // Values older app versions wrote to the DB instead of empty tags.
+    // Do not change: existing rows store them in artist/album.
     private const string LegacyUnknownArtist = "Неизвестный исполнитель";
     private const string LegacyUnknownAlbum = "Неизвестный альбом";
 
@@ -56,10 +56,10 @@ public sealed class Track
 
     public string CoverHash { get; set; } = string.Empty;
 
-    // ===== Runtime-only поля (в таблице tracks их нет; выставляются при построении списков) =====
+    // ===== Runtime-only fields (not in the tracks table; set when building lists) =====
 
-    /// <summary>Источник трека: "local" — файл библиотеки, "soundcloud" — лайк SoundCloud,
-    /// "vk" — трек VK Music, "yandex" — трек Яндекс Музыки, "spotify" — трек Spotify.</summary>
+    /// <summary>Track source: "local" — library file, "soundcloud" — SoundCloud like,
+    /// "vk" — VK Music track, "yandex" — Yandex Music track, "spotify" — Spotify track.</summary>
     public const string SourceLocal = "local";
     public const string SourceSoundCloud = "soundcloud";
     public const string SourceVk = "vk";
@@ -69,33 +69,31 @@ public sealed class Track
     public string Source { get; set; } = SourceLocal;
 
     /// <summary>
-    /// Универсальный идентификатор трека платформы. Историческое имя поля — ScId
-    /// (SoundCloud id); переименование ломает существующие обращения, поэтому поле
-    /// оставлено как есть и используется для всех платформ: при Source="soundcloud"
-    /// хранит числовой id SoundCloud, при Source="vk" — vk_id ("{owner_id}_{id}"),
-    /// при Source="yandex" — ym_id (числовой id трека API Яндекс Музыки),
-    /// при Source="spotify" — spotify_id (Base62 id трека Spotify API).
+    /// Universal platform track identifier. The field name ScId is historical
+    /// (SoundCloud id); renaming would break existing call sites, so the field is kept
+    /// as-is and used for all platforms: Source="soundcloud" — numeric SoundCloud id,
+    /// Source="vk" — vk_id ("{owner_id}_{id}"), Source="yandex" — ym_id (numeric id of
+    /// the Yandex Music API), Source="spotify" — spotify_id (Base62 id of the Spotify API).
     /// </summary>
     public string ScId { get; set; } = string.Empty;
 
-    /// <summary>Spotify track ID для удобного доступа (алиас ScId для Source="spotify").</summary>
+    /// <summary>Spotify track ID for convenient access (alias of ScId for Source="spotify").</summary>
     public string SpotifyId
     {
         get => Source == SourceSpotify ? ScId : string.Empty;
         set { if (Source == SourceSpotify) ScId = value; }
     }
 
-    /// <summary>Удалённый платформенный источник (SoundCloud/VK/Яндекс Музыка/Spotify): FilePath может
-    /// быть пуст и резолвится плеером на клике/переходе через AudioService.FilePathResolver.</summary>
+    /// <summary>Remote platform source (SoundCloud/VK/Yandex Music/Spotify): FilePath may
+    /// be empty and is resolved by the player on click/advance via AudioService.FilePathResolver.</summary>
     public bool IsPlatformTrack => Source is SourceSoundCloud or SourceVk or SourceYandex or SourceSpotify;
 
     /// <summary>
-    /// Тот же ли это трек, что other. Для платформенных треков (SC/VK/Яндекс/Spotify)
-    /// уникальность = источник + id на платформе (ScId): runtime-карточки одной и той же
-    /// композиции в разных списках (Home/Favorites/страницы платформ) — разные объекты
-    /// с разными (отрицательными) Id, а Id из РАЗНЫХ списков случайно совпадают
-    /// (-1 - index), из-за чего сравнение по Id подсвечивало чужие карточки.
-    /// Для локальных файлов — Id из БД.
+    /// Whether this is the same track as other. For platform tracks (SC/VK/Yandex/Spotify)
+    /// uniqueness = source + platform id (ScId): runtime cards of the same composition in
+    /// different lists (Home/Favorites/platform pages) are different objects with different
+    /// (negative) Ids, and Ids from DIFFERENT lists accidentally coincide (-1 - index),
+    /// which made Id comparison highlight the wrong cards. For local files — the DB Id.
     /// </summary>
     public bool IsSameTrackAs(Track? other)
     {
@@ -116,12 +114,12 @@ public sealed class Track
         ? System.IO.Path.GetFileNameWithoutExtension(FilePath)
         : Title;
 
-    /// <summary>Исполнитель для отображения: пустые и legacy-значения заменяются локализованной строкой.</summary>
+    /// <summary>Display artist: empty and legacy values are replaced by the localized string.</summary>
     public string DisplayArtist => IsUnknownValue(Artist, LegacyUnknownArtist)
         ? Localization.Loc.Get("UnknownArtist")
         : Artist;
 
-    /// <summary>Альбом для отображения: пустые и legacy-значения заменяются локализованной строкой.</summary>
+    /// <summary>Display album: empty and legacy values are replaced by the localized string.</summary>
     public string DisplayAlbum => IsUnknownValue(Album, LegacyUnknownAlbum)
         ? Localization.Loc.Get("UnknownAlbum")
         : Album;

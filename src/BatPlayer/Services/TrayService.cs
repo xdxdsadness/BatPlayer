@@ -9,7 +9,7 @@ using BatPlayer.Localization;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Иконка в системном трее + контекстное меню + уведомления о смене трека.
+/// System tray icon + context menu + track-change notifications.
 /// </summary>
 public sealed class TrayService : IDisposable
 {
@@ -20,10 +20,10 @@ public sealed class TrayService : IDisposable
 
     public void Initialize()
     {
-        // Guard от повторной инициализации: окно пересоздаётся при смене визуальных
-        // настроек, а TrayService — синглтон уровня приложения. Без guard'а каждое
-        // пересоздание окна вешало в трей вторую иконку (старая утекала) и удваивало
-        // подписки: уведомления о треке приходили дважды и чаще.
+        // Re-initialization guard: the window is recreated on visual settings changes,
+        // while TrayService is an app-level singleton. Without the guard, every window
+        // recreation added a second tray icon (the old one leaked) and doubled the
+        // subscriptions: track notifications arrived twice and more often.
         if (_icon != null) return;
 
         var appIcon = TryLoadAppIcon();
@@ -35,7 +35,7 @@ public sealed class TrayService : IDisposable
         };
 
         _icon.ContextMenu = BuildMenu();
-        // Перестраиваем меню на смене языка (LanguageChanged приходит с UI-потока).
+        // Rebuild the menu on language change (LanguageChanged arrives on the UI thread).
         Loc.LanguageChanged += OnLanguageChanged;
         _audio.CurrentTrackChanged += OnTrackChanged;
     }
@@ -84,9 +84,9 @@ public sealed class TrayService : IDisposable
         return menu;
     }
 
-    // Пункты: явный implicit-стиль MenuItem по type-ключу — трей-меню живёт вне
-    // логического дерева окна, implicit-стили туда не доходят (hover/отступы
-    // дефолтного шаблона отличаются от ПКМ-меню трека).
+    // Items use an explicit implicit-style MenuItem with a type key — the tray menu
+    // lives outside the window's logical tree, where implicit styles do not reach
+    // (hover/padding of the default template differ from the track's context menu).
     private static System.Windows.Controls.MenuItem MakeItem(string header)
         => new()
         {
@@ -95,10 +95,10 @@ public sealed class TrayService : IDisposable
                 .FindResource(typeof(System.Windows.Controls.MenuItem))
         };
 
-    // Сепаратор — с ЯВНЫМ keyed-стилем MenuSeparatorStyle: трей-меню живёт вне
-    // логического дерева окна (ContextMenu из трея), app-уровневый implicit-стиль
-    // Separator туда не доходит, и без явного назначения рисуется дефолтный
-    // «жирный» шаблон WPF с отступами от краёв.
+    // Separator — with an EXPLICIT keyed MenuSeparatorStyle: the tray menu lives
+    // outside the window's logical tree (a context menu from the tray), the app-level
+    // implicit Separator style never reaches it, and without the explicit assignment
+    // the default "thick" WPF template with edge padding is drawn.
     private static System.Windows.Controls.Separator MakeSeparator()
         => new()
         {
@@ -125,11 +125,11 @@ public sealed class TrayService : IDisposable
         }
     }
 
-    /// <summary>Полное завершение работы приложения: убрать иконку, остановить звук,
-    /// дозаписать незакоммиченную прослушку и состояние, закрыть процесс.
-    /// async void — обработчик события меню; исключения глотаются (exit must not fail),
-    /// await SaveStateAsync стоит ДО Shutdown: после него dispatcher останавливается
-    /// и продолжить запись прослушки/состояния некому.</summary>
+    /// <summary>Full application shutdown: remove the icon, stop audio, flush uncommitted
+    /// listens and state, close the process. async void — a menu event handler;
+    /// exceptions are swallowed (exit must not fail). await SaveStateAsync comes
+    /// BEFORE Shutdown: after it the dispatcher stops and nothing can finish writing
+    /// the listen/state.</summary>
     public async void ExitApplication()
     {
         Logger.Info("Exit requested.");

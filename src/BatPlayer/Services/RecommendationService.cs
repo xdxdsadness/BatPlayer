@@ -12,186 +12,186 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Кандидат волны (все кандидаты сейчас приходят из графа Яндекса; источник сохранён
-/// в модели на случай будущих пулов из других сервисов).
+/// Wave candidate (all candidates currently come from the Yandex graph; the source
+/// is kept in the model in case of future pools from other services).
 /// </summary>
 public sealed class WaveItem
 {
     public required string Source { get; init; }
-    /// <summary>Идентификатор платформы: ym_id / vk_id / sc_id; для local — не используется.</summary>
+    /// <summary>Platform identifier: ym_id / vk_id / sc_id; unused for local.</summary>
     public required string PlatformId { get; init; }
     public required string Title { get; init; }
     public required string Artist { get; init; }
     public long DurationMs { get; init; }
-    /// <summary>Шаблон обложки с "%%" (ЯМ) или готовый URL (VK/SC); null — обложки нет.</summary>
+    /// <summary>Cover template with "%%" (YM) or a ready URL (VK/SC); null — no cover.</summary>
     public string? CoverUri { get; init; }
     public bool Available { get; init; } = true;
-    /// <summary>Для local — путь файла; для VK/SC — уже скачанная обложка; null по умолчанию.</summary>
+    /// <summary>For local — the file path; for VK/SC — an already downloaded cover; null by default.</summary>
     public string? LocalPath { get; init; }
 
-    /// <summary>Ключ журнала предложений (PK wave_suggested): у ЯМ — ym_id,
-    /// у остальных — префикс источника, чтобы id разных платформ не сталкивались.</summary>
+    /// <summary>Suggestion journal key (PK wave_suggested): for YM — ym_id,
+    /// otherwise a source prefix so ids of different platforms do not collide.</summary>
     public string JournalId => Source == Track.SourceYandex
         ? PlatformId
         : $"{Source}:{PlatformId}";
 }
 
 /// <summary>
-/// «Моя волна»: локальная генерация рекомендаций по вкусу — без сервера. Анализ
-/// идёт по ИСПОЛНИТЕЛЯМ и трекам, которые пользователь реально слушает:
+/// "My wave": local taste-based recommendation generation — no server. Analysis is
+/// based on the ARTISTS and tracks the user actually listens to:
 ///
-///   A. «Треки слушаемых исполнителей» — топ play_log → /artists/{id}/tracks:
-///      треки артистов, которых я слушаю, но ещё не добавил (самый весомый пул).
-///   B. «Общая тусовка» — /artists/{id}/similar для топ-артистов: похожие
-///      исполнители той же сцены, их треки тем же эндпоинтом.
-///   C. «Радио сцены» — /rotor/station/artist:{id}/tracks: батч похожего звука
-///      из ротора Яндекса, обновляется каждую генерацию.
-///   D. «Похожие треки» — /tracks/{id}/similar по сидам из библиотек (ЯМ + VK/SC/
-///      локальные, сопоставленные с ym_id через /search с кэшем в wave_seed_map).
+///   A. "Tracks of listened artists" — top of play_log → /artists/{id}/tracks:
+///      tracks by artists I listen to but have not added yet (the heaviest pool).
+///   B. "Shared scene" — /artists/{id}/similar for top artists: similar artists of
+///      the same scene, their tracks via the same endpoint.
+///   C. "Scene radio" — /rotor/station/artist:{id}/tracks: a batch of similar sound
+///      from the Yandex rotor, refreshed every generation.
+///   D. "Similar tracks" — /tracks/{id}/similar over seeds from the libraries
+///      (YM + VK/SC/local matched to ym_id via /search with a cache in wave_seed_map).
 ///
-/// Пулы сливаются с дедупликацией (знакомые исполнители выигрывают), фильтруются
-/// от уже имеющегося/недавно игравшего/недавно предложенного и ранжируются: вес
-/// пула + аффинность исполнителя по play_log + джиттер. Всё кэшируется (14 дней),
-/// повторные генерации почти не ходят в сеть.
+/// Pools are merged with deduplication (familiar artists win), filtered against
+/// already owned/recently played/recently suggested material, and ranked: pool
+/// weight + artist affinity from play_log + jitter. Everything is cached (14 days),
+/// so repeat generations barely touch the network.
 ///
-/// Обратная связь без хуков плеера: предложенное запоминается (wave_suggested);
-/// трек, прослушанный после предложения, снова предлагается, а непрослушанные
-/// предложения неделю не попадают в волну — пассивный негативный сигнал.
+/// Feedback without player hooks: suggestions are remembered (wave_suggested); a
+/// track played after being suggested gets suggested again, while unplayed
+/// suggestions stay out of the wave for a week — a passive negative signal.
 /// </summary>
 public sealed class RecommendationService
 {
-    /// <summary>Сколько сидов участвует в пуле D (по ним запрашивается /similar).
-    /// Каждый сид — путь к соседним исполнителям: чем их больше, тем шире круг.</summary>
+    /// <summary>How many seeds participate in pool D (they drive the /similar requests).
+    /// Each seed is a path to neighboring artists: the more of them, the wider the circle.</summary>
     public const int SeedCount = 20;
 
-    /// <summary>Размер микса (длина очереди). Очередь всегда полной длины: если
-    /// знакомых кандидатов меньше, хвост добирается новизной (она ранжируется
-    /// последней), а материал знакомых расширяется глубокими каталогами.</summary>
+    /// <summary>Mix size (queue length). The queue is always full length: if there are
+    /// fewer familiar candidates, the tail is filled with novelty (ranked last) and
+    /// familiar material is expanded via deep catalogs.</summary>
     public const int WaveSize = 20;
 
-    /// <summary>Лимит треков одного «лёгкого» исполнителя в выдаче — иначе волна
-    /// вырождается в альбом. Для «тяжёлых» (вес сида ≥ HeavyCapShare от максимума —
-    /// т.е. исполнители из топа play_log) действует HeavyPerArtist: знакомое
-    /// занимает большую часть волны, novelty — дозированный остаток.
-    /// Лимиты работают в первых двух проходах отбора; если и ослабленные лимиты
-    /// не заполняют очередь до WaveSize, финальный проход добирает без лимитов —
-    /// короткий микс хуже вырожденного.</summary>
+    /// <summary>Per-artist limit for a "light" artist in the output — otherwise the wave
+    /// degenerates into an album. For "heavy" ones (seed weight ≥ HeavyCapShare of the
+    /// max, i.e. artists from the play_log top) HeavyPerArtist applies: familiar
+    /// material takes most of the wave, novelty is a dosed remainder.
+    /// The limits work in the first two selection passes; if even the relaxed limits
+    /// cannot fill the queue to WaveSize, the final pass backfills without limits —
+    /// a short mix is worse than a degenerate one.</summary>
     public const int LightPerArtist = 1;
     public const int HeavyPerArtist = 2;
     internal const double HeavyCapShare = 0.55;
 
-    /// <summary>Дополнительные слоты на исполнителя в проходе добора: хвост микса
-    /// заполняется с ослабленным лимитом (а не снятым). +1 держит семейство в
-    /// пределах 2 треков «лёгкому» / 3 «тяжёлому» за весь микс — серии одного
-    /// исполнителя, даже разведённые раскладкой, воспринимаются как мусор.
-    /// Финальный проход без лимитов включается, только если и этого не хватает
-    /// до WaveSize при очень тонком пуле.</summary>
+    /// <summary>Extra slots per artist in the backfill pass: the mix tail is filled with
+    /// a relaxed (not removed) limit. +1 keeps a family within 2 tracks for "light"
+    /// / 3 for "heavy" over the whole mix — streaks of one artist, even when spread
+    /// out, read as clutter. The no-limits final pass only kicks in if even this
+    /// cannot reach WaveSize with a very thin pool.</summary>
     internal const int BackfillExtraPerArtist = 1;
 
-    /// <summary>Сколько топ-исполнителей play_log анализируется за генерацию.</summary>
+    /// <summary>How many top play_log artists are analyzed per generation.</summary>
     public const int MaxTopArtists = 20;
 
-    /// <summary>Минимальные органические прослушки (сырые, без дисконта), чтобы
-    /// артист считался «прослушанным» и попал в анализ каталога (пул A):
-    /// 3-4 пассивные прослушки из микса это не «вкус».</summary>
+    /// <summary>Minimum organic plays (raw, no discount) for an artist to count as
+    /// "listened" and enter the catalog analysis (pool A):
+    /// 3-4 passive plays out of a mix are not "taste".</summary>
     public const double MinTopArtistPlays = 4.0;
 
-    /// <summary>Планка «сильного вкуса» (сырые прослушки, без дисконта): семейства
-    /// выше неё проходят гейт аудитории без проверки — нишевые любимцы остаются.
-    /// Ниже — «слабый сигнал» (пара фоновых проигрываний, накликанные тестами плеера):
-    /// нужен счётчик ≥ MinArtistListeners на карточке артиста, иначе в миксе нет
-    /// места.</summary>
+    /// <summary>Threshold of "strong taste" (raw plays, no discount): families above it
+    /// pass the audience gate without a check — niche favorites stay. Below — a "weak
+    /// signal" (a couple of background plays, click-tested in the player): a counter
+    /// ≥ MinArtistListeners on the artist card is required, otherwise it gets no
+    /// place in the mix.</summary>
     public const double StrongTastePlays = 10.0;
 
-    /// <summary>Минимальная аудитория исполнителя (ЯМ brief-info) для слабого сигнала
-    /// и добора новизны: ноунеймы и «нейро-треки» не попадают в микс даже в хвосте.</summary>
+    /// <summary>Minimum artist audience (YM brief-info) for a weak signal and novelty
+    /// backfill: no-names and "AI tracks" stay out of the mix, even in the tail.</summary>
     public const int MinArtistListeners = 10_000;
 
-    /// <summary>Минимум прослушиваний трека для related-кандидатов SoundCloud.</summary>
+    /// <summary>Minimum track plays for SoundCloud related-candidates.</summary>
     public const int MinTrackPlays = 10_000;
 
-    /// <summary>Бюджет проверок аудитории за генерацию (поиск + brief-info на семейство);
-    /// результаты кэшируются в wave_seed_map навсегда, бюджет расходуется один раз.
-    /// 60 — широкий круг требует быстрого прогрева: каждый проверенный ≥10k артист
-    /// навсегда расширяет оборот, непроверенное в микс не проходит.</summary>
+    /// <summary>Budget of audience checks per generation (search + brief-info per family);
+    /// results are cached in wave_seed_map forever, the budget is spent once.
+    /// 60 — a wide circle needs a fast warm-up: every verified ≥10k artist forever
+    /// widens the rotation, unverified material does not enter the mix.</summary>
     public const int MaxListenerResolutions = 60;
 
 
-    /// <summary>Сколько «артистов сцены» (похожих исполнителей) подключается к волне.
-    /// Каждая сцена — новое семейство в миксе: чем их больше, тем шире круг.
-    /// Кандидаты сэмплируются заново каждую генерацию, их каталоги кэшируются —
-    /// проверенный аудиторией круг растёт от генерации к генерации.</summary>
+    /// <summary>How many "scene artists" (similar artists) join the wave.
+    /// Each scene is a new family in the mix: the more of them, the wider the circle.
+    /// Candidates are re-sampled every generation and their catalogs are cached —
+    /// the audience-verified circle grows from generation to generation.</summary>
     public const int MaxSceneArtists = 24;
 
-    /// <summary>Сколько похожих берётся у каждого топ-артиста перед отбором сцены.</summary>
+    /// <summary>How many similar artists are taken from each top artist before scene selection.</summary>
     public const int ScenePerArtist = 3;
 
-    /// <summary>Для скольких топ-артистов запрашивается радио-батч ротора.
-    /// Ротор — единственный источник СВЕЖЕГО материала каждую генерацию (не кэшируется),
-    /// поэтому его квота — главная защита пула от выедания кулдауном.</summary>
+    /// <summary>For how many top artists a rotor radio batch is requested.
+    /// The rotor is the only source of FRESH material each generation (not cached),
+    /// so its quota is the main protection of the pool against cooldown depletion.</summary>
     public const int MaxRadioArtists = 15;
 
-    /// <summary>Сколько треков запрашивается у одного исполнителя (/artists/{id}/tracks).</summary>
+    /// <summary>How many tracks are requested from one artist (/artists/{id}/tracks).</summary>
     public const int ArtistPageSize = 50;
 
-    /// <summary>Пауза между перекачками каталогов артистов, мс: перекачка двух страниц
-    /// по всем сидам подряд упирается в rate-limit Яндекса и роняла часть каталогов —
-    /// пул тогда собирался из пары уцелевших семейств.</summary>
+    /// <summary>Pause between artist catalog fetches, ms: fetching two pages across all
+    /// seeds back-to-back hits the Yandex rate limit and dropped part of the catalogs —
+    /// the pool was then assembled from a couple of surviving families.</summary>
     public const int ArtistCatalogFetchDelayMs = 250;
 
-    /// <summary>Бюджет поисков /search за генерацию: сопоставление сидов и имён
-    /// исполнителей не должно внезапно гонять десятки запросов (кэш расходует его один раз).</summary>
+    /// <summary>Budget of /search calls per generation: seed and artist-name matching
+    /// must not suddenly fire dozens of requests (the cache spends it once).</summary>
     public const int MaxSearchResolutions = 12;
     public const int MaxArtistResolutions = 8;
 
-    /// <summary>Базовые веса пулов в скоринге (нормируются на максимум).</summary>
+    /// <summary>Base pool weights in scoring (normalized to the max).</summary>
     internal const double ScenePoolWeight = 2.5;
     internal const double RadioPoolWeight = 2.0;
     internal const double ArtistPoolBase = 3.0;
     internal const double ScPoolWeight = 2.6;
 
-    /// <summary>Пул E «сцена SoundCloud»: сколько лайков-сидов и сколько похожих берётся.</summary>
+    /// <summary>Pool E "SoundCloud scene": how many like-seeds and how many related tracks are taken.</summary>
     public const int ScSeedCount = 8;
     public const int ScRelatedLimit = 20;
 
-    /// <summary>Вес аффинности исполнителя кандидата и разброс джиттера: знакомое
-    /// стабильно поднимается над шумом, novelty дозирована.</summary>
+    /// <summary>Artist-affinity weight of a candidate and jitter spread: familiar material
+    /// reliably rises above noise, novelty stays dosed.</summary>
     internal const double AffinityBonusWeight = 1.2;
     internal const double SeedBonusWeight = 0.6;
     internal const double JitterAmplitude = 0.75;
 
-    /// <summary>Множитель бонуса артистам, звучавшим в недавних миксах — не исключение,
-    /// а понижение: при тонком пуле знакомых они всё ещё доступны, но в хвосте.</summary>
+    /// <summary>Multiplier for artists played in recent mixes — not an exclusion but a
+    /// demotion: with a thin familiar pool they remain reachable, just in the tail.</summary>
     internal const double DemotedArtistFactor = 0.25;
 
-    /// <summary>Сколько сидов берётся с каждого библиотечного источника за генерацию
-    /// (пул D, взвешенно по play_log; сиды от никогда не игравшихся исполнителей
-    /// отсеиваются — лайк без прослушек это не вкус, а шум).</summary>
+    /// <summary>How many seeds are taken from each library source per generation
+    /// (pool D, weighted by play_log; seeds from never-played artists are dropped —
+    /// a like without plays is noise, not taste).</summary>
     internal static readonly (int Yandex, int Vk, int SoundCloud, int Local) SeedQuota = (8, 5, 2, 2);
 
-    /// <summary>TTL кэша /similar и негативных матчей поиска.</summary>
+    /// <summary>TTL of the /similar cache and negative search matches.</summary>
     public static readonly TimeSpan SimilarCacheTtl = TimeSpan.FromDays(14);
     public static readonly TimeSpan SeedMapRetryTtl = TimeSpan.FromDays(14);
 
-    /// <summary>Окно аффинности по play_log и порог «недавно играло» (не предлагать).</summary>
+    /// <summary>Affinity window over play_log and the "recently played" threshold (do not suggest).</summary>
     public const int AffinityWindowDays = 90;
     public const int RecentPlayedDays = 2;
 
-    /// <summary>Сколько дней непрослушанное предложение держится вне микса —
-    /// пассивный негативный сигнал и ротация материала между миксами. 3, а не 7:
-    /// при частых генерациях кулдаун выедает пул быстрее, чем он пополняется,
-    /// и волна тает от обновления к обновлению.</summary>
+    /// <summary>For how many days an unplayed suggestion stays out of the mix —
+    /// a passive negative signal and rotation between mixes. 3, not 7: with frequent
+    /// generations the cooldown drains the pool faster than it refills, and the wave
+    /// shrinks from update to update.</summary>
     public const int SuggestedCooldownDays = 3;
 
-    /// <summary>Прослушанное предложение возвращается уже через день: прослушка —
-    /// позитивный сигнал, и именно возврат понравившегося держит длину микса при
-    /// активной ротации (иначе волна выедает пул и тает от генерации к генерации).</summary>
+    /// <summary>A played suggestion returns after just one day: a play is a positive
+    /// signal, and it is exactly the return of liked material that keeps the mix full
+    /// under active rotation (otherwise the wave drains the pool and shrinks from
+    /// generation to generation).</summary>
     public const int PlayedSuggestedCooldownDays = 1;
 
-    /// <summary>Grace-добор: если волна вышла короче полной (пул выеден кулдауном
-    /// или семейств осталось мало), предложения старше этого возраста возвращаются
-    /// в оборот — старые первыми. Час — чтобы не повторять микс, который слушали
-    /// только что. Повтор вчерашнего материала лучше микса из одного трека.</summary>
+    /// <summary>Grace backfill: if the wave came out shorter than full (the pool was
+    /// drained by cooldown or few families remain), suggestions older than this age
+    /// return to rotation — oldest first. One hour, so a mix the user just heard is
+    /// not repeated. Repeating yesterday's material beats a one-track mix.</summary>
     public const int GraceRefillHours = 1;
 
     private readonly YmService _ym;
@@ -215,19 +215,19 @@ public sealed class RecommendationService
         _library = library;
     }
 
-    /// <summary>Один сид пула D. YmId известен сразу для лайков ЯМ, остальные
-    /// разрешаются через /search (с кэшем в wave_seed_map).</summary>
+    /// <summary>A single pool D seed. YmId is known up front for YM likes; the rest
+    /// are resolved via /search (cached in wave_seed_map).</summary>
     private sealed record Seed(string Source, string SeedId, string Artist, string Title,
                                long DurationMs, string? YmId);
 
-    /// <summary>Исполнитель для пулов A/B/C: ключ play_log, отображаемое имя, ym-id, частота.</summary>
+    /// <summary>An artist for pools A/B/C: play_log key, display name, ym-id, play count.</summary>
     private sealed record TopArtist(string Key, string Name, string YmId, double Plays);
 
     /// <summary>
-    /// Источники сидов, собранные ДО фоновой генерации: чтения идут через общее
-    /// SQLite-соединение других сервисов и должны выполняться на потоке вызывающего
-    /// (UI), как загрузки всех остальных страниц — генерация же работает в фоне
-    /// только с собственными соединениями RecommendationRepository.
+    /// Seed sources gathered BEFORE background generation: the reads go through the
+    /// shared SQLite connection of other services and must run on the caller's (UI)
+    /// thread, like the loads of all other pages — generation itself works in the
+    /// background only with RecommendationRepository's own connections.
     /// </summary>
     public sealed class WaveSources
     {
@@ -237,7 +237,7 @@ public sealed class RecommendationService
         public IReadOnlyList<Track> LocalTracks { get; init; } = Array.Empty<Track>();
     }
 
-    /// <summary>Собрать источники сидов (быстрые индексированные выборки; UI-поток).</summary>
+    /// <summary>Gathers seed sources (fast indexed queries; UI thread).</summary>
     public async Task<WaveSources> GatherSourcesAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -251,11 +251,11 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Сгенерировать волну: анализ исполнителей из play_log → пулы A/B/C → сиды из
-    /// библиотек → пул D → фильтры → ранжирование. Требует подключённый Яндекс Музыки
-    /// (проверяет вызывающий через YmService.HasToken). Возвращает пустой список,
-    /// если кандидатов нет. Тяжёлые участки — на пуле потоков; БД в фоне доступается
-    /// ТОЛЬКО через собственные соединения RecommendationRepository.
+    /// Generates the wave: play_log artist analysis → pools A/B/C → library seeds →
+    /// pool D → filters → ranking. Requires a connected Yandex Music account (the
+    /// caller checks via YmService.HasToken). Returns an empty list when there are
+    /// no candidates. Heavy sections run on the thread pool; background DB access
+    /// happens ONLY through RecommendationRepository's own connections.
     /// </summary>
     public async Task<List<WaveItem>> GenerateWaveAsync(WaveSources sources, CancellationToken ct)
         => await Task.Run(() => GenerateCoreAsync(sources, ct), ct);
@@ -270,18 +270,18 @@ public sealed class RecommendationService
         ct.ThrowIfCancellationRequested();
         var rng = Random.Shared;
 
-        // ===== Сигналы вкуса =====
+        // ===== Taste signals =====
         var plays = await _repo.GetRecentPlaysAsync(AffinityWindowDays);
         var suggested = await _repo.GetSuggestedAsync();
-        // Прослушки ранее предложенного весят меньше — микс не выращивает себе
-        // «любимых» артистов из того, что сам навязал.
+        // Plays of previously suggested material weigh less — the mix must not grow
+        // its own "favorite" artists out of what it pushed itself.
         var suggestedKeys = suggested
             .Select(s => s.ArtistKey + "|" + s.TitleKey)
             .Where(k => k.Length > 1)
             .ToHashSet(StringComparer.Ordinal);
         var artistPlayCounts = ComputePlayCounts(plays, suggestedKeys);
-        // Сырые счётчики — для порогов «известности»/«сильного вкуса» и приоритета
-        // проверок гейта: дисконт в них не входит.
+        // Raw counters — for the "fame"/"strong taste" thresholds and gate-check
+        // priority: the discount is not included in them.
         var rawPlayCounts = ComputeRawPlayCounts(plays);
         var playKeysAll = plays
             .Select(p => PlayKey(p.Artist, p.Title))
@@ -289,7 +289,7 @@ public sealed class RecommendationService
             .Select(k => k!)
             .ToHashSet(StringComparer.Ordinal);
 
-        // Отображаемые имена ключей play_log (для поисковых запросов артистов).
+        // Display names of play_log keys (for artist search queries).
         var artistNames = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var play in plays)
             foreach (var name in ArtistHelper.Split(play.Artist))
@@ -298,20 +298,20 @@ public sealed class RecommendationService
                 if (key.Length > 0) artistNames.TryAdd(key, name);
             }
 
-        // ===== Пулы A/B/C: анализ исполнителей =====
+        // ===== Pools A/B/C: artist analysis =====
         var topArtists = await ResolveTopArtistsAsync(rawPlayCounts, artistNames, ct);
         var seedWeights = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var artist in topArtists)
             seedWeights[$"artist:{artist.YmId}"] = ArtistPoolBase
                                                     + 2 * Math.Log(1 + artist.Plays) / Math.Log(2);
 
-        // B: «общая тусовка» — похожие исполнители топ-артистов, их треки тем же эндпоинтом.
+        // B: "shared scene" — similar artists of top artists, their tracks via the same endpoint.
         await CollectSceneArtistsAsync(topArtists, artistPlayCounts, seedWeights, rng, ct);
 
-        // C: «радио сцены» — батч ротора по топ-артистам (свежий каждую генерацию).
+        // C: "scene radio" — rotor batch over top artists (fresh every generation).
         await CollectRadioBatchesAsync(topArtists, seedWeights, ct);
 
-        // ===== Пул D: сиды из библиотек (взвешенно по play_log) =====
+        // ===== Pool D: library seeds (weighted by play_log) =====
         double SeedWeight(Seed seed)
         {
             var artistSum = ArtistKeysOf(seed.Artist)
@@ -372,8 +372,9 @@ public sealed class RecommendationService
             return resolved.Where(s => seenIds.Add(s.YmId!)).Take(SeedCount).Select(s => s.YmId!).ToList();
         });
 
-        // ===== Пул E «сцена SoundCloud»: related-tracks по игравшимся лайкам =====
-        // Треки берутся из каталога SC (не из библиотеки пользователя) и играют через
+        // ===== Pool E "SoundCloud scene": related tracks over played likes =====
+        // Tracks come from the SC catalog (not the user's library) and play through
+        // the player's regular SC resolve (transcodings).
         var scSeedIds = new List<string>();
         var scRelatedSeeds = scRows
             .Where(r => !string.IsNullOrEmpty(r.ScId) && !string.IsNullOrEmpty(r.Title))
@@ -386,7 +387,7 @@ public sealed class RecommendationService
                 scSeedIds.Add($"sc:{seed.SeedId}");
         }
 
-        // ===== Обновление кэша /similar, /artists/{id}/tracks и SC related =====
+        // ===== Refresh of the /similar, /artists/{id}/tracks and SC related caches =====
         var artistSeedIds = seedWeights.Keys
             .Where(k => k.StartsWith("artist:", StringComparison.Ordinal))
             .ToList();
@@ -406,10 +407,10 @@ public sealed class RecommendationService
                 List<YmTrackDto> tracks;
                 if (seedId.StartsWith("artist:", StringComparison.Ordinal))
                 {
-                    // Каталог глубже одной страницы (2 × 50): больше материала
-                    // для ротации между миксами в пределах одного семейства.
-                    // Пауза между каталогами: перекачка двух страниц по всем
-                    // сидам подряд упирается в rate-limit Яндекса (429).
+                    // Catalog deeper than one page (2 × 50): more material for
+                    // rotation between mixes within one family.
+                    // Pause between catalogs: fetching two pages across all seeds
+                    // back-to-back hits the Yandex rate limit (429).
                     var page0 = await _ym.GetArtistTracksAsync(seedId["artist:".Length..], ArtistPageSize, 0, ct);
                     var page1 = await _ym.GetArtistTracksAsync(seedId["artist:".Length..], ArtistPageSize, 1, ct);
                     tracks = page0.Concat(page1.Where(p => page0.All(t => t.Id != p.Id))).ToList();
@@ -434,7 +435,7 @@ public sealed class RecommendationService
             }
             catch (YmApiException ex) when (YmApiException.IsSessionError(ex.HttpCode))
             {
-                throw; // токен отозван — VM покажет «подключите аккаунт»
+                throw; // token revoked — the VM will show "connect account"
             }
             catch (OperationCanceledException)
             {
@@ -446,8 +447,8 @@ public sealed class RecommendationService
             }
         }
 
-        // SC related: свои кандидаты (ScTrack) → те же строки кэша; сессия SC мертва —
-        // пул просто пропускается, волну собирают остальные.
+        // SC related: its own candidates (ScTrack) → the same cache rows; if the SC
+        // session is dead the pool is simply skipped, the rest assemble the wave.
         foreach (var seedId in staleSc)
         {
             ct.ThrowIfCancellationRequested();
@@ -457,7 +458,7 @@ public sealed class RecommendationService
                                ?? new List<ScTrack>();
                 await _repo.ReplaceSimilarAsync(seedId, related
                     .Where(t => t.Streamable && t.Policy == null && t.Id > 0
-                                && t.PlaybackCount >= MinTrackPlays) // ноунеймы/нейро-треки мимо
+                                && t.PlaybackCount >= MinTrackPlays) // no-names/AI tracks out
                     .Select(t => new WaveCandidateRow
                     {
                         YmId = t.Id.ToString(),
@@ -481,7 +482,7 @@ public sealed class RecommendationService
             }
         }
 
-        // Ротор: батчи случайные — не кэшируем на TTL, берём свежие каждую генерацию.
+        // Rotor: batches are random — not cached on TTL, fresh ones every generation.
         foreach (var seedId in rotorSeedIds)
         {
             ct.ThrowIfCancellationRequested();
@@ -510,14 +511,15 @@ public sealed class RecommendationService
             }
         }
 
-        // ===== Кандидаты всех пулов: дедуп по «источник:id», приоритет — порядок сидов
-        // (артисты play_log вытесняют сцену, сцена — ротор, тот — похожие треки) =====
+        // ===== Candidates of all pools: dedup by "source:id", priority — seed order
+        // (play_log artists outrank the scene, the scene outranks the rotor, that
+        // outranks similar tracks) =====
         var allSeedIds = artistSeedIds.Concat(rotorSeedIds).Concat(trackSeedIds).Concat(scSeedIds).ToList();
         var maxSeedWeight = seedWeights.Count > 0 ? seedWeights.Values.Max() : 1.0;
         var similarMap = await _repo.GetSimilarAsync(allSeedIds, SimilarCacheTtl);
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        // Кросс-источниковый дедуп песен: одна и та же песня, найденная и в YM-каталоге,
-        // и в related SC, не должна задваиваться в миксе (приоритет — более ранний пул).
+        // Cross-source song dedup: the same song found both in the YM catalog and in
+        // SC related must not appear twice in the mix (priority — the earlier pool).
         var seenSongs = new HashSet<string>(StringComparer.Ordinal);
         var pool = new List<WaveItem>();
         foreach (var seedId in allSeedIds)
@@ -547,8 +549,8 @@ public sealed class RecommendationService
         }
         if (pool.Count == 0) return new List<WaveItem>();
 
-        // База «знакомых» из всех библиотек: исполнители, которые пользователь
-        // хотя бы добавил, получают минимальный бонус (добавление — тоже сигнал).
+        // Base of "familiar" material from all libraries: artists the user has at
+        // least added get a minimal bonus (adding is a signal too).
         var maxPlayCount = artistPlayCounts.Count > 0 ? artistPlayCounts.Values.Max() : 0;
         foreach (var key in LibraryArtistKeys(ymRows.Select(r => r.Artist),
                      vkRows.Select(r => r.Artist),
@@ -556,7 +558,7 @@ public sealed class RecommendationService
                      localTracks.Select(t => t.Artist)))
             artistPlayCounts[key] = Math.Max(artistPlayCounts.GetValueOrDefault(key), 0.05);
 
-        // ===== Обратная связь: прослушанное после предложения — не исключение =====
+        // ===== Feedback: played-after-suggested is not an exception =====
         var playKeysSince = plays
             .Select(p => (Key: PlayKey(p.Artist, p.Title), p.PlayedAt))
             .Where(p => p.Key != null)
@@ -570,24 +572,24 @@ public sealed class RecommendationService
         }
         await _repo.MarkPlayedAsync(nowPlaying);
 
-        // ===== Фильтры =====
+        // ===== Filters =====
         var libraryYmIds = ymRows.Select(r => r.YmId).ToHashSet(StringComparer.Ordinal);
         var localIndex = MatchHelper.BuildIndex(localTracks);
         var vkKeys = vkRows.Select(r => MatchHelper.BuildKey(r.Artist, r.Title))
             .Where(k => k.Length > 1).ToHashSet(StringComparer.Ordinal);
         var scKeys = scRows.Select(r => MatchHelper.BuildKey(r.Artist, r.Title))
             .Where(k => k.Length > 1).ToHashSet(StringComparer.Ordinal);
-        // Кулдаун предложений раздвоен: непрослушанное отдыхает 7 дней (пассивный
-        // негатив), прослушанное возвращается через день — оно уже понравилось,
-        // и именно его возврат не даёт волне таять при частых генерациях.
+        // The suggestion cooldown is split: unplayed suggestions rest 7 days (passive
+        // negative), played ones return after a day — they were already liked, and
+        // their return is what keeps the wave from shrinking under frequent generation.
         var cooldownIds = suggested
             .Where(s => s.SuggestedAt >= DateTime.UtcNow.AddDays(-(s.Played
                 ? PlayedSuggestedCooldownDays
                 : SuggestedCooldownDays)))
             .Select(s => s.YmId)
             .ToHashSet(StringComparer.Ordinal);
-        // Артисты недавних миксов получают пониженный бонус: следующий микс
-        // заводит других знакомых исполнителей, а не тех же в том же порядке.
+        // Artists of recent mixes get a reduced bonus: the next mix introduces other
+        // familiar artists instead of the same ones in the same order.
         var demotedArtistKeys = suggested
             .Where(s => s.SuggestedAt >= DateTime.UtcNow.AddDays(-(s.Played
                 ? PlayedSuggestedCooldownDays
@@ -601,7 +603,7 @@ public sealed class RecommendationService
             .Where(k => k.Length > 1)
             .ToHashSet(StringComparer.Ordinal);
 
-        // ===== Базовые фильтры (без «известности») =====
+        // ===== Base filters (no "fame") =====
         var baseFiltered = pool
             .Where(c => c.Source != Track.SourceYandex || !libraryYmIds.Contains(c.PlatformId))
             .Where(c => MatchHelper.FindLocalMatch(localIndex, c.Artist, c.Title) == null)
@@ -611,23 +613,23 @@ public sealed class RecommendationService
             .Where(c => !cooldownIds.Contains(c.JournalId))
             .ToList();
 
-        // ===== Только прослушанные исполнители =====
-        // Кандидат проходит как «знакомый», если хотя бы один его исполнитель имеет
-        // ≥ MinTopArtistPlays органических прослушек в play_log. Членство в библиотеке
-        // само по себе НЕ считается: рекомендации строятся на том, что пользователь
-        // реально слушает — «добавил, но не слушает» в микс не попадает. Всё остальное —
-        // новизна (хвост микса), и она фильтруется гейтом аудитории.
+        // ===== Only listened-to artists =====
+        // A candidate counts as "familiar" if at least one of its artists has
+        // ≥ MinTopArtistPlays organic plays in play_log. Library membership alone
+        // does NOT count: recommendations are built on what the user actually
+        // listens to — "added but not played" does not enter the mix. Everything
+        // else is novelty (the mix tail), and it is filtered by the audience gate.
         var playedKeys = rawPlayCounts
             .Where(kv => kv.Value >= MinTopArtistPlays)
             .Select(kv => kv.Key)
             .ToHashSet(StringComparer.Ordinal);
         var knownKeys = playedKeys;
 
-        // ===== Единый гейт аудитории для всего пула =====
-        // Сильный вкус (≥ StrongTastePlays органических прослушек) не проверяется —
-        // нишевые любимцы с маленькой аудиторией остаются. Слабый сигнал (пара
-        // фоновых проигрываний, накликанные тестами плеера) и новизна проверяются:
-        // мелкие исполнители (< MinArtistListeners слушателей) в микс не проходят.
+        // ===== Single audience gate for the whole pool =====
+        // Strong taste (≥ StrongTastePlays organic plays) is not checked — niche
+        // favorites with small audiences stay. Weak signal (a couple of background
+        // plays, click-tested in the player) and novelty are checked: small artists
+        // (< MinArtistListeners listeners) do not pass into the mix.
         var strongKeys = rawPlayCounts
             .Where(kv => kv.Value >= StrongTastePlays)
             .Select(kv => kv.Key)
@@ -642,7 +644,7 @@ public sealed class RecommendationService
             .Where(c => !TrackArtistKeys(c).Any(knownKeys.Contains))
             .ToList();
 
-        // ===== Ранжирование =====
+        // ===== Ranking =====
         var candidateWeights = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var seedId in allSeedIds)
         {
@@ -660,8 +662,9 @@ public sealed class RecommendationService
             var result = RankCandidates(filtered, artistPlayCounts, maxPlayCount, candidateWeights,
                 maxSeedWeight, WaveSize, LightPerArtist, rng, demotedArtistKeys);
 
-            // Хвост микса добирается новизной (см. WaveSize): ноунеймы ранжируются
-            // после всего знакомого материала, короткий микс из-за них хуже полного.
+            // The mix tail is backfilled with novelty (see WaveSize): no-names rank
+            // after all familiar material — a short mix caused by them is worse than
+            // a full one.
             if (result.Count < WaveSize && novelty.Count > 0)
                 result.AddRange(RankCandidates(novelty, artistPlayCounts, maxPlayCount, candidateWeights,
                     maxSeedWeight, WaveSize - result.Count, LightPerArtist, rng, demotedArtistKeys));
@@ -670,10 +673,11 @@ public sealed class RecommendationService
 
         var wave = RankAll();
 
-        // ===== Grace-добор: волна вышла короче полной =====
-        // Кулдаун выел пул (или семейств осталось мало) — возвращаем в оборот
-        // предложения старше GraceRefillHours, старые первыми. Повтор вчерашнего
-        // материала лучше микса из одного трека; свежее часа по-прежнему отдыхает.
+        // ===== Grace backfill: the wave came out shorter than full =====
+        // The cooldown drained the pool (or few families remain) — suggestions older
+        // than GraceRefillHours return to rotation, oldest first. Repeating
+        // yesterday's material beats a one-track mix; anything newer than an hour
+        // still rests.
         if (wave.Count < WaveSize)
         {
             var graceCutoff = DateTime.UtcNow.AddHours(-GraceRefillHours);
@@ -683,14 +687,14 @@ public sealed class RecommendationService
             var baseSet = new HashSet<WaveItem>(baseFiltered);
 
             var grace = pool
-                .Where(c => !baseSet.Contains(c)) // отсеяны именно кулдауном
+                .Where(c => !baseSet.Contains(c)) // exactly the cooldown-filtered ones
                 .Where(c => suggestedAtById.TryGetValue(c.JournalId, out var at) && at <= graceCutoff)
                 .OrderBy(c => suggestedAtById[c.JournalId])
                 .ToList();
             if (grace.Count > 0)
             {
-                // Возвратный материал проходит тот же гейт аудитории: иначе
-                // однажды накликанный слабый артист возвращается через grace.
+                // Returning material passes the same audience gate: otherwise a weak
+                // artist once click-tested returns via grace.
                 var graceGated = await FilterByListenersAsync(grace, strongKeys, rawPlayCounts, ct);
                 filtered.AddRange(graceGated
                     .Where(c => TrackArtistKeys(c).Any(knownKeys.Contains)));
@@ -708,8 +712,8 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Топ play_log-исполнителей → ym-artist-id (кэш в wave_seed_map, source='ym_artist',
-    /// негативный кэш с TTL). Порядок — по частоте прослушек, не более MaxTopArtists.
+    /// Top play_log artists → ym-artist-id (cache in wave_seed_map, source='ym_artist',
+    /// negative cache with TTL). Ordered by play count, at most MaxTopArtists.
     /// </summary>
     private async Task<List<TopArtist>> ResolveTopArtistsAsync(
         Dictionary<string, double> artistPlayCounts,
@@ -766,9 +770,8 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Лучший результат поиска исполнителя: точное совпадение нормализованных имён,
-    /// иначе первый, чьё имя содержит запрос (или наоборот). null — ничего похожего.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Best artist search result: exact match of normalized names, otherwise the first
+    /// whose name contains the query (or vice versa). null — nothing similar.
     /// </summary>
     internal static YmArtistDto? PickArtistMatch(IReadOnlyList<YmArtistDto> results, string queryName)
     {
@@ -786,21 +789,20 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Единый гейт аудитории, закрытый по умолчанию: семейство проходит только если
-    /// оно сильное (≥ StrongTastePlays сырых прослушек) или ПРОВЕРЕНО с аудиторией
-    /// ≥ MinArtistListeners (ЯМ brief-info). Непроверенное выбывает из этой генерации —
-    /// мелкие артисты не просачиваются, пока кэш не прогрелся. Проверки (бюджет
-    /// MaxListenerResolutions за генерацию) идут сначала на слабый сигнал
-    /// пользователя по убыванию прослушек — их результат сразу наполняет микс, —
-    /// затем на семейства без прослушек (вероятный «нейро»-спам). Кэш навсегда
-    /// в wave_seed_map (source='ym_listeners'). Сбой одного запроса не роняет
-    /// генерацию.
+    /// Single audience gate, closed by default: a family passes only if it is strong
+    /// (≥ StrongTastePlays raw plays) or VERIFIED with an audience ≥ MinArtistListeners
+    /// (YM brief-info). Unverified material drops out of this generation — small
+    /// artists do not leak in while the cache is cold. Checks (budget of
+    /// MaxListenerResolutions per generation) first cover the user's weak signal in
+    /// descending play order — their results immediately fill the mix — then families
+    /// without plays (likely "AI" spam). Cache lives forever in wave_seed_map
+    /// (source='ym_listeners'). A single failed request does not kill the generation.
     /// </summary>
     private async Task<List<WaveItem>> FilterByListenersAsync(
         List<WaveItem> candidates, HashSet<string> strongKeys,
         Dictionary<string, double> playCounts, CancellationToken ct)
     {
-        // Отображаемые имена семейств — из самих кандидатов (в play_log их нет).
+        // Display names of families — from the candidates themselves (play_log has none).
         var names = new Dictionary<string, (string Name, double Plays)>(StringComparer.Ordinal);
         foreach (var candidate in candidates)
             foreach (var name in ArtistHelper.Split(candidate.Artist))
@@ -814,7 +816,7 @@ public sealed class RecommendationService
         var budget = MaxListenerResolutions;
         var toCheck = names
             .Where(kv => !strongKeys.Contains(kv.Key))
-            .OrderBy(kv => kv.Value.Plays == 0 ? 1 : 0) // сначала слабый сигнал пользователя
+            .OrderBy(kv => kv.Value.Plays == 0 ? 1 : 0) // user's weak signal first
             .ThenByDescending(kv => kv.Value.Plays)
             .ToList();
         foreach (var (key, entry) in toCheck)
@@ -823,7 +825,7 @@ public sealed class RecommendationService
             var cached = await _repo.GetSeedMapAsync("ym_listeners", key);
             if (cached != null)
             {
-                // "0" — проверен и забракован (ноунейм или поиск не нашёл): не тратим бюджет.
+                // "0" — checked and rejected (no-name or search found nothing): budget not spent.
                 if (long.TryParse(cached.Value.YmId, out var count)) listeners[key] = count;
                 continue;
             }
@@ -842,7 +844,7 @@ public sealed class RecommendationService
             }
             catch (YmApiException ex) when (YmApiException.IsSessionError(ex.HttpCode))
             {
-                throw; // токен отозван — VM покажет «подключите аккаунт»
+                throw; // token revoked — the VM will show "connect account"
             }
             catch (OperationCanceledException)
             {
@@ -854,8 +856,8 @@ public sealed class RecommendationService
             }
         }
 
-        // Fail-closed и по ВСЕМ исполнителям карточки: «сильный X feat. мелкий гость»
-        // всё равно показывает мелкое имя на карточке — такой трек не проходит.
+        // Fail-closed across ALL artists of the card: "strong X feat. minor guest"
+        // still shows the small name on the card — such a track does not pass.
         bool FamilyPasses(string key)
             => strongKeys.Contains(key)
                || listeners.TryGetValue(key, out var count) && count >= MinArtistListeners;
@@ -870,12 +872,12 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Пул B «общая тусовка»: у КАЖДОГО топ-артиста берём ScenePerArtist похожих
-    /// исполнителей, вычитаем тех, кого пользователь уже слушает (они и так в пуле A),
-    /// сэмплим до MaxSceneArtists новых и забираем их каталоги (кэш 'artist:{id}',
-    /// вес сцены). Это главный источник ШИРОКОГО круга: каждое новое семейство сцены
-    /// проходит гейт аудитории и навсегда остаётся в обороте.
-    /// Сбой одного запроса не роняет генерацию.
+    /// Pool B "shared scene": for EACH top artist take ScenePerArtist similar artists,
+    /// subtract those the user already plays (they are in pool A anyway), sample up to
+    /// MaxSceneArtists new ones and fetch their catalogs (cache 'artist:{id}', scene
+    /// weight). This is the main source of a WIDE circle: each new scene family passes
+    /// the audience gate and stays in rotation forever.
+    /// A single failed request does not kill the generation.
     /// </summary>
     private async Task CollectSceneArtistsAsync(
         IReadOnlyList<TopArtist> topArtists,
@@ -918,8 +920,8 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Пул C «радио сцены»: батч ротора по топ-артистам (свежий каждую генерацию,
-    /// вес радиопула). Сбой не роняет генерацию.
+    /// Pool C "scene radio": a rotor batch over top artists (fresh each generation,
+    /// radio-pool weight). A failure does not kill the generation.
     /// </summary>
     private async Task CollectRadioBatchesAsync(
         IReadOnlyList<TopArtist> topArtists,
@@ -935,10 +937,10 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// ym_id сида через кэш/поиск: известный матч — сразу; просроченный негативный кэш
-    /// или отсутствие записи — поиск (если бюджет разрешает). Возвращаемые значения:
-    /// ym_id — найден; '' — найден негативный кэш/поиск не дал матча; null — бюджета
-    /// нет или сид без исполнителя/названия.
+    /// Seed's ym_id via cache/search: a known match returns immediately; an expired
+    /// negative cache or a missing entry triggers a search (if the budget allows).
+    /// Return values: ym_id — found; '' — a negative cache hit or no search match;
+    /// null — no budget left or the seed lacks artist/title.
     /// </summary>
     private async Task<string?> ResolveSeedYmIdAsync(Seed seed, bool searchAllowed, CancellationToken ct)
     {
@@ -950,7 +952,7 @@ public sealed class RecommendationService
         {
             if (cached.Value.YmId.Length > 0) return cached.Value.YmId;
             if (DateTime.UtcNow - cached.Value.ResolvedAt < SeedMapRetryTtl) return string.Empty;
-            // Протухший негативный кэш — ищем снова (каталоги Яндекса пополняются).
+            // Expired negative cache — search again (Yandex catalogs grow).
         }
 
         if (!searchAllowed) return null;
@@ -962,12 +964,11 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Лучший результат поиска для сида: нормализованное совпадение названия И пересечение
-    /// исполнителей; длительность (если известна обеим сторонам) — фильтр ±15 c. Строгий
-    /// матч не найден — первый результат с совпавшим исполнителем (названия треков в
-    /// каталогах расходятся чаще, чем имена). null — совпадений по исполнителю нет:
-    /// чужой трек в волне хуже пропуска.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Best search result for a seed: a normalized title match AND artist intersection;
+    /// duration (when known to both sides) filters at ±15s. No strict match — the first
+    /// result with a matching artist (track titles diverge across catalogs more often
+    /// than artist names). null — no artist matches: someone else's track in the wave
+    /// is worse than a skip.
     /// </summary>
     internal static YmTrackDto? PickSearchMatch(
         IReadOnlyList<YmTrackDto> results, string seedArtist, string seedTitle, long seedDurationMs)
@@ -998,11 +999,11 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Годится ли трек в сиды пула D: исполнитель встречался в play_log ИЛИ сам трек
-    /// игрался. Лайк/трек библиотеки, который пользователь никогда не слушал, вкуса
-    /// не отражает — от таких сидов волна уезжает в сторону. Спец-источники
-    /// (лайки SC и избранное) фильтруются так же: явный сигнал слабее факта прослушки.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Whether a track qualifies as a pool D seed: its artist appears in play_log OR
+    /// the track itself was played. A library like/track the user never played does
+    /// not reflect taste — seeds like that pull the wave off course. Special sources
+    /// (SC likes and favorites) are filtered the same way: an explicit signal is
+    /// weaker than an actual listen.
     /// </summary>
     internal static bool IsSeedPlayed(
         string artist, string title,
@@ -1016,12 +1017,11 @@ public sealed class RecommendationService
     }
 
     /// <summary>
-    /// Бонус аффинности исполнителя — ОТНОСИТЕЛЬНЫЙ: доля от самого играемого
-    /// артиста (логарифмическое сглаживание обеих сторон). Раньше логарифм
-    /// насыщался уже к 3-4 прослушкам, и артисты с парой прослушек получали почти
-    /// максимальный буст, вытесняя действительно играемых. count=0 → 0;
-    /// count=max → полный <see cref="AffinityBonusWeight"/>.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Artist affinity bonus is RELATIVE: a share of the most-played artist
+    /// (logarithmic smoothing on both sides). Previously the logarithm saturated by
+    /// 3-4 plays, so artists with a couple of plays got nearly the max boost,
+    /// displacing genuinely played ones. count=0 → 0;
+    /// count=max → the full <see cref="AffinityBonusWeight"/>.
     /// </summary>
     internal static double ArtistBonus(
         Dictionary<string, double> artistPlayCounts, double maxPlayCount, string artistKey)
@@ -1033,11 +1033,10 @@ public sealed class RecommendationService
         return AffinityBonusWeight * relative;
     }
 
-    /// <summary>Частоты исполнителей по play_log (соавторы учитываются каждому).
-    /// Прослушки из журнала предложений (discountedKeys) весят 0.4: трек, который
-    /// пользователь просто дал дограть миксу, не становится «вкусом» — иначе волна
-    /// сама выращивает себе топ-артистов из навязанного (петля самозагрязнения).
-    /// Чистая функция — покрыта юнит-тестами.</summary>
+    /// <summary>Artist play frequencies from play_log (featured artists count for each).
+    /// Plays from the suggestion journal (discountedKeys) weigh 0.4: a track the user
+    /// merely let the mix finish must not become "taste" — otherwise the wave grows
+    /// its own top artists out of what it pushed (a self-polluting loop).</summary>
     internal static Dictionary<string, double> ComputePlayCounts(
         IReadOnlyList<(string Artist, string Title, DateTime PlayedAt)> plays,
         HashSet<string>? discountedKeys = null)
@@ -1055,13 +1054,13 @@ public sealed class RecommendationService
         return counts;
     }
 
-    /// <summary>Вес прослушки трека, ранее предложенного миксом (см. ComputePlayCounts).</summary>
+    /// <summary>Weight of a play for a track previously suggested by the mix (see ComputePlayCounts).</summary>
     internal const double SuggestedPlayWeight = 0.25;
 
-    /// <summary>Сырые частоты прослушек (без дисконта) — для порогов «известности» и
-    /// «сильного вкуса»: прослушка есть прослушка, гейты не должны зависеть от того,
-    /// из микса ли звучал трек (иначе сильный вкус занижался до пары артистов).
-    /// Дисконт остаётся только в ранжировании. Чистая функция — покрыта юнит-тестами.</summary>
+    /// <summary>Raw play frequencies (no discount) — for the "fame" and "strong taste"
+    /// thresholds: a play is a play, gates must not depend on whether the track was
+    /// played from the mix (otherwise strong taste was understated to a couple of
+    /// artists). The discount remains only in ranking.</summary>
     internal static Dictionary<string, double> ComputeRawPlayCounts(
         IReadOnlyList<(string Artist, string Title, DateTime PlayedAt)> plays)
     {
@@ -1072,13 +1071,13 @@ public sealed class RecommendationService
         return counts;
     }
 
-    /// <summary>Семейные ключи трека: все его исполнители после отрезания фитов.
-    /// Треки "X feat. B", "X &amp; B" и "X" принадлежат семейству {x, b} — для лимитов
-    /// и раскладки это один исполнитель в любых написаниях.</summary>
+    /// <summary>Family keys of a track: all its artists after stripping features.
+    /// Tracks "X feat. B", "X &amp; B" and "X" belong to the family {x, b} — for limits
+    /// and spreading they count as one artist under any spelling.</summary>
     internal static List<string> TrackArtistKeys(WaveItem track)
         => ArtistKeysOf(track.Artist);
 
-    /// <summary>Семейные ключи строки исполнителей (Split → StripFeatures → Key).</summary>
+    /// <summary>Family keys of an artist string (Split → StripFeatures → Key).</summary>
     internal static List<string> ArtistKeysOf(string artist)
         => ArtistHelper.Split(artist)
             .Select(n => ArtistHelper.Key(ArtistHelper.StripFeatures(n)))
@@ -1086,13 +1085,13 @@ public sealed class RecommendationService
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-    /// <summary>Ранжирование кандидатов волны: скоринг (вес пула/сида + аффинность + джиттер) →
-    /// сортировка → отбор в три прохода. Первый — с лимитами на исполнителя
-    /// («тяжёлым» — HeavyPerArtist, остальным — maxPerArtist): знакомое занимает
-    /// большую часть волны и не вырождается в альбом. Второй и третий — с
-    /// ослабленными лимитами (+1 и +2): очередь добирается с сохранением разброса,
-    /// потолок 3 «лёгким» / 4 «тяжёлым» за весь микс. Джиттер гарантирует отличие
-    /// повторных генераций. Чистая функция — покрыта юнит-тестами.
+    /// <summary>Wave candidate ranking: scoring (pool/seed weight + affinity + jitter) →
+    /// sort → selection in three passes. The first uses per-artist limits ("heavy"
+    /// artists get HeavyPerArtist, the rest maxPerArtist): familiar material takes
+    /// most of the wave without degenerating into an album. The second and third use
+    /// relaxed limits (+1 and +2): the queue backfills while keeping spread, with a
+    /// ceiling of 3 "light" / 4 "heavy" per artist over the whole mix. Jitter
+    /// guarantees repeat generations differ.
     /// </summary>
     internal static List<WaveItem> RankCandidates(
         IReadOnlyList<WaveItem> candidates,
@@ -1113,12 +1112,12 @@ public sealed class RecommendationService
                 : 0;
             var poolBonus = SeedBonusWeight * weightNorm;
             var keys = TrackArtistKeys(c);
-            // Бонус — по самому играемому из исполнителей трека (коллаборация с
-            // любимым артистом релевантна, даже если ведущий неизвестен).
+            // Bonus — based on the most-played artist of the track (a collaboration
+            // with a favorite is relevant even if the lead is unknown).
             var artistBonus = keys.Count > 0
                 ? keys.Max(k => ArtistBonus(artistPlayCounts, maxPlayCount, k))
                 : 0;
-            // Демоушн артистов недавних миксов: ротация головного состава.
+            // Demotion of artists from recent mixes: rotate the head of the lineup.
             if (demotedArtistKeys != null && keys.Any(demotedArtistKeys.Contains))
                 artistBonus *= DemotedArtistFactor;
             return new
@@ -1133,8 +1132,8 @@ public sealed class RecommendationService
         var picked = new HashSet<WaveItem>();
         var perArtist = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        // Отбор в три прохода с общими счётчиками: каждый следующий ослабляет лимит,
-        // а не сбрасывает его, поэтому семейство не может набрать лишние слоты в доборе.
+        // Selection in three passes with shared counters: each pass relaxes the limit
+        // rather than resetting it, so a family cannot accumulate extra slots in backfill.
         void SelectPass(int extraPerArtist)
         {
             foreach (var item in scored.OrderByDescending(s => s.Score))
@@ -1145,9 +1144,10 @@ public sealed class RecommendationService
                 var keys = TrackArtistKeys(item.Track);
                 if (keys.Count > 0 && extraPerArtist != int.MaxValue)
                 {
-                    // «Тяжёлые» исполнители (топ play_log) получают расширенный лимит.
-                    // Лимит семейный: трек учитывается против КАЖДОГО своего исполнителя —
-                    // соло "X", "X & B" и "X feat. C" вместе не превысят лимит семейства X.
+                    // "Heavy" artists (the play_log top) get an extended limit.
+                    // The limit is family-wide: a track counts against EACH of its
+                    // artists — "X", "X & B" and "X feat. C" together cannot exceed
+                    // the X family limit.
                     var baseCap = item.WeightNorm >= HeavyCapShare ? HeavyPerArtist : maxPerArtist;
                     var cap = baseCap + extraPerArtist;
                     if (keys.Any(k => perArtist.GetValueOrDefault(k) >= cap)) continue;
@@ -1159,27 +1159,27 @@ public sealed class RecommendationService
             }
         }
 
-        // Проход 1 — основные лимиты: разнообразие среди лучшего материала.
+        // Pass 1 — main limits: variety among the best material.
         SelectPass(0);
-        // Проход 2 — ослабленные лимиты (+1): хвост добирается
-        // с сохранением разброса, исполнитель не собирается в блок.
+        // Pass 2 — relaxed limits (+1): the tail backfills while keeping spread;
+        // an artist does not gather into a block.
         if (selected.Count < waveSize) SelectPass(BackfillExtraPerArtist);
-        // Проход 3 — ещё +1 (потолок 3 «лёгким» / 4 «тяжёлым» за весь микс).
-        // Прохода «без лимитов» нет намеренно: блок одного исполнителя в хвосте
-        // хуже микса, не добравшего полную длину.
+        // Pass 3 — another +1 (ceiling of 3 "light" / 4 "heavy" per whole mix).
+        // There is deliberately no "no limits" pass: a block of one artist in the
+        // tail is worse than a mix that did not reach full length.
         if (selected.Count < waveSize) SelectPass(BackfillExtraPerArtist * 2);
 
         return SpreadByArtist(selected, rng);
     }
 
     /// <summary>
-    /// Раскладка выбранных треков «веером» по исполнителям с СОХРАНЕНИЕМ рейтинга:
-    /// трек отодвигается дальше, если пересекается семействами с любым из последних
-    /// ArtistSpreadWindow размещённых («через трек» невозможно). Когда конфликтуют
-    /// все остатки (пул тонкий), берём хотя бы не тот же артист, что предыдущий —
-    /// при двух семействах получается чередование, а не слипшийся блок. Смежность
-    /// остаётся лишь там, где её не избежать (все остатки — одно семейство).
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Fans the selected tracks out by artist while PRESERVING ranking: a track is
+    /// pushed further back if it shares families with any of the last
+    /// ArtistSpreadWindow placed tracks ("every other track" is not always possible).
+    /// When all remaining options conflict (thin pool), at least avoid the same artist
+    /// as the previous track — with two families this yields alternation instead of a
+    /// clumped block. Adjacency remains only where unavoidable (all remaining are one
+    /// family).
     /// </summary>
     internal static List<WaveItem> SpreadByArtist(IReadOnlyList<WaveItem> selected, Random rng)
     {
@@ -1187,7 +1187,7 @@ public sealed class RecommendationService
 
         var pending = new LinkedList<WaveItem>(selected);
         var result = new List<WaveItem>(selected.Count);
-        // Множества семейств последних ArtistSpreadWindow размещённых треков.
+        // Family sets of the last ArtistSpreadWindow placed tracks.
         var window = new List<HashSet<string>>();
 
         while (pending.Count > 0)
@@ -1206,7 +1206,7 @@ public sealed class RecommendationService
                     var keys = TrackArtistKeys(node.Value);
                     if (keys.Count == 0 || !keys.Any(last.Contains)) { chosen = node; break; }
                 }
-                chosen ??= pending.First; // все остатки — одно семейство
+                chosen ??= pending.First!; // everything left is one family
             }
 
             var chosenKeys = TrackArtistKeys(chosen.Value).ToHashSet(StringComparer.Ordinal);
@@ -1224,17 +1224,17 @@ public sealed class RecommendationService
         }
     }
 
-    /// <summary>Окно раскладки: семейство не повторяется среди последних N размещённых
-    /// треков. N=3: «через трек» невозможно, и два самых слушаемых артиста не могут
-    /// пинг-понговать головой микса — третий по рейтингу подключается уже третьим
-    /// треком (A,B,C,A,D,…), а не после того, как парные слоты исчерпаются.</summary>
+    /// <summary>Spreading window: a family does not repeat among the last N placed
+    /// tracks. N=3: "every other track" is impossible, and the two most-played artists
+    /// cannot ping-pong at the head of the mix — the third-ranked artist joins as early
+    /// as the third track (A,B,C,A,D,…), rather than after the paired slots run out.</summary>
     internal const int ArtistSpreadWindow = 3;
 
-    /// <summary>Совпадает ли основной (первый) исполнитель у двух треков — для тестов
-    /// раскладки и диагностики.</summary>
-    /// <summary>Взвешенный сэмпл без повторений: элемент с весом в 2 раза выше попадает
-    /// в выборку примерно вдвое чаще. Нулевые/отрицательные веса зажимаются к минимуму.
-    /// Чистая функция — покрыта юнит-тестами.</summary>
+    /// <summary>Whether the lead (first) artist matches between two tracks — for spread
+    /// tests and diagnostics.</summary>
+    /// <summary>Weighted sample without repetition: an element with twice the weight is
+    /// picked roughly twice as often. Zero/negative weights are clamped to a minimum.
+    /// </summary>
     internal static List<T> WeightedSample<T>(IReadOnlyList<T> items, Func<T, double> weight, int count, Random rng)
     {
         var pool = items.ToList();
@@ -1278,8 +1278,8 @@ public sealed class RecommendationService
         return keys;
     }
 
-    /// <summary>Ключ пары «исполнитель|название» для сверки play_log с wave_suggested
-    /// (совпадает со схемой artist_key/title_key в wave_suggested). null — пустые части.</summary>
+    /// <summary>Key of the "artist|title" pair for matching play_log against wave_suggested
+    /// (matches the artist_key/title_key schema in wave_suggested). null — empty parts.</summary>
     private static string? PlayKey(string artist, string title)
     {
         var artistKey = ArtistKeysOf(artist).FirstOrDefault() ?? string.Empty;

@@ -11,9 +11,9 @@
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
         UseLayoutRounding="True">
 
-    <!-- WindowChrome: WindowStyle=None без него оставляет системную DWM-рамку —
-         сверху окна белая полоса (светлая тема Windows). Забираем non-client область
-         целиком: рамка исчезает, ресайз (5px) и DragMove из code-behind живут. -->
+    <!-- WindowChrome: WindowStyle=None without it leaves the system DWM frame —
+         a white strip at the top of the window. Taking over the whole non-client
+         area removes the frame while keeping resize (5px) and DragMove. -->
     <WindowChrome.WindowChrome>
         <WindowChrome GlassFrameThickness="0" CaptionHeight="0" ResizeBorderThickness="5" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
@@ -25,7 +25,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Title bar: заголовок + крестик, перетаскивание за верхнюю полосу -->
+        <!-- Title bar: heading + close button, drag by the top strip -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBrush}"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid Margin="16,0">
@@ -48,17 +48,17 @@
             </Grid>
         </Border>
 
-        <!-- Подсказка: окно закроется само после входа -->
+        <!-- The window closes itself after sign-in -->
         <TextBlock Grid.Row="1" Margin="16,8,16,8" FontSize="11" TextWrapping="Wrap"
                    Foreground="{DynamicResource TextSecondaryBrush}"
                    Text="{Binding [SoundCloudLoginHint], Source={x:Static loc:Loc.T}}"/>
 
         <Grid Grid.Row="2">
-            <!-- Веб-вью входа (soundcloud.com/login) -->
+            <!-- Sign-in web view (soundcloud.com/login) -->
             <wv2:WebView2 x:Name="Web"
                           DefaultBackgroundColor="Transparent"/>
 
-            <!-- Заглушка, когда WebView2 Runtime не установлен -->
+            <!-- Placeholder shown when the WebView2 Runtime is not installed -->
             <Border x:Name="WebviewMissingPanel" Background="{DynamicResource BgBrush}" Margin="16,0,16,16"
                     Visibility="Collapsed">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">

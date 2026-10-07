@@ -1,28 +1,28 @@
 namespace BatPlayer.Audio;
 
-/// <summary>Что делать при неудачном резолве файла SC-трека.</summary>
+/// <summary>What to do when an SC track's file resolve fails.</summary>
 public enum ResolveFailureAction
 {
-    /// <summary>Перейти к следующему треку очереди (быстрый скип мёртвых при авто-переходе).</summary>
+    /// <summary>Move to the next queue track (fast skip of dead tracks on auto-advance).</summary>
     SkipNext,
 
-    /// <summary>Остановить воспроизведение и показать ошибку (без перескока).</summary>
+    /// <summary>Stop playback and show an error (no skipping).</summary>
     StopWithError
 }
 
 /// <summary>
-/// Чистая политика обработки неудачного резолва FilePathResolver (SC-runtime-карточки).
-/// Клики пользователя (PlayTrack/Play) — явное намерение: играет ИЛИ чистая ошибка,
-/// никаких перескоков. Авто-переходы (Next/конец трека) — мёртвые треки скипаем,
-/// но не более MaxConsecutiveUnresolvable подряд, иначе Next() зациклится на мёртвой
-/// очереди (RepeatAll). streak — число уже учтённых подряд идущих неудачных резолвов
-/// ДО текущей (успешный резолв сбрасывает счётчик).
+/// Pure policy for a failed FilePathResolver resolve (SC runtime cards).
+/// User clicks (PlayTrack/Play) are explicit intent: the track plays OR a clean
+/// error shows, never a skip. Auto-advance (Next/track end) skips dead tracks,
+/// but no more than MaxConsecutiveUnresolvable in a row, otherwise Next() loops
+/// on a dead queue (RepeatAll). streak — the number of already-counted consecutive
+/// failed resolves BEFORE the current one (a successful resolve resets the counter).
 /// </summary>
 public static class ResolveFailurePolicy
 {
     /// <summary>
-    /// Лимит подряд неуспешных резолвов при авто-переходе: достигнут — Stop + тост,
-    /// иначе Next() ходит по кругу, мигая иконкой Play/Pause.
+    /// Limit of consecutive failed resolves on auto-advance: once reached — Stop + toast,
+    /// otherwise Next() goes in circles flashing the Play/Pause icon.
     /// </summary>
     public const int MaxConsecutiveUnresolvable = 3;
 

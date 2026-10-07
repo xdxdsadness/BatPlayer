@@ -9,18 +9,16 @@ public partial class SettingsView : UserControl
 {
     public SettingsView() => InitializeComponent();
 
-    /// <summary>Кнопка «Применить»: визуальные настройки вступают в силу сразу —
-    /// главное окно пересоздаётся с новыми ресурсами, музыка не прерывается.</summary>
+    /// <summary>Apply button: visual settings take effect immediately —
+    /// the main window is recreated with new resources; playback is not interrupted.</summary>
     private void ApplySettings_Click(object sender, System.Windows.RoutedEventArgs e)
         => App.ApplyVisualSettingsAndRecreateWindow();
 
     /// <summary>
-    /// Колесо при открытом выпадающем списке (аудиоустройства, язык, колонки):
-    /// ComboBox держит захват мыши, событие булькает через страницу и прокручивает
-    /// её под открытым Popup — меню «уезжает» от своего комбобокса (Popup не следует
-    /// за перемещённой целью). Пока список держит захват, колесо над страницей гасим.
-    /// Колесо над самим открытым меню в этот Preview не попадает — оно
-    /// роутится внутри Popup и продолжает прокручивать список устройств.
+    /// While a combo dropdown is open, the wheel bubbles through the page and scrolls it
+    /// under the open Popup, which doesn't follow its moved target. Suppress the wheel
+    /// over the page while the list holds capture; the wheel over the open menu itself
+    /// is routed inside the Popup and keeps scrolling the device list.
     /// </summary>
     private void SettingsScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
@@ -29,10 +27,9 @@ public partial class SettingsView : UserControl
     }
 
     /// <summary>
-    /// Страховка к гашению колеса: часть сценариев всё же прокручивает страницу
-    /// при открытом дропдауне (захват ушёл от комбобокса, скроллбар попапа и т.п.),
-    /// и Popup не следует за целью — меню оставалось висеть на старом месте.
-    /// Любая фактическая прокрутка закрывает все открытые дропдауны страницы.
+    /// Safety net for the wheel suppression: some scenarios still scroll the page with
+    /// a dropdown open, and the Popup doesn't follow the target. Any actual scroll
+    /// closes all open dropdowns on the page.
     /// </summary>
     private void SettingsScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {

@@ -11,45 +11,44 @@ using BatPlayer.Services.SoundCloud;
 namespace BatPlayer.Views;
 
 /// <summary>
-/// Окно входа в SoundCloud: встроенный WebView2 открывает soundcloud.com/login.
-/// Успех детектится по появлению cookie oauth_token для soundcloud.com (опрос 500мс);
-/// после этого все cookies soundcloud.com собираются в Cookie-строку и отдаются сервису
-/// (сохранение в sc_auth.json — не здесь, а в SoundCloudLoginService).
-/// Если WebView2 Runtime не установлен — показывается понятная ошибка, приложение не падает.
+/// SoundCloud login window: an embedded WebView2 opens soundcloud.com/login. Success is
+/// detected by the appearance of the oauth_token cookie for soundcloud.com (polled every
+/// 500ms); afterwards all soundcloud.com cookies are collected into a cookie string and
+/// handed to the service (persisting to sc_auth.json lives in SoundCloudLoginService).
+/// Shows a clear error instead of crashing when the WebView2 Runtime is missing.
 /// </summary>
     public partial class SoundCloudLoginWindow : Window
 {
-    /// <summary>Адрес страницы входа.</summary>
+    /// <summary>Login page URL.</summary>
     private const string LoginUrl = "https://soundcloud.com/login";
-    /// <summary>Выход из текущей сессии НА САЙТЕ: открывает штатные страницы SoundCloud,
-    /// где пользователь сам выбирает, каким аккаунтом войти (сайт помнит почту, предлагает
-    /// продолжить под текущим и т.п.) — как в аккаунт-чузере Google, но средствами сайта.</summary>
+    /// <summary>Logout ON THE SITE: opens SoundCloud's own pages so the user
+    /// picks which account to sign in with (like a Google account chooser).</summary>
     private const string LogoutUrl = "https://soundcloud.com/logout";
-    /// <summary>Сайт, cookies которого собираем.</summary>
+    /// <summary>Domain whose cookies are collected.</summary>
     private const string CookieDomain = "https://soundcloud.com";
-    /// <summary>Имя cookie, появление которой означает успешный вход.</summary>
+    /// <summary>Cookie whose appearance signals a successful login.</summary>
     private const string OAuthCookieName = "oauth_token";
 
     private readonly SoundCloudService _soundCloud;
-    /// <summary>Сначала выйти из текущей сессии на сайте (режим «Сменить аккаунт»).</summary>
+    /// <summary>Sign out of the current on-site session first ("switch account" mode).</summary>
     private readonly bool _signOutFirst;
     private DispatcherTimer? _pollTimer;
     private bool _checking;
     private bool _finished;
 
-    // oauth_token появляется РАНЬШЕ, чем веб-логин дописывает остальную сессию
-    // (sc_session, свежий datadome). Сохранить всё сразу — получить неполный набор:
-    // media MONETIZE-треков требует именно полной сессии. Ждём после первого
-    // появления oauth_token, пока набор cookies стабилизируется.
+    // oauth_token appears BEFORE the web login finishes writing the rest of the
+    // session (sc_session, fresh datadome); saving immediately yields an incomplete
+    // set, and MONETIZE-track media requires the full session. Wait after oauth_token
+    // first appears until the cookie set stabilizes.
     private DateTime? _oauthFirstSeenUtc;
     private int _lastCookieCount = -1;
 
-    /// <summary>Сколько ждать после появления oauth_token, пока cookies перестанут меняться.</summary>
+    /// <summary>How long to wait after oauth_token appears for the cookies to stop changing.</summary>
     private static readonly TimeSpan CookieStabilityDelay = TimeSpan.FromSeconds(3);
-    /// <summary>Верхняя граница ожидания: сохраняем и «нестабильный» набор, чтобы вход не зависал.</summary>
+    /// <summary>Upper bound on waiting; an "unstable" set is saved anyway so login never hangs.</summary>
     private static readonly TimeSpan CookieMaxWait = TimeSpan.FromSeconds(8);
 
-    /// <summary>Собранная Cookie-строка всех cookies soundcloud.com (валидна после DialogResult=true).</summary>
+    /// <summary>Collected cookie string for all soundcloud.com cookies (valid after DialogResult=true).</summary>
     public string? SavedCookieHeader { get; private set; }
 
     public SoundCloudLoginWindow(SoundCloudService soundCloud, bool signOutFirst = false)
@@ -65,7 +64,7 @@ namespace BatPlayer.Views;
     {
         try
         {
-            // Папка данных WebView2 — в %LOCALAPPDATA%/BatPlayer: exe-папка может быть read-only.
+            // WebView2 data folder lives in %LOCALAPPDATA%/BatPlayer: the exe folder may be read-only.
             var userDataFolder = System.IO.Path.Combine(App.AppDataDir, "webview2", "sc");
             CoreWebView2Environment env;
             try
@@ -74,29 +73,28 @@ namespace BatPlayer.Views;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Папка профиля занята другим экземпляром/повреждена («ошибка кеша») —
-                // повторяем с уникальной папкой, вход всё равно будет выполнен заново.
+                // Profile folder locked by another instance or corrupted ("cache error") —
+                // retry with a unique folder; the login runs fresh anyway.
                 Logger.Warn($"WebView2 profile folder unavailable, using a fresh one: {ex.Message}");
                 userDataFolder += "_" + Guid.NewGuid().ToString("N")[..8];
                 env = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
             }
             await Web.EnsureCoreWebView2Async(env);
 
-            // Cookies профиля НЕ чистим: постоянный профиль хранит сессию — при обычном
-            // «Подключить» автологин возвращает в тот же аккаунт без ввода пароля.
-            // «Сменить аккаунт» сначала открывает штатный logout НА САЙТЕ: пользователь
-            // видит настоящие страницы SoundCloud и входит каким хочет аккаунтом.
+            // Profile cookies are NOT cleared: the persistent profile keeps the session, so a
+            // regular "Connect" auto-logs back into the same account. "Switch account" first
+            // opens the on-site logout so the user signs in with any account they choose.
             Web.Source = new Uri(_signOutFirst ? LogoutUrl : LoginUrl);
 
-            // Опрос cookies: вход может завершиться без события навигации (SPA-редиректы),
-            // поэтому таймер работает всё время, пока окно открыто.
+            // Poll cookies: login can complete without a navigation event (SPA redirects),
+            // so the timer runs the whole time the window is open.
             _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _pollTimer.Tick += PollCookiesTick;
             _pollTimer.Start();
         }
         catch (Exception ex)
         {
-            // Самый частый случай — WebView2 Runtime не установлен; текст ошибки локализован.
+            // Most common case: WebView2 Runtime not installed; the error text is localized.
             Logger.Error(ex, "SoundCloud login: WebView2 init failed");
             ShowWebviewMissing();
         }
@@ -111,7 +109,7 @@ namespace BatPlayer.Views;
             var cookies = await Web.CoreWebView2.CookieManager.GetCookiesAsync(CookieDomain);
             if (cookies.All(c => c.Name != OAuthCookieName)) return;
 
-            // Первое появление oauth_token: сессия ещё дописывается — ждём стабилизации.
+            // First oauth_token sighting: the session is still being written — wait for stability.
             _oauthFirstSeenUtc ??= DateTime.UtcNow;
             var sinceFirst = DateTime.UtcNow - _oauthFirstSeenUtc.Value;
             var count = cookies.Count;
@@ -123,8 +121,8 @@ namespace BatPlayer.Views;
             _finished = true;
             _pollTimer?.Stop();
 
-            // Собираем ВСЕ cookies soundcloud.com — Cookie-строку для api-v2 запросов.
-            // (Имена cookies в логе безопасны, значения не логируем.)
+            // Collect ALL soundcloud.com cookies into the cookie string for api-v2 requests.
+            // (Cookie names are safe to log; values are never logged.)
             SavedCookieHeader = string.Join("; ",
                 cookies.Select(c => $"{c.Name}={c.Value}"));
             Logger.Info($"SoundCloud login: saved {count} session cookies ({sinceFirst.TotalSeconds:0}s after oauth_token): " +
@@ -136,7 +134,7 @@ namespace BatPlayer.Views;
         }
         catch (Exception ex)
         {
-            // Ошибка одного опроса не закрывает окно — попробуем на следующем тике.
+            // A single poll failure doesn't close the window — retry on the next tick.
             Logger.Error(ex, "SoundCloud login: cookie poll failed");
         }
         finally
@@ -154,7 +152,7 @@ namespace BatPlayer.Views;
     private void TitleBar_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
-            try { DragMove(); } catch { /* окно могло закрыться */ }
+            try { DragMove(); } catch { /* window may already be closed */ }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

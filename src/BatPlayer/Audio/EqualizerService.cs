@@ -6,13 +6,13 @@ using BatPlayer.Services;
 namespace BatPlayer.Audio;
 
 /// <summary>
-/// Хранит пресеты эквалайзера, применяет их к AudioEngine.
-/// Пользовательские пресеты сериализуются в settings.json
-/// (AppSettings.EqualizerUserPresets) и переживают перезапуск.
+/// Stores equalizer presets and applies them to the AudioEngine.
+/// User presets are serialized into settings.json
+/// (AppSettings.EqualizerUserPresets) and survive restarts.
 /// </summary>
 public sealed class EqualizerService
 {
-    // null в юнит-тестах: пресеты живут в памяти, сохранение недоступно.
+    // null in unit tests: presets live in memory, persistence is unavailable.
     private readonly SettingsService? _settings;
 
     public IReadOnlyList<EqualizerPreset> BuiltInPresets { get; }
@@ -24,7 +24,7 @@ public sealed class EqualizerService
         _settings = settings;
         BuiltInPresets = new List<EqualizerPreset>
         {
-            // Flat — пустой набор полос: ровная линия без точек, как в Pro-Q.
+            // Flat — empty band set: a straight line without points, like Pro-Q.
             new EqualizerPreset { Name = "Flat", IsBuiltIn = true },
             Build("Rock",       -1, 1, 2, 3, 1, -1, 0, 1, 2, 3),
             Build("Pop",         0, 0, 1, 3, 3, 1, 0, -1, -1, 0),
@@ -36,8 +36,7 @@ public sealed class EqualizerService
             Build("Treble Boost",0, 0, 0, 0, 0, 0, 1, 2, 3, 4),
         }.AsReadOnly();
 
-        // Пользовательские пресеты — из settings.json (комментарий про сериализацию
-        // существовал давно, реально хранение добавлено сейчас).
+        // User presets come from settings.json.
         if (_settings != null)
             foreach (var p in _settings.Current.EqualizerUserPresets)
                 UserPresets.Add(p);

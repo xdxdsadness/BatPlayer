@@ -19,7 +19,7 @@ public partial class PlaylistViewModel : PageViewModel
 
     [ObservableProperty] private Playlist? _selectedPlaylist;
     [ObservableProperty] private int _totalTrackCount;
-    /// <summary>Детальный режим: открыт плейлист (сетка карточек ↔ его треки).</summary>
+    /// <summary>Detail mode: a playlist is open (card grid ↔ its tracks).</summary>
     [ObservableProperty] private bool _isDetailView;
 
     public PlaylistViewModel(PlaylistService playlistService, LibraryService library, AudioService audio)
@@ -29,21 +29,21 @@ public partial class PlaylistViewModel : PageViewModel
         _audio = audio;
         Title = Loc.Get("Playlists");
 
-        // VM живёт столько же, сколько приложение — отписка не нужна.
-        // Перечитываем треки выбранного плейлиста, чтобы DisplayArtist обновился.
+        // VM lives as long as the app — no unsubscribe needed.
+        // Re-read the selected playlist's tracks so DisplayArtist gets updated.
         Loc.LanguageChanged += (_, _) =>
         {
             Title = Loc.Get("Playlists");
             _ = LoadPlaylistTracksAsync();
         };
 
-        // Смена обложки плейлиста пишет cover_path и уведомляет LibraryChanged:
-        // перечитываем сетку, иначе новая обложка появилась бы только после
-        // повторного захода на страницу.
+        // Changing a playlist cover writes cover_path and raises LibraryChanged:
+        // re-read the grid, otherwise the new cover would appear only after
+        // re-entering the page.
         _library.LibraryChanged += (_, _) => _ = LoadAsync();
     }
 
-    /// <summary>Вызывается из MainViewModel.Navigate("Playlists"): перечитать плейлисты.</summary>
+    /// <summary>Called from MainViewModel.Navigate("Playlists"): re-read playlists.</summary>
     public async Task OnNavigatedAsync() => await LoadAsync();
 
     public async Task LoadAsync()
@@ -52,7 +52,7 @@ public partial class PlaylistViewModel : PageViewModel
         var list = await _library.GetAllPlaylistsAsync();
         foreach (var p in list) Playlists.Add(p);
 
-        // Плейлист мог быть удалён из детального режима — вернуться к сетке.
+        // The playlist may have been deleted from detail mode — return to the grid.
         if (SelectedPlaylist != null && Playlists.All(p => p.Id != SelectedPlaylist.Id))
         {
             SelectedPlaylist = null;
@@ -88,7 +88,7 @@ public partial class PlaylistViewModel : PageViewModel
         await LoadAsync();
     }
 
-    /// <summary>Переименование через диалог ввода.</summary>
+    /// <summary>Rename via an input dialog.</summary>
     [RelayCommand]
     private void RenamePlaylistDialog(Playlist? playlist)
     {
@@ -98,7 +98,7 @@ public partial class PlaylistViewModel : PageViewModel
         _ = RenamePlaylistAsync((playlist, name));
     }
 
-    /// <summary>Смена обложки плейлиста: выбор картинки, копия в playlist_covers.</summary>
+    /// <summary>Change the playlist cover: pick an image, copy into playlist_covers.</summary>
     [RelayCommand]
     private void ChangeCover(Playlist? playlist)
     {
@@ -121,7 +121,7 @@ public partial class PlaylistViewModel : PageViewModel
         _ = LoadPlaylistTracksAsync();
     }
 
-    /// <summary>Открыть плейлист из сетки карточек: детальный режим с его треками.</summary>
+    /// <summary>Open a playlist from the card grid: detail mode with its tracks.</summary>
     [RelayCommand]
     private void OpenPlaylist(Playlist? playlist)
     {
@@ -130,19 +130,19 @@ public partial class PlaylistViewModel : PageViewModel
         IsDetailView = true;
     }
 
-    /// <summary>Назад к сетке плейлистов.</summary>
+    /// <summary>Back to the playlist grid.</summary>
     [RelayCommand]
     private void CloseDetailView() => IsDetailView = false;
 
-    /// <summary>Перемешать треки плейлиста; если играет трек из этого плейлиста —
-    /// очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the playlist's tracks; if a track from this playlist is playing,
+    /// the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShufflePlaylist() =>
         Helpers.CardsShuffler.Shuffle(SelectedPlaylistTracks, _audio,
             (t, i) => t, (playing, t) => playing.Id == t.Id && playing.Source == t.Source, "Playlist");
 
-    /// <summary>Играть конкретный трек плейлиста (двойной клик по строке).
-    /// playlistId: карточка этого плейлиста показывает Pause, пока играет его очередь.</summary>
+    /// <summary>Play a specific playlist track (double-click on a row).
+    /// playlistId: this playlist's card shows Pause while its queue plays.</summary>
     [RelayCommand]
     private void PlayTrackFromPlaylist(Track? track)
     {
@@ -169,8 +169,8 @@ public partial class PlaylistViewModel : PageViewModel
         _ = PlayPlaylistAsync(playlist);
     }
 
-    /// <summary>Клик по карточке плейлиста: старт очереди, а для УЖЕ играющего
-    /// плейлиста — честный тоггл Pause/Resume (как у карточек треков).</summary>
+    /// <summary>Card click: start the queue; for an ALREADY playing playlist —
+    /// a real Pause/Resume toggle (like track cards).</summary>
     private async Task PlayPlaylistAsync(Playlist playlist)
     {
         if (_audio.CurrentPlaylistId == playlist.Id && _audio.CurrentTrack != null)

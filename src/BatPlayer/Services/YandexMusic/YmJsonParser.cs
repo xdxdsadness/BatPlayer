@@ -2,61 +2,61 @@ using System.Text.Json;
 
 namespace BatPlayer.Services.YandexMusic;
 
-/// <summary>Ошибка слоя Яндекс Музыки после всех повторов. HttpCode — код ответа (0 — транспорт/парсинг,
-/// 401/403 — сессия (OAuth-токен) недействительна).</summary>
+/// <summary>Yandex Music layer error after all retries. HttpCode — response code (0 — transport/parsing,
+/// 401/403 — session (OAuth token) invalid).</summary>
 public sealed class YmApiException : Exception
 {
     public int HttpCode { get; }
 
     public YmApiException(string message, int httpCode = 0) : base(message) => HttpCode = httpCode;
 
-    /// <summary>Код означает отозванный/недействительный OAuth-токен.</summary>
+    /// <summary>The code means the OAuth token is revoked/invalid.</summary>
     public static bool IsSessionError(int httpCode) => httpCode is 401 or 403;
 }
 
-/// <summary>Трек из JSON-ответов API (likes→tracks, landing). Часть полей может отсутствовать —
-/// разбор lenient; надёжны id и title.</summary>
+/// <summary>Track from API JSON responses (likes→tracks, landing). Some fields may be missing —
+/// parsing is lenient; id and title are reliable.</summary>
 public sealed class YmTrackDto
 {
     public string Id { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;
-    /// <summary>Исполнители через ", " (до трёх имён, как в веб-плеере).</summary>
+    /// <summary>Artists joined by ", " (up to three names, like the web player).</summary>
     public string Artist { get; init; } = string.Empty;
     public long DurationMs { get; init; }
-    /// <summary>Шаблон обложки с "%%" вместо размера (albums[].coverUri); null — нет обложки.</summary>
+    /// <summary>Cover template with "%%" instead of the size (albums[].coverUri); null — no cover.</summary>
     public string? CoverUri { get; init; }
-    /// <summary>Трек доступен на текущем тарифе (поле available; отсутствие поля — считаем доступным).</summary>
+    /// <summary>Track available on the current plan (field available; a missing field is treated as available).</summary>
     public bool Available { get; init; } = true;
 }
 
-/// <summary>Исполнитель из JSON-ответов API (поиск, похожие исполнители). Надёжен id.</summary>
+/// <summary>Artist from API JSON responses (search, similar artists). Only id is reliable.</summary>
 public sealed class YmArtistDto
 {
     public string Id { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
 }
 
-/// <summary>Данные аккаунта из account/status (uid + отображаемое имя).</summary>
+/// <summary>Account data from account/status (uid + display name).</summary>
 public sealed class YmAccountInfo
 {
     public string Uid { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
 }
 
-/// <summary>Готовый вариант прямой mp3-ссылки из download-info (URL уже собран парсером).</summary>
+/// <summary>A ready direct mp3 URL variant from download-info (URL already built by the parser).</summary>
 public sealed class YmDownloadOption
 {
     public string Codec { get; init; } = string.Empty;
     public int Bitrate { get; init; }
     public string Url { get; init; } = string.Empty;
 
-    /// <summary>Ссылка на XML-дескриптор (storage.mds.yandex.net/…/download-info), из
-    /// которого собирается финальная mp3-ссылка — раскладка современного API. Пустая —
-    /// вариант уже содержит готовый Url (легаси-раскладки).</summary>
+    /// <summary>URL of the XML descriptor (storage.mds.yandex.net/…/download-info) from
+    /// which the final mp3 URL is built — modern API layout. Empty — the variant already
+    /// carries a ready Url (legacy layouts).</summary>
     public string DownloadInfoUrl { get; init; } = string.Empty;
 }
 
-/// <summary>Поля XML-дескриптора download-info: host/path/ts/s → финальная ссылка
+/// <summary>Fields of the download-info XML descriptor: host/path/ts/s → final URL
 /// https://{host}/get-mp3/{s}/{ts}{path}.</summary>
 public sealed class YmDownloadInfoXml
 {
@@ -66,56 +66,56 @@ public sealed class YmDownloadInfoXml
     public string S { get; init; } = string.Empty;
 }
 
-/// <summary>Код устройства из POST oauth.yandex.ru/device-code (OAuth Device Flow).</summary>
+/// <summary>Device code from POST oauth.yandex.ru/device-code (OAuth Device Flow).</summary>
 public sealed class YmDeviceCode
 {
     public string DeviceCode { get; init; } = string.Empty;
     public string UserCode { get; init; } = string.Empty;
-    /// <summary>Страница подтверждения (oauth.yandex.ru/device); пустая — берётся дефолт.</summary>
+    /// <summary>Verification page (oauth.yandex.ru/device); empty — the default is used.</summary>
     public string VerificationUrl { get; init; } = string.Empty;
-    /// <summary>Через сколько секунд код истекает (0 — берётся дефолт).</summary>
+    /// <summary>Seconds until the code expires (0 — the default is used).</summary>
     public int ExpiresInSeconds { get; init; }
-    /// <summary>Рекомендованный интервал опроса в секундах (0 — берётся дефолт).</summary>
+    /// <summary>Recommended polling interval in seconds (0 — the default is used).</summary>
     public int IntervalSeconds { get; init; }
 }
 
-/// <summary>Ответ POST oauth.yandex.ru/token: либо токен, либо код OAuth-ошибки
+/// <summary>Response of POST oauth.yandex.ru/token: either a token or an OAuth error code
 /// (authorization_pending / slow_down / expired_token / access_denied / …).</summary>
 public sealed class YmTokenResult
 {
     public string AccessToken { get; init; } = string.Empty;
     public int? ExpiresInSeconds { get; init; }
-    /// <summary>Код OAuth-ошибки из тела 400-ответа; null — ошибки нет (токен получен).</summary>
+    /// <summary>OAuth error code from the 400 body; null — no error (token obtained).</summary>
     public string? ErrorCode { get; init; }
 
-    /// <summary>Пользователь ещё не подтвердил код — опрос продолжается.</summary>
+    /// <summary>The user has not approved the code yet — keep polling.</summary>
     public bool IsPending => string.Equals(ErrorCode, "authorization_pending", StringComparison.Ordinal);
 
-    /// <summary>Яндекс попросил опрашивать реже (poll_interval+5 c).</summary>
+    /// <summary>Yandex asked to poll less often (poll_interval+5 s).</summary>
     public bool IsSlowDown => string.Equals(ErrorCode, "slow_down", StringComparison.Ordinal);
 
-    /// <summary>Код истёк — нужен новый.</summary>
+    /// <summary>The code expired — a new one is needed.</summary>
     public bool IsExpired => string.Equals(ErrorCode, "expired_token", StringComparison.Ordinal);
 
-    /// <summary>Пользователь отказал в согласии / клиент отклонён — опрос смысла не имеет.</summary>
+    /// <summary>The user denied consent / the client was rejected — polling is pointless.</summary>
     public bool IsDenied => ErrorCode is "access_denied" or "invalid_client" or "unauthorized_client"
                             or "invalid_grant" or "bad_verification_code";
 }
 
 /// <summary>
-/// Разбор JSON-ответов API Яндекс Музыки. Вынесен в отдельный статический класс: эндпоинты
-/// api.music.yandex.net не документированы и меняются, поэтому весь парсинг — lenient
-/// (мусор/неожиданная раскладка не бросают исключений, а дают пустой результат), изолирован
-/// от сети и покрыт юнит-тестами на реалистичных фикстурах. Cookies/токены в ответах треков
-/// не встречаются — логировать parsed-данные безопасно.
+/// Parses Yandex Music API JSON responses. Kept in a separate static class: the
+/// api.music.yandex.net endpoints are undocumented and change, so all parsing is lenient
+/// (garbage/unexpected layout yields an empty result instead of exceptions), isolated
+/// from the network and unit-tested on realistic fixtures. Track responses contain no
+/// cookies/tokens — logging parsed data is safe.
 /// </summary>
 public static class YmJsonParser
 {
-    // ========================= Треки (tracks?track-ids) =========================
+    // ========================= Tracks (tracks?track-ids) =========================
 
     /// <summary>
-    /// Ответ GET /tracks?track-ids=…&amp;lang=ru: {"result":[{…track…}, …]}.
-    /// Порядок result соответствует порядку запрошенных id (недоступные id отсутствуют).
+    /// Response of GET /tracks?track-ids=…&amp;lang=ru: {"result":[{…track…}, …]}.
+    /// The result order matches the requested id order (unavailable ids are absent).
     /// </summary>
     public static List<YmTrackDto> ParseTracksResponse(string? json)
     {
@@ -136,13 +136,13 @@ public static class YmJsonParser
         return result;
     }
 
-    // ========================= Лендинг (blocks) =========================
+    // ========================= Landing (blocks) =========================
 
     /// <summary>
-    /// Ответ GET /landing?types=track&amp;lang=ru: {"result":{"blocks":[{…, "tracks":[…]}]}}.
-    /// Раскладка блоков меняется — треки собираются DFS-ом по всему дереву: трек-кандидат —
-    /// объект с "id", строковым "title" и массивом "artists" или "albums"; дубликаты по id
-    /// отбрасываются (трек может встретиться в нескольких блоках).
+    /// Response of GET /landing?types=track&amp;lang=ru: {"result":{"blocks":[{…, "tracks":[…]}]}}.
+    /// The block layout changes — tracks are collected by DFS over the whole tree: a track
+    /// candidate is an object with "id", a string "title" and an "artists" or "albums"
+    /// array; id duplicates are dropped (a track may appear in several blocks).
     /// </summary>
     public static List<YmTrackDto> ParseLandingTracks(string? json)
     {
@@ -160,14 +160,14 @@ public static class YmJsonParser
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                // Кандидат в треки: объект с id+title И хотя бы одной платформенной
-                // коллекцией (artists/albums). Без этого фильтра под DFS попадали бы
-                // альбомы (у них тоже есть id+title) и служебные объекты блоков.
+                // Track candidate: object with id+title AND at least one platform
+                // collection (artists/albums). Without this filter the DFS would also
+                // catch albums (they have id+title too) and block service objects.
                 if ((element.TryGetProperty("artists", out _) || element.TryGetProperty("albums", out _))
                     && ParseTrackObject(element) is { } track)
                 {
                     if (seen.Add(track.Id)) into.Add(track);
-                    return; // трек-объект внутрь не углубляемся
+                    return; // do not descend into a track object
                 }
                 foreach (var prop in element.EnumerateObject())
                     CollectTrackObjects(prop.Value, into, seen);
@@ -183,14 +183,14 @@ public static class YmJsonParser
     // ========================= Similar (tracks/{id}/similar) =========================
 
     /// <summary>
-    /// Ответ GET /tracks/{id}/similar: {"result":[{…сид…, "similarTracks":[…track…]}]}
-    /// (встречается и обёртка {"result":{"similarTracks":[…]}}). Особенность раскладки:
-    /// кандидаты лежат ВНУТРИ объекта-трека (сида), поэтому обычный DFS лендинга не
-    /// подходит — он не углубляется в трек-объекты. Здесь объект с "similarTracks"
-    /// отдаёт только содержимое этого массива (сам сид не собирается), остальное дерево
-    /// обходится рекурсивно; внутри массива кандидаты разбираются обычным DFS. Дубликаты
-    /// по id отбрасываются, сам сид (seedYmId) исключается. Пустой список — не
-    /// сошлось/нет похожих.
+    /// Response of GET /tracks/{id}/similar: {"result":[{…seed…, "similarTracks":[…track…]}]}
+    /// (the wrapper {"result":{"similarTracks":[…]}} also occurs). Layout quirk: candidates
+    /// live INSIDE the seed track object, so the landing DFS does not fit — it does not
+    /// descend into track objects. Here an object with "similarTracks" yields only that
+    /// array's contents (the seed itself is not collected) and the rest of the tree is
+    /// walked recursively; inside the array, candidates are parsed by the regular DFS.
+    /// Id duplicates are dropped and the seed (seedYmId) is excluded. An empty list —
+    /// no match/no similar tracks.
     /// </summary>
     public static List<YmTrackDto> ParseSimilarTracks(string? json, string? seedYmId)
     {
@@ -212,9 +212,9 @@ public static class YmJsonParser
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                // Массив similarTracks: кандидаты — обычные трек-объекты (артисты/альбомы
-                // обязаны быть — см. CollectTrackObjects). Сам объект-обёртка (сид и
-                // служебные поля) не собирается.
+                // similarTracks array: candidates are regular track objects (artists/albums
+                // required — see CollectTrackObjects). The wrapper object itself (seed and
+                // service fields) is not collected.
                 if (element.TryGetProperty("similarTracks", out var similar)
                     && similar.ValueKind == JsonValueKind.Array)
                 {
@@ -233,13 +233,12 @@ public static class YmJsonParser
         }
     }
 
-    // ========================= Поиск (/search) =========================
+    // ========================= Search (/search) =========================
 
     /// <summary>
-    /// Ответ GET /search?text=…&amp;type=track: {"result":{"tracks":{"results":[…track…],
-    /// "total":…}, …}}. Сначала точный путь result.tracks.results; если раскладка не
-    /// сошлась — DFS-фолбэк по всему дереву (тот же, что у similar). Чистая функция —
-    /// покрыта юнит-тестами.
+    /// Response of GET /search?text=…&amp;type=track: {"result":{"tracks":{"results":[…track…],
+    /// "total":…}, …}}. First the exact path result.tracks.results; if the layout does not
+    /// match — DFS fallback over the whole tree (same as similar). Pure function, unit-tested.
     /// </summary>
     public static List<YmTrackDto> ParseSearchTracks(string? json)
     {
@@ -269,10 +268,10 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Ответ GET /search?text=…&amp;type=artist: {"result":{"artists":{"results":[…artist…]}}}.
-    /// Точный путь result.artists.results, фолбэк — DFS по объектам-исполнителям
-    /// (id + имя + признак артиста: cover/various/composer/genres — отсекает label'ы
-    /// с той же парой id+name). Чистая функция — покрыта юнит-тестами.
+    /// Response of GET /search?text=…&amp;type=artist: {"result":{"artists":{"results":[…artist…]}}}.
+    /// Exact path result.artists.results; fallback — DFS over artist objects
+    /// (id + name + an artist marker: cover/various/composer/genres — filters out labels
+    /// sharing the same id+name pair). Pure function, unit-tested.
     /// </summary>
     public static List<YmArtistDto> ParseSearchArtists(string? json)
     {
@@ -301,13 +300,13 @@ public static class YmJsonParser
         return result;
     }
 
-    // ========================= Исполнители (artists/{id}/…) =========================
+    // ========================= Artists (artists/{id}/…) =========================
 
     /// <summary>
-    /// Ответ GET /artists/{id}/tracks?page=…&amp;pageSize=…:
-    /// {"result":{"pager":{…},"tracks":[…track…]}} — треки исполнителя (каталог,
-    /// НЕ лайки пользователя). Точный путь result.tracks, фолбэк — DFS по дереву.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Response of GET /artists/{id}/tracks?page=…&amp;pageSize=…:
+    /// {"result":{"pager":{…},"tracks":[…track…]}} — the artist's catalog tracks,
+    /// NOT the user's likes. Exact path result.tracks; fallback — DFS over the tree.
+    /// Pure function, unit-tested.
     /// </summary>
     public static List<YmTrackDto> ParseArtistTracks(string? json)
     {
@@ -335,10 +334,10 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Ответ GET /artists/{id}/brief-info: {"result":{"stats":{"lastMonthListeners":…},…}} —
-    /// аудитория исполнителя за месяц (именно так его показывает карточка артиста).
-    /// Фолбэк на "listeners" на случай изменения API. Фильтр ноунеймов/«нейро-треков».
-    /// null — поле отсутствует (неизвестно). Чистая функция — покрыта юнит-тестами.
+    /// Response of GET /artists/{id}/brief-info: {"result":{"stats":{"lastMonthListeners":…},…}} —
+    /// the artist's monthly audience (as shown on the artist card). Falls back to
+    /// "listeners" in case the API changes. Used to filter no-names/"AI tracks".
+    /// null — field absent (unknown). Pure function, unit-tested.
     /// </summary>
     public static long? ParseArtistListeners(string? json)
     {
@@ -353,13 +352,13 @@ public static class YmJsonParser
             || stats.ValueKind != JsonValueKind.Object)
             return null;
 
-        // Актуальное поле API — lastMonthListeners (месячная аудитория карточки).
+        // Current API field — lastMonthListeners (the card's monthly audience).
         if (stats.TryGetProperty("lastMonthListeners", out var month)
             && month.ValueKind == JsonValueKind.Number
             && month.TryGetInt64(out var monthValue))
             return monthValue;
 
-        // Фолбэк: прежнее имя поля.
+        // Fallback: the field's former name.
         if (stats.TryGetProperty("listeners", out var listeners)
             && listeners.ValueKind == JsonValueKind.Number
             && listeners.TryGetInt64(out var value))
@@ -369,10 +368,10 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Ответ GET /artists/{id}/similar: {"result":{"artist":{…},
-    /// "similarArtists":[…artist…]}} — похожие исполнители («общая тусовка»):
-    /// элементы массива — сами объекты артистов. Точный путь result.similarArtists,
-    /// фолбэк — DFS по объектам-исполнителям. Чистая функция — покрыта юнит-тестами.
+    /// Response of GET /artists/{id}/similar: {"result":{"artist":{…},
+    /// "similarArtists":[…artist…]}} — similar artists ("same scene"): the array
+    /// elements are the artist objects themselves. Exact path result.similarArtists;
+    /// fallback — DFS over artist objects. Pure function, unit-tested.
     /// </summary>
     public static List<YmArtistDto> ParseSimilarArtists(string? json, string? artistId)
     {
@@ -408,11 +407,11 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Ответ GET /rotor/station/artist:{id}/tracks: {"result":{"sequence":[
-    /// {"__type":"track","track":{…track…}}, …], "batchId":…}} — персональная радио-
-    /// лента по исполнителю («похожий звук»). Треки собираются DFS-ом по дереву
-    /// (кандидат — объект с id+title+artists/albums), дубликаты отбрасываются.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Response of GET /rotor/station/artist:{id}/tracks: {"result":{"sequence":[
+    /// {"__type":"track","track":{…track…}}, …], "batchId":…}} — a personal radio feed
+    /// for the artist ("similar sound"). Tracks are collected by DFS over the tree
+    /// (candidate — an object with id+title+artists/albums); duplicates are dropped.
+    /// Pure function, unit-tested.
     /// </summary>
     public static List<YmTrackDto> ParseRadioTracks(string? json)
     {
@@ -426,8 +425,8 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Разбор объекта-исполнителя: есть "id" (строка/число) и строковое "name".
-    /// null — не сошлось.
+    /// Parses an artist object: has "id" (string/number) and a string "name".
+    /// null — no match.
     /// </summary>
     public static YmArtistDto? ParseArtistObject(JsonElement element)
     {
@@ -441,9 +440,9 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// DFS-сбор объектов-исполнителей по дереву: id + name + хотя бы один признак
-    /// артиста (cover/various/composer/genres) — отсекает label'ы и прочие объекты
-    /// с парой id+name. Дубликаты по id отбрасываются.
+    /// DFS collection of artist objects over the tree: id + name + at least one artist
+    /// marker (cover/various/composer/genres) — filters out labels and other objects
+    /// with an id+name pair. Id duplicates are dropped.
     /// </summary>
     private static void CollectArtistObjects(JsonElement element, List<YmArtistDto> into, HashSet<string> seen)
     {
@@ -471,22 +470,22 @@ public static class YmJsonParser
         }
     }
 
-    // ========================= Лайки (users/{uid}/likes/tracks) =========================
+    // ========================= Likes (users/{uid}/likes/tracks) =========================
 
     /// <summary>
-    /// Ответ GET /users/{uid}/likes/tracks: {"result":{"library":{"tracks":[{"id":…,"timestamp":…}, …]}}}.
-    /// ВАЖНО: лайки возвращают ТОЛЬКО id — полные объекты добираются батчами через /tracks.
-    /// id бывает числом и строкой. Если обёртка library неожиданно отсутствует — DFS-фолбэк
-    /// по объектам с полями id+timestamp (раскладка меняется).
+    /// Response of GET /users/{uid}/likes/tracks: {"result":{"library":{"tracks":[{"id":…,"timestamp":…}, …]}}}.
+    /// IMPORTANT: likes return ONLY ids — full objects are fetched in batches via /tracks.
+    /// The id may be a number or a string. If the library wrapper is unexpectedly missing —
+    /// DFS fallback over objects with id+timestamp fields (the layout changes).
     /// </summary>
-    /// <summary>Запись лайка: id трека (+возможный суффикс) и время лайка из API
-    /// (ISO 8601, напр. "2026-09-30T15:20:20+00:00"; пусто — сервер не отдал).</summary>
+    /// <summary>A like entry: track id (plus a possible suffix) and the like time from the API
+    /// (ISO 8601, e.g. "2026-09-30T15:20:20+00:00"; empty — the server did not send it).</summary>
     public sealed record YmLikeEntry(string Id, string LikedAt);
 
     /// <summary>
-    /// Лайки с временем: id + timestamp записи. Основная раскладка —
-    /// {"result":{"library":{"tracks":[{id, timestamp}, …]}}}; фолбэк — поиск по
-    /// объектам с полями id+timestamp (раскладка меняется).
+    /// Likes with timestamps: id + entry timestamp. The main layout is
+    /// {"result":{"library":{"tracks":[{id, timestamp}, …]}}}; fallback — a search over
+    /// objects with id+timestamp fields (the layout changes).
     /// </summary>
     public static List<YmLikeEntry> ParseLikeEntries(string? json)
     {
@@ -512,12 +511,12 @@ public static class YmJsonParser
             return result;
         }
 
-        // Фолбэк: ищем пары id+timestamp по всему дереву.
+        // Fallback: search for id+timestamp pairs across the whole tree.
         CollectLikeEntries(root, result);
         return result;
     }
 
-    /// <summary>Только id лайков (без времени) — обёртка над <see cref="ParseLikeEntries"/>.</summary>
+    /// <summary>Like ids only (no timestamps) — a wrapper over <see cref="ParseLikeEntries"/>.</summary>
     public static List<string> ParseLikeIds(string? json)
         => ParseLikeEntries(json).Select(e => e.Id).ToList();
 
@@ -545,12 +544,12 @@ public static class YmJsonParser
         }
     }
 
-    // ========================= Аккаунт (account/status) =========================
+    // ========================= Account (account/status) =========================
 
     /// <summary>
-    /// Ответ GET /account/status: {"result":{"account":{"uid":…,"login":…,"fullName":…,
-    /// "displayName":{"name":…}, …}}}. Приоритет имени: fullName → displayName.name → login.
-    /// null — раскладка не сошлась (не аккаунт-ответ).
+    /// Response of GET /account/status: {"result":{"account":{"uid":…,"login":…,"fullName":…,
+    /// "displayName":{"name":…}, …}}}. Name priority: fullName → displayName.name → login.
+    /// null — layout did not match (not an account response).
     /// </summary>
     public static YmAccountInfo? ParseAccountStatus(string? json)
     {
@@ -584,15 +583,15 @@ public static class YmJsonParser
     // ========================= Download-info =========================
 
     /// <summary>
-    /// Ответ GET /tracks/{id}/download-info. Раскладка вариантов менялась несколько раз —
-    /// парсим lenient, на каждый элемент result[] пытаемся получить ссылку:
-    ///   0) поле "downloadInfoUrl" (раскладка 2025+, поле bitrateInKbps) — ссылка на
-    ///      XML-дескриптор, финальный URL собирается сервисом через ParseDownloadInfoXml;
-    ///   1) массив "urls" с прямыми ссылками (transports=encode_info_websonic,pure_d);
-    ///   2) поле "url": прямая https-ссылка ИЛИ шаблон с "$" — "$" раскрывается через
-    ///      host/path того же элемента ("$host$path" → https://host + path);
-    ///   3) классическая схема {host, path, ts, s} → "https://{host}/get-mp3/{s}/{ts}{path}".
-    /// Элементы без вычислимой ссылки/дескриптора пропускаются (lenient-договорённость).
+    /// Response of GET /tracks/{id}/download-info. The variant layout changed several times —
+    /// parsing is lenient; for each result[] item a URL is attempted:
+    ///   0) the "downloadInfoUrl" field (2025+ layout, bitrateInKbps field) — an XML
+    ///      descriptor URL; the final URL is built by the service via ParseDownloadInfoXml;
+    ///   1) a "urls" array with direct links (transports=encode_info_websonic,pure_d);
+    ///   2) the "url" field: a direct https link OR a "$" template — "$" is expanded via
+    ///      the same item's host/path ("$host$path" → https://host + path);
+    ///   3) the classic {host, path, ts, s} scheme → "https://{host}/get-mp3/{s}/{ts}{path}".
+    /// Items without a computable URL/descriptor are skipped (lenient contract).
     /// </summary>
     public static List<YmDownloadOption> ParseDownloadInfo(string? json)
     {
@@ -615,7 +614,7 @@ public static class YmJsonParser
             var codec = GetString(item, "codec") ?? string.Empty;
             var bitrate = TryGetInt(item, "bitrateInKbps") ?? TryGetInt(item, "bitrate") ?? 0;
 
-            // 0) Современная раскладка: дескриптор вместо готовой ссылки.
+            // 0) Modern layout: a descriptor instead of a ready URL.
             var descriptor = GetString(item, "downloadInfoUrl");
             if (!string.IsNullOrWhiteSpace(descriptor))
             {
@@ -642,9 +641,9 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// XML-дескриптор по ссылке downloadInfoUrl:
+    /// XML descriptor at the downloadInfoUrl:
     /// &lt;download-info&gt;&lt;host&gt;…&lt;/host&gt;&lt;path&gt;…&lt;/path&gt;&lt;ts&gt;…&lt;/ts&gt;&lt;s&gt;…&lt;/s&gt;&lt;/download-info&gt;.
-    /// null — мусор/не хватает полей. Чистая функция — покрыта юнит-тестами.
+    /// null — garbage/missing fields. Pure function, unit-tested.
     /// </summary>
     public static YmDownloadInfoXml? ParseDownloadInfoXml(string? xml)
     {
@@ -671,24 +670,24 @@ public static class YmJsonParser
         }
         catch (System.Xml.XmlException)
         {
-            return null; // не XML (заглушка прокси/обрыв) — lenient
+            return null; // not XML (proxy stub/truncation) — lenient
         }
     }
 
-    /// <summary>Финальная mp3-ссылка из полей дескриптора: https://{host}/get-mp3/{s}/{ts}{path}.</summary>
+    /// <summary>Final mp3 URL from descriptor fields: https://{host}/get-mp3/{s}/{ts}{path}.</summary>
     public static string BuildDownloadUrlFromXml(YmDownloadInfoXml info)
     {
         var slash = info.Path.StartsWith('/') ? string.Empty : "/";
         return $"https://{info.Host}/get-mp3/{info.S}/{info.Ts}{slash}{info.Path}";
     }
 
-    /// <summary>Сборка ссылки из одного элемента download-info; null — не сошлось (см. доксуммарку класса).</summary>
+    /// <summary>Builds a URL from one download-info item; null — no match (see the ParseDownloadInfo docs).</summary>
     internal static string? BuildDownloadUrl(JsonElement item)
     {
         var host = GetString(item, "host");
         var path = GetString(item, "path");
 
-        // 1) Массив готовых ссылок "urls".
+        // 1) Array of ready URLs "urls".
         if (item.TryGetProperty("urls", out var urls) && urls.ValueKind == JsonValueKind.Array)
         {
             foreach (var u in urls.EnumerateArray())
@@ -701,7 +700,7 @@ public static class YmJsonParser
             }
         }
 
-        // 2) Одиночное поле "url": прямая ссылка или шаблон с "$".
+        // 2) Single "url" field: a direct link or a "$" template.
         var urlField = GetString(item, "url");
         if (!string.IsNullOrWhiteSpace(urlField))
         {
@@ -709,7 +708,7 @@ public static class YmJsonParser
             if (!string.IsNullOrEmpty(expanded)) return expanded;
         }
 
-        // 3) Классическая схема {host, path, ts, s} → https://{host}/get-mp3/{s}/{ts}{path}.
+        // 3) Classic {host, path, ts, s} scheme → https://{host}/get-mp3/{s}/{ts}{path}.
         var ts = GetString(item, "ts");
         var s = GetString(item, "s");
         if (!string.IsNullOrEmpty(host) && !string.IsNullOrEmpty(path)
@@ -723,8 +722,8 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Раскрытие шаблона с "$": "$host" → host, "$path" → path; оставшийся одиночный "$"
-    /// подставляет host+path целиком. Результат без схемы дополняется "https://".
+    /// Expands a "$" template: "$host" → host, "$path" → path; a leftover single "$"
+    /// is replaced with host+path as a whole. A scheme-less result gets "https://" prepended.
     /// </summary>
     private static string? ExpandPlaceholders(string url, string? host, string? path)
     {
@@ -745,12 +744,12 @@ public static class YmJsonParser
         return url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url;
     }
 
-    // ========================= Поля трека =========================
+    // ========================= Track fields =========================
 
     /// <summary>
-    /// Разбор одного объекта-трека. Трек-кандидат: есть "id" и строковый "title".
-    /// artist — первые до трёх имён artists[].name через ", " (как в веб-плеере Яндекса);
-    /// обложка — albums[0].coverUri (шаблон с "%%"); available отсутствует → true.
+    /// Parses one track object. Track candidate: has "id" and a string "title".
+    /// artist — the first up to three artists[].name joined by ", " (as in the Yandex
+    /// web player); cover — albums[0].coverUri ("%%" template); missing available → true.
     /// </summary>
     public static YmTrackDto? ParseTrackObject(JsonElement element)
     {
@@ -771,7 +770,7 @@ public static class YmJsonParser
         };
     }
 
-    /// <summary>Имена исполнителей через ", ", максимум три (веб-плеер Яндекса сворачивает так же).</summary>
+    /// <summary>Artist names joined by ", ", at most three (the Yandex web player does the same).</summary>
     public static string JoinArtistNames(JsonElement track)
     {
         if (!track.TryGetProperty("artists", out var artists) || artists.ValueKind != JsonValueKind.Array)
@@ -787,7 +786,7 @@ public static class YmJsonParser
         return string.Join(", ", names);
     }
 
-    /// <summary>albums[0].coverUri (шаблон с "%%" вместо размера); null — обложки нет.</summary>
+    /// <summary>albums[0].coverUri ("%%" template instead of size); null — no cover.</summary>
     public static string? GetFirstAlbumCoverUri(JsonElement track)
     {
         if (!track.TryGetProperty("albums", out var albums) || albums.ValueKind != JsonValueKind.Array)
@@ -803,9 +802,9 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Готовая ссылка на обложку из шаблона coverUri: "%%" заменяется на размер
-    /// (например "300x400"/"400x400"); URI без схемы дополняется "https://".
-    /// Плейсхолдера "%%" нет — строка используется как есть (уже полный URL).
+    /// Ready artwork URL from the coverUri template: "%%" is replaced with the size
+    /// (e.g. "300x400"/"400x400"); a scheme-less URI gets "https://" prepended.
+    /// No "%%" placeholder — the string is used as is (already a full URL).
     /// </summary>
     public static string? BuildArtworkUrl(string? coverUri, string size = "300x300")
     {
@@ -817,15 +816,15 @@ public static class YmJsonParser
         return url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url;
     }
 
-    // ========================= Примитивы =========================
+    // ========================= Primitives =========================
 
     // ========================= OAuth Device Flow ================================
 
     /// <summary>
-    /// Тело 200-ответа POST oauth.yandex.ru/device-code:
+    /// Body of the 200 response of POST oauth.yandex.ru/device-code:
     /// {"device_code":"…","user_code":"…","verification_url":"https://oauth.yandex.ru/device",
-    ///  "expires_in":300,"interval":5}. null — тело не распознано (сеть/мусор).
-    /// Чистая функция — покрыта юнит-тестами.
+    ///  "expires_in":300,"interval":5}. null — body not recognized (network/garbage).
+    /// Pure function, unit-tested.
     /// </summary>
     public static YmDeviceCode? ParseDeviceCode(string? json)
     {
@@ -847,11 +846,11 @@ public static class YmJsonParser
     }
 
     /// <summary>
-    /// Тело ответа POST oauth.yandex.ru/token: 200 — {"access_token":"…"[,"expires_in":…]},
-    /// 400 — {"error":"authorization_pending"|"slow_down"|…}. Не-JSON мусор (HTML-заглушка
-    /// прокси и пр.) → ErrorCode="invalid_response", чтобы окно показало общий сбой, а не
-    /// висело в ожидании.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Body of the POST oauth.yandex.ru/token response: 200 — {"access_token":"…"[,"expires_in":…]},
+    /// 400 — {"error":"authorization_pending"|"slow_down"|…}. Non-JSON garbage (a proxy HTML
+    /// stub etc.) → ErrorCode="invalid_response", so the window shows a general failure
+    /// instead of waiting forever.
+    /// Pure function, unit-tested.
     /// </summary>
     public static YmTokenResult ParseTokenResponse(string? json)
     {
@@ -872,7 +871,7 @@ public static class YmJsonParser
         return new YmTokenResult { ErrorCode = GetString(doc.RootElement, "error") ?? "invalid_response" };
     }
 
-    // ============================ Хелперы =======================================
+    // ============================ Helpers =======================================
 
     private static JsonDocument? TryParse(string? json)
     {
@@ -883,7 +882,7 @@ public static class YmJsonParser
         }
         catch (JsonException)
         {
-            return null; // мусор/обрыв — пустой результат, не исключение
+            return null; // garbage/truncation — empty result, not an exception
         }
     }
 
@@ -892,7 +891,7 @@ public static class YmJsonParser
            && obj.TryGetProperty(name, out var v)
            && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-    /// <summary>Строковое поле, которое API отдаёт и числом, и строкой (id, uid).</summary>
+    /// <summary>String field the API returns both as a number and as a string (id, uid).</summary>
     internal static string? GetStringOrNumber(JsonElement obj, string name)
     {
         if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(name, out var v)) return null;

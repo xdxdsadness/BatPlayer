@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 
+using BatPlayer.Localization;
+
 namespace BatPlayer.Models;
 
 public sealed class Artist
@@ -39,13 +41,13 @@ public sealed class Folder
 public sealed class Playlist
 {
     public long Id { get; set; }
-    public string Name { get; set; } = "Новый плейлист";
+    public string Name { get; set; } = Loc.Get("NewPlaylistName");
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public int TrackCount { get; set; }
-    // Имя строго под колонку cover_path: Dapper (MatchNamesWithUnderscores)
-    // маппит её именно в CoverPath; под именем CoverCachePath значение
-    // молча терялось, и обложка плейлиста никогда не показывалась.
+    // Name must match the cover_path column exactly: Dapper (MatchNamesWithUnderscores)
+    // maps it to CoverPath; under the name CoverCachePath the value was silently
+    // dropped and the playlist cover never showed.
     public string? CoverPath { get; set; }
 }
 

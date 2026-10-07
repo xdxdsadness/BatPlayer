@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
@@ -183,11 +183,6 @@
   <data name="SoundCloudProxyHint" xml:space="preserve"><value>Прокси (авто / выкл / socks5://host:port)</value></data>
   <data name="SoundCloudWebviewMissing" xml:space="preserve"><value>Для входа в SoundCloud требуется WebView2 Runtime (Microsoft Edge WebView2). Установите его с сайта Microsoft и попробуйте снова.</value></data>
   <data name="SoundCloudSyncFailed" xml:space="preserve"><value>Не удалось синхронизировать SoundCloud</value></data>
-  <data name="ZapretSearching" xml:space="preserve"><value>Обход блокировки SoundCloud: ищу рабочую стратегию…</value></data>
-  <data name="ZapretStrategy" xml:space="preserve"><value>Обход блокировки: стратегия {0}/{1}…</value></data>
-  <data name="ZapretFound" xml:space="preserve"><value>Обход найден — {0}</value></data>
-  <data name="ZapretFailed" xml:space="preserve"><value>Обход не сработал — SoundCloud без VPN недоступен</value></data>
-  <data name="ZapretNeedUac" xml:space="preserve"><value>Обходу нужны права администратора (запрос UAC отклонён)</value></data>
   <data name="SettingsSoundCloudSwitch" xml:space="preserve"><value>Сменить аккаунт</value></data>
   <data name="SettingsSoundCloudSwitchHint" xml:space="preserve"><value>Выйти на сайте SoundCloud и войти другим аккаунтом</value></data>
   <data name="SoundCloudSyncing" xml:space="preserve"><value>Синхронизация лайков SoundCloud…</value></data>
@@ -306,4 +301,27 @@
   <data name="WaveEmptyHint" xml:space="preserve"><value>Микс собирается из вашей музыки: лайков Яндекс Музыки, треков VK, SoundCloud и локальной библиотеки. Подключите Яндекс Музыку в настройках — её граф похожести подбирает кандидатов.</value></data>
   <data name="WaveNotConnected" xml:space="preserve"><value>Подключите Яндекс Музыку в настройках — без неё микс не собрать</value></data>
   <data name="WaveFailed" xml:space="preserve"><value>Не удалось собрать микс — попробуйте ещё раз</value></data>
+  <data name="ScApiOpeningBrowser" xml:space="preserve"><value>Открываю браузер для входа SoundCloud...</value></data>
+  <data name="ScApiManualHint" xml:space="preserve"><value>  Если у вас есть приложение на soundcloud.com/you/apps — введите его client_id ниже и нажмите Сохранить.</value></data>
+  <data name="ScApiAutoRegUnavailable" xml:space="preserve"><value>Авто-регистрация недоступна: создайте приложение на soundcloud.com/you/apps (redirect: http://127.0.0.1:8765/callback), введите client_id и нажмите Сохранить</value></data>
+  <data name="ErrorPrefix" xml:space="preserve"><value>Ошибка: </value></data>
+  <data name="ClientIdTooShort" xml:space="preserve"><value>client_id слишком короткий</value></data>
+  <data name="ScApiRegisteringApp" xml:space="preserve"><value>Регистрирую приложение SoundCloud API...</value></data>
+  <data name="ScApiReconnectingOwnApp" xml:space="preserve"><value>Переподключаюсь с учётными данными вашего приложения (второй вход в браузере)...</value></data>
+  <data name="ScApiWaitingBrowser" xml:space="preserve"><value>Ожидаю вход в браузере SoundCloud...</value></data>
+  <data name="ScApiCanceledPage" xml:space="preserve"><value>Отменено: </value></data>
+  <data name="ScApiSignInCanceled" xml:space="preserve"><value>Вход отменён: </value></data>
+  <data name="ScApiConnectedPage" xml:space="preserve"><value>&lt;h2&gt;SoundCloud API подключён&lt;/h2&gt;Можно закрыть это окно.</value></data>
+  <data name="ScApiExchangingCode" xml:space="preserve"><value>Обмениваю код на токен...</value></data>
+  <data name="ScApiAppRegistered" xml:space="preserve"><value>Приложение зарегистрировано (client_id {0}).</value></data>
+  <data name="ScApiAppAlreadyRegistered" xml:space="preserve"><value>Приложение уже зарегистрировано — получаю его учётные данные...</value></data>
+  <data name="ScApiAppFound" xml:space="preserve"><value>Найдено зарегистрированное приложение (client_id {0}).</value></data>
+  <data name="ScApiRegNeedsPro" xml:space="preserve"><value>Регистрация приложений недоступна для аккаунта — нужна подписка SoundCloud Artist Pro</value></data>
+  <data name="ScApiRegNameRejected" xml:space="preserve"><value>Имя приложения отклонено SoundCloud</value></data>
+  <data name="ScApiRegWebsiteRejected" xml:space="preserve"><value>URL сайта приложения отклонён SoundCloud</value></data>
+  <data name="ScApiRegUnavailable" xml:space="preserve"><value>Регистрация приложения недоступна ({0})</value></data>
+  <data name="ScApiConnect" xml:space="preserve"><value>Подключить API</value></data>
+  <data name="ScApiDisconnect" xml:space="preserve"><value>Отключить API</value></data>
+  <data name="UntitledTrack" xml:space="preserve"><value>(без названия)</value></data>
+  <data name="NewPlaylistName" xml:space="preserve"><value>Новый плейлист</value></data>
 </root>

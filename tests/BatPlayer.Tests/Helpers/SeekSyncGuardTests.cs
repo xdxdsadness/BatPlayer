@@ -5,14 +5,13 @@ using Xunit;
 namespace BatPlayer.Tests.Helpers;
 
 /// <summary>
-/// Логика guard'а перемотки (SeekSyncGuard) — чистая, без аудио-движка.
-/// Сам PlayerBarViewModel в юнит-тестах не создать: его конструктор требует
-/// AudioService с NAudio AudioEngine (WASAPI-устройство), класс sealed и не
-/// поддаётся подмене, поэтому тестируется выделенная логика guard'а.
+/// Seek-guard logic (SeekSyncGuard) — pure, no audio engine. PlayerBarViewModel itself
+/// cannot be unit-tested (its constructor needs AudioService with an NAudio WASAPI engine
+/// and the class is sealed), so the extracted guard logic is tested directly.
 /// </summary>
 public class SeekSyncGuardTests
 {
-    private const long T0 = 100_000; // произвольная «текущая» отметка, мс
+    private const long T0 = 100_000; // arbitrary "current" mark, ms
 
     [Fact]
     public void InactiveGuard_acceptsAnyPosition()
@@ -34,7 +33,7 @@ public class SeekSyncGuardTests
         Assert.True(g.IsActive);
         Assert.False(g.TryAccept(TimeSpan.FromSeconds(30), T0 + 100));
         Assert.False(g.TryAccept(TimeSpan.FromSeconds(99.4), T0 + 200));
-        Assert.True(g.IsActive); // ещё не доехали — guard держится
+        Assert.True(g.IsActive); // not there yet — guard holds
     }
 
     [Fact]
@@ -45,8 +44,8 @@ public class SeekSyncGuardTests
 
         Assert.False(g.TryAccept(TimeSpan.FromSeconds(80), T0 + 100));
         Assert.True(g.TryAccept(TimeSpan.FromSeconds(100), T0 + 200));
-        Assert.False(g.IsActive); // догнали — guard закрылся
-        // последующие тики принимаются как обычно
+        Assert.False(g.IsActive); // caught up — guard closed
+        // later ticks accepted as usual
         Assert.True(g.TryAccept(TimeSpan.FromSeconds(101), T0 + 300));
     }
 
@@ -57,11 +56,11 @@ public class SeekSyncGuardTests
         var g = new SeekSyncGuard();
         g.Begin(target, T0);
 
-        // ровно target - 0.5с — уже «доехали» (p >= target - epsilon)
+        // exactly target - 0.5s counts as reached (p >= target - epsilon)
         Assert.True(g.TryAccept(target - SeekSyncGuard.Epsilon, T0 + 100));
         Assert.False(g.IsActive);
 
-        // чуть раньше границы — ещё нет
+        // slightly earlier — not yet
         var g2 = new SeekSyncGuard();
         g2.Begin(target, T0);
         Assert.False(g2.TryAccept(target - SeekSyncGuard.Epsilon - TimeSpan.FromMilliseconds(1), T0 + 100));
@@ -74,12 +73,12 @@ public class SeekSyncGuardTests
         var g = new SeekSyncGuard();
         g.Begin(TimeSpan.FromSeconds(100), T0);
 
-        // за 1мс до истечения предохранителя — всё ещё глотаем
+        // 1ms before fuse expiry — still swallowed
         var fuseMs = (long)SeekSyncGuard.Fuse.TotalMilliseconds;
         Assert.False(g.TryAccept(TimeSpan.FromSeconds(10), T0 + fuseMs - 1));
         Assert.True(g.IsActive);
 
-        // по истечении — предохранитель снимает guard, тик принимается
+        // after expiry the fuse releases the guard; tick accepted
         Assert.True(g.IsExpired(T0 + fuseMs));
         Assert.True(g.TryAccept(TimeSpan.FromSeconds(10), T0 + fuseMs));
         Assert.False(g.IsActive);
@@ -93,7 +92,7 @@ public class SeekSyncGuardTests
         g.Begin(TimeSpan.FromSeconds(10), T0 + 500);
 
         Assert.Equal(TimeSpan.FromSeconds(10), g.Target);
-        // против НОВОЙ цели старая позиция «свежая»
+        // old position counts as fresh against the NEW target
         Assert.True(g.TryAccept(TimeSpan.FromSeconds(9.8), T0 + 600));
         Assert.False(g.IsActive);
     }

@@ -17,7 +17,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Title bar: заголовок + крестик, перетаскивание за верхнюю полосу -->
+        <!-- Title bar: heading + close button, drag by the top strip -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBrush}"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid Margin="16,0">
@@ -40,14 +40,14 @@
             </Grid>
         </Border>
 
-        <!-- Вход по OAuth Device Flow: плеер показывает код, пользователь вводит его
-             на официальной странице Яндекс ID в браузере; токен забирается опросом -->
+        <!-- OAuth Device Flow sign-in: the player shows a code, the user enters it
+             on the official Yandex ID page in a browser; the token is polled -->
         <StackPanel Grid.Row="1" Margin="24,16,24,20">
             <TextBlock Text="{Binding [YmDeviceIntro], Source={x:Static loc:Loc.T}}"
                        FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
                        Foreground="{DynamicResource TextPrimaryBrush}"/>
 
-            <!-- Код подтверждения: крупно, моноширинно, копируется по кнопке -->
+            <!-- Confirmation code: large, monospaced, copied by button -->
             <Border Background="{DynamicResource PanelBrush}"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                     CornerRadius="8" Margin="0,16,0,4" Padding="16,10">
@@ -73,7 +73,7 @@
                 <TextBlock Text="{Binding [YmDeviceRetry], Source={x:Static loc:Loc.T}}"/>
             </Button>
 
-            <!-- Статус: ждём подтверждение / код истёк / сбой сети / подтверждено -->
+            <!-- Status: waiting for approval / code expired / network failure / approved -->
             <TextBlock x:Name="StatusText" Margin="0,8,0,0"
                        FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
                        Foreground="{DynamicResource TextSecondaryBrush}"

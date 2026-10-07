@@ -9,19 +9,12 @@ using System.Threading.Tasks;
 namespace BatPlayer.Services.SoundCloud;
 
 /// <summary>
-/// Локальный (127.0.0.1) CONNECT-прокси с фрагментацией TLS ClientHello — обход
-/// SNI-блокировок провайдера БЕЗ VPN и внешних серверов. Принцип тот же, что у
-/// открытых утилит (zapret/byedpi): ClientHello отправляется в TCP-сегментах так,
-/// чтобы имя сервера (SNI) оказалось в отдельном сегменте — DPI, собирающий блок-
-/// решение по первому пакету, не видит запрещённое имя целиком.
-///
-/// Как используется: SoundCloudHttp в auto-режиме пробует direct, при сетевой ошибке
-/// повторяет запрос через этот прокси (HttpClient с WebProxy http://127.0.0.1:port —
-/// для https он шлёт CONNECT, дальше туннель). Релеи видят только шифрованный трафик.
-///
-/// Безопасность: слушает ТОЛЬКО loopback, принимает соединения только с loopback,
-/// туннелирует только хосты SoundCloud (*.soundcloud.com / *.sndcdn.com /
-/// *.soundcloud.cloud) на порты 80/443.
+/// Local (127.0.0.1) CONNECT proxy that fragments the TLS ClientHello to bypass
+/// provider SNI/DPI blocking without a VPN (same trick as zapret/byedpi): the ClientHello
+/// is sent in TCP segments so the SNI never appears whole in the packet a DPI inspects.
+/// SoundCloudHttp retries failed direct requests through it (WebProxy http://127.0.0.1:port);
+/// relays only see encrypted traffic. Listens on loopback only, accepts loopback clients
+/// only, and tunnels only SoundCloud hosts on ports 80/443.
 /// </summary>
 internal static class DpiBypassProxy
 {
@@ -30,17 +23,17 @@ internal static class DpiBypassProxy
     private static int _port;
     private static bool _started;
 
-    /// <summary>Пауза между фрагментами ClientHello, мс. Достаточно, чтобы DPI
-    /// «закрыл окно» сборки пакета; заметной задержки не даёт.</summary>
+    /// <summary>Delay between ClientHello fragments, ms: enough for DPI to miss
+    /// reassembling the packet, with no noticeable latency.</summary>
     private const int FragmentDelayMs = 25;
 
-    /// <summary>Размер первого чтения: TLS ClientHello для api-v2 ~300-600 байт,
-    /// запас на случай больших ClientHello (л bridges).</summary>
+    /// <summary>First read size: the api-v2 ClientHello is ~300-600 bytes, with headroom
+    /// for larger handshakes.</summary>
     private const int FirstChunkSize = 8192;
 
     /// <summary>
-    /// Запустить прокси (идемпотентно). Возвращает эндпоинт 127.0.0.1:port или
-    /// null — порт занят/старт не удался (фолбэк на другие транспорты).
+    /// Starts the proxy (idempotent). Returns the 127.0.0.1:port endpoint, or null if the
+    /// port is taken / startup failed (caller falls back to other transports).
     /// </summary>
     public static (string Host, int Port)? EnsureStarted()
     {
@@ -79,7 +72,7 @@ internal static class DpiBypassProxy
             }
             catch
             {
-                return; // listener остановлен (завершение приложения)
+                return; // listener stopped (app shutdown)
             }
 
             _ = Task.Run(() => HandleClientAsync(client));
@@ -90,7 +83,7 @@ internal static class DpiBypassProxy
     {
         try
         {
-            // Принимаем только loopback-клиентов (свой же HttpClient).
+            // Accept loopback clients only (our own HttpClient).
             if (client.Client.RemoteEndPoint is IPEndPoint remote && !IPAddress.IsLoopback(remote.Address))
             {
                 client.Close();
@@ -113,12 +106,12 @@ internal static class DpiBypassProxy
                 return;
             }
 
-            // Туннель к цели.
+            // Tunnel to the target.
             using var target = new TcpClient();
             await target.ConnectAsync(host, port).ConfigureAwait(false);
             await WriteRawAsync(clientStream, "HTTP/1.1 200 Connection established\r\n\r\n").ConfigureAwait(false);
 
-            // Первый payload клиента = TLS ClientHello: отправляем фрагментами.
+            // The client's first payload is the TLS ClientHello: send it fragmented.
             var hello = await ReadFirstChunkAsync(clientStream).ConfigureAwait(false);
             if (hello == null || hello.Length == 0)
             {
@@ -129,15 +122,15 @@ internal static class DpiBypassProxy
             var targetStream = target.GetStream();
             await SendFragmentedAsync(targetStream, hello, host).ConfigureAwait(false);
 
-            // Дальше — двусторонняя перекачка шифрованного трафика до закрытия любой из сторон.
+            // Then relay encrypted traffic both ways until either side closes.
             var clientToTarget = RelayAsync(clientStream, targetStream);
             var targetToClient = RelayAsync(targetStream, clientStream);
             await Task.WhenAny(clientToTarget, targetToClient).ConfigureAwait(false);
         }
         catch
         {
-            // Ошибка одного туннеля не должна ронять прокси: клиент получит обрыв,
-            // HttpClient отработает это как сетевую ошибку запроса (фолбэк транспортов).
+            // A single tunnel failure must not kill the proxy: the client sees a drop,
+            // which HttpClient treats as a request network error (transport fallback).
         }
         finally
         {
@@ -145,7 +138,7 @@ internal static class DpiBypassProxy
         }
     }
 
-    /// <summary>Читает строку CONNECT (до \r\n\r\n) и парсит host:port. null — не CONNECT.</summary>
+    /// <summary>Reads the CONNECT request (up to \r\n\r\n) and parses host:port. null — not CONNECT.</summary>
     private static async Task<(string Host, int Port)?> ReadConnectRequestAsync(NetworkStream stream)
     {
         var buffer = new byte[2048];
@@ -175,14 +168,14 @@ internal static class DpiBypassProxy
         return null;
     }
 
-    /// <summary>Читает первый пакет клиента (TLS-запись целиком, если это TLS).</summary>
+    /// <summary>Reads the client's first packet (the full TLS record, if TLS).</summary>
     private static async Task<byte[]?> ReadFirstChunkAsync(NetworkStream stream)
     {
         var buffer = new byte[FirstChunkSize];
         var read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
         if (read <= 0) return null;
 
-        // TLS record: длина в байтах 3-4 (big-endian) после заголовка 5 байт.
+        // TLS record: length in bytes 3-4 (big-endian) after the 5-byte header.
         if (read >= 5 && buffer[0] == 0x16)
         {
             var recordLen = (buffer[3] << 8) | buffer[4];
@@ -201,9 +194,9 @@ internal static class DpiBypassProxy
     }
 
     /// <summary>
-    /// Отправить ClientHello фрагментами: разрез ПО смещению имени хоста внутри SNI
-    /// (в первом сегменте имя не встречается целиком), между сегментами пауза.
-    /// Если SNI не нашёлся — разрез пополам.
+    /// Sends the ClientHello in fragments: split at the SNI host-name offset (the name
+    /// never appears whole in the first segment), with a pause between segments. If SNI
+    /// is not found, split in half.
     /// </summary>
     private static async Task SendFragmentedAsync(NetworkStream target, byte[] hello, string host)
     {
@@ -221,7 +214,7 @@ internal static class DpiBypassProxy
         await target.FlushAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Смещение ASCII-имени хоста внутри ClientHello (SNI server_name). null — не нашлось.</summary>
+    /// <summary>Offset of the ASCII host name inside the ClientHello (SNI server_name). null — not found.</summary>
     private static int? FindSniHostOffset(byte[] hello, string host)
     {
         var needle = Encoding.ASCII.GetBytes(host);
@@ -252,7 +245,7 @@ internal static class DpiBypassProxy
         }
         catch
         {
-            // Обрыв одной из сторон — нормальное завершение туннеля.
+            // Either side dropped — normal tunnel termination.
         }
     }
 
@@ -263,7 +256,7 @@ internal static class DpiBypassProxy
         await stream.FlushAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Туннелируем только хосты SoundCloud на 80/443 — прокси не «открытый релей».</summary>
+    /// <summary>Only SoundCloud hosts on 80/443 are tunneled — the proxy is not an open relay.</summary>
     private static bool IsAllowedTarget(string host, int port)
     {
         if (port != 443 && port != 80) return false;

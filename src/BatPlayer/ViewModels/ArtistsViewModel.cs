@@ -15,8 +15,8 @@ using BatPlayer.Services;
 
 namespace BatPlayer.ViewModels;
 
-/// <summary>Карточка исполнителя на странице «Исполнители».
-/// HasSc — у артиста есть лайки SoundCloud (значок облачка на карточке).</summary>
+/// <summary>Artist card on the Artists page.
+/// HasSc — the artist has SoundCloud likes (cloud badge on the card).</summary>
 public sealed record ArtistCard(
     string Key,
     string DisplayName,
@@ -26,10 +26,10 @@ public sealed record ArtistCard(
     bool HasSc = false);
 
 /// <summary>
-/// Сборка карточек артистов из двух списков — локальные треки + лайки SoundCloud.
-/// Статическая чистая функция: группировка по ArtistHelper.Key, обложка — локальная
-/// (CoverCachePath), а если её нет — artwork_local_path лайка; TrackCount суммируется.
-/// Вынесена из ArtistsViewModel, чтобы покрываться юнит-тестами без WPF-окружения.
+/// Builds artist cards from two lists — local tracks + SoundCloud likes.
+/// Static pure function: groups by ArtistHelper.Key; cover is the local one
+/// (CoverCachePath), falling back to the like's artwork_local_path; TrackCount is summed.
+/// Extracted from ArtistsViewModel so it can be unit-tested without a WPF environment.
 /// </summary>
 public static class ArtistCardBuilder
 {
@@ -37,15 +37,15 @@ public static class ArtistCardBuilder
         IEnumerable<VkTrackRow>? vkTracks = null, IEnumerable<YmTrackRow>? ymTracks = null,
         IEnumerable<SpotifyTrackRow>? spotifyTracks = null)
     {
-        // Ключ (нижний регистр) → (количество треков, обложка, есть ли SC-лайки).
+        // Key (lowercase) → (track count, cover, has SC likes).
         var byKey = new Dictionary<string, (int Count, string? Cover, bool HasSc)>();
-        // Первое увиденное написание имени — для отображения ("Kai Angel", не "kai angel").
+        // First-seen spelling of the name is used for display ("Kai Angel", not "kai angel").
         var display = new Dictionary<string, string>();
 
         void AddArtist(string? rawArtist, string? cover, bool isSc)
         {
             var names = ArtistHelper.Split(rawArtist);
-            if (names.Count == 0) names = new List<string> { string.Empty }; // неизвестный артист
+            if (names.Count == 0) names = new List<string> { string.Empty }; // unknown artist
 
             foreach (var name in names)
             {
@@ -59,8 +59,8 @@ public static class ArtistCardBuilder
         foreach (var t in localTracks) AddArtist(t.Artist, t.CoverCachePath, false);
         foreach (var like in scLikes) AddArtist(like.Artist, like.ArtworkLocalPath, true);
 
-        // Артисты VK, Яндекс Музыки и Spotify — те же группы: треки считаются наравне
-        // с локальными и SC (один артист на разных платформах склеивается).
+        // VK, Yandex Music and Spotify artists are the same groups: their tracks count
+        // alongside local and SC ones (one artist across platforms is merged).
         foreach (var t in vkTracks ?? Enumerable.Empty<VkTrackRow>())
             AddArtist(t.Artist, t.ArtworkLocalPath, false);
 
@@ -86,9 +86,9 @@ public static class ArtistCardBuilder
 }
 
 /// <summary>
-/// Страница «Исполнители»: сетка карточек артистов, построенных группировкой
-/// локальных треков библиотеки И лайков SoundCloud по нормализованному имени
-/// (ArtistHelper.Key). Карточки с SC-лайками помечаются облачком.
+/// Artists page: grid of artist cards built by grouping the library's local tracks
+/// AND SoundCloud likes by normalized name (ArtistHelper.Key).
+/// Cards with SC likes get a cloud badge.
 /// </summary>
 public partial class ArtistsViewModel : PageViewModel
 {
@@ -98,7 +98,7 @@ public partial class ArtistsViewModel : PageViewModel
     private readonly YmTracksRepository _ymTracks;
     private readonly SpotifyTracksRepository _spotifyTracks;
 
-    // Колбэк в MainViewModel: открывает профиль исполнителя по ключу.
+    // Callback into MainViewModel: opens an artist profile by key.
     private readonly Action<string> _openArtist;
 
     private List<Track> _allTracks = new();
@@ -107,10 +107,9 @@ public partial class ArtistsViewModel : PageViewModel
     private List<YmTrackRow> _ymTracksCache = new();
     private List<SpotifyTrackRow> _spotifyTracksCache = new();
 
-    // Debounce LibraryChanged: скан папки вставляет треки по одному
-    // (InsertOrUpdateTrackAsync дёргает LibraryChanged на каждый файл) — без гашения
-    // страница пересобирается N раз подряд. Одна перезагрузка через 300 мс после
-    // последнего события.
+    // Debounce LibraryChanged: a folder scan inserts tracks one by one
+    // (InsertOrUpdateTrackAsync raises LibraryChanged per file) — without debouncing
+    // the page would rebuild N times in a row. One reload 300 ms after the last event.
     private const int LibraryChangedDebounceMs = 300;
     private CancellationTokenSource? _reloadDebounceCts;
 
@@ -128,11 +127,11 @@ public partial class ArtistsViewModel : PageViewModel
         _openArtist = openArtist;
         Title = Loc.Get("Artists");
 
-        // VM живёт столько же, сколько приложение, поэтому отписка не нужна.
+        // VM lives as long as the app, so no unsubscribe is needed.
         Loc.LanguageChanged += (_, _) =>
         {
             Title = Loc.Get("Artists");
-            // Пересборка заодно перечитывает локализованные DisplayName и «N треков».
+            // Rebuilding also re-reads localized DisplayName and the "N tracks" text.
             Rebuild();
         };
 
@@ -140,7 +139,7 @@ public partial class ArtistsViewModel : PageViewModel
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                // Каждое событие перезапускает таймер: грузимся один раз после пачки.
+                // Each event restarts the timer: we load once after the burst.
                 _reloadDebounceCts?.Cancel();
                 _reloadDebounceCts = new CancellationTokenSource();
                 _ = DebouncedLoadAsync(_reloadDebounceCts.Token);
@@ -156,7 +155,7 @@ public partial class ArtistsViewModel : PageViewModel
         }
         catch (OperationCanceledException)
         {
-            return; // пришло новое событие — перезагрузит свежий таймер
+            return; // a new event arrived — its fresh timer will reload
         }
         await LoadAsync();
     }
@@ -165,7 +164,7 @@ public partial class ArtistsViewModel : PageViewModel
     {
         _allTracks = await _library.GetAllTracksAsync();
 
-        // Лайки — дополнение к локальной библиотеке: их сбой не должен прятать артистов.
+        // Likes are an addition to the local library: their failure must not hide artists.
         try
         {
             _scLikesCache = await _scLikes.GetAllAsync();
@@ -176,7 +175,7 @@ public partial class ArtistsViewModel : PageViewModel
             _scLikesCache = new List<SoundCloudLikeRow>();
         }
 
-        // VK/Яндекс — такие же дополнения: сбой синка не прячет остальных артистов.
+        // VK/Yandex are similar additions: a sync failure must not hide the other artists.
         try
         {
             _vkTracksCache = await _vkTracks.GetAllAsync();
@@ -194,7 +193,7 @@ public partial class ArtistsViewModel : PageViewModel
         Rebuild();
     }
 
-    /// <summary>Группировка треков по нормализованному имени исполнителя.</summary>
+    /// <summary>Groups tracks by the normalized artist name.</summary>
     private void Rebuild()
     {
         var cards = ArtistCardBuilder.Build(_allTracks, _scLikesCache, _vkTracksCache, _ymTracksCache, _spotifyTracksCache);

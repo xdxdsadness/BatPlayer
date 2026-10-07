@@ -11,13 +11,15 @@
     <AssemblyName>BatPlayer</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
-    <Version>1.0.0.0</Version>
+    <Version>1.0.0</Version>
     <Company>Bat Player</Company>
     <Product>Bat Player</Product>
     <AssemblyTitle>Bat Player</AssemblyTitle>
     <Copyright>© 2026 Bat Player</Copyright>
     <Description>Native minimalist music player for Windows</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Release builds ship without a .pdb: the exe is the whole deliverable -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishReadyToRun>true</PublishReadyToRun>
@@ -43,13 +45,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- ExcludeFromSingleFile: инструменты должны лежать РЯДОМ с BatPlayer.exe
-         (SDK иначе бандлит их внутрь exe, откуда путь BaseDirectory\Tools не резолвится) -->
-    <None Include="Tools/ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
-    <!-- Антиблокировка SoundCloud (zapret/winws + WinDivert): запуск только при
-         недоступности всех транспортов, с повышением прав (UAC). Хостлист —
-         только домены SoundCloud, остальной трафик не затрагивается. -->
-    <None Include="Tools/zapret/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- Built-in DPI bypass (WinDivert engine + presets): started automatically only
+         when SoundCloud is unreachable, elevated via UAC (one prompt per session).
+         Applies only to the hosts in Tools/bypass/lists/hosts.txt. -->
+    <None Include="Tools/bypass/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
   <ItemGroup>
@@ -68,12 +67,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Resources\app.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="app.manifest">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- The manifest and the icon are embedded into the exe at build time;
+         loose copies in the output only duplicate them -->
   </ItemGroup>
+
+  <Target Name="StripXmlDocsFromPublish" AfterTargets="ComputeFilesToPublish">
+    <!-- NuGet .xml doc files are IDE tooltips, not runtime files -->
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Extension)' == '.xml'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

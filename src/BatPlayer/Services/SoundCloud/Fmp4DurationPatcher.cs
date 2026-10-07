@@ -3,21 +3,20 @@ using System;
 namespace BatPlayer.Services.SoundCloud;
 
 /// <summary>
-/// Проставляет общую длительность в склеенном из HLS-сегментов fMP4 (init-сегмент + moof/mdat).
-/// У init-сегмента SoundCloud mvhd.duration = 0 и mehd (movie extension header) отсутствует:
-/// Media Foundation такой файл открывает и декодирует, но TotalTime = 0 — таймлайн, перемотка
-/// и «оставшееся время» не работают. Патчим duration в mvhd и вставляем mehd внутрь moov;
-/// длительность пишется в таймскейле mvhd (у SoundCloud init-сегментов — 1000, т.е. миллисекунды).
-/// Структура не читается (битый/неожиданный layout) — возвращаем исходные байты: файл
-/// остаётся валидным, пусть и без длительности.
+/// Writes the overall duration into an fMP4 stitched from HLS segments (init segment + moof/mdat).
+/// SoundCloud's init segment has mvhd.duration = 0 and no mehd: Media Foundation opens and decodes
+/// the file but reports TotalTime = 0, so the timeline, seeking and remaining time break. Patches
+/// the mvhd duration and inserts a mehd into moov; the duration is written in the mvhd timescale
+/// (1000 on SoundCloud init segments, i.e. milliseconds). On unreadable structure the original
+/// bytes are returned unchanged — the file stays valid, just without a duration.
 /// </summary>
 public static class Fmp4DurationPatcher
 {
-    /// <summary>Максимальное значение 32-битного поля duration в миллисекундах (2^32 - 1 мс ≈ 49.7 суток).</summary>
+    /// <summary>Max 32-bit duration field value in milliseconds (2^32 - 1 ms ≈ 49.7 days).</summary>
     private const long Max32BitMs = uint.MaxValue;
 
-    /// <summary>Вернуть копию <paramref name="data"/> с duration = <paramref name="durationMs"/>.
-    /// durationMs &lt;= 0 или структура не читается — исходные байты без изменений.</summary>
+    /// <summary>Returns a copy of <paramref name="data"/> with duration = <paramref name="durationMs"/>.
+    /// durationMs &lt;= 0 or unparsable structure — original bytes unchanged.</summary>
     public static byte[] Patch(byte[] data, long durationMs)
     {
         if (durationMs <= 0 || data.Length < 8)
@@ -32,7 +31,7 @@ public static class Fmp4DurationPatcher
             if (mvhdOffset < 0) return data;
 
             var version = data[mvhdOffset + 8];
-            // v0: version/flags(4) + creation(4) + modification(4); v1: те же поля по 8 байт.
+            // v0: version/flags(4) + creation(4) + modification(4); v1: same fields, 8 bytes each.
             int timescaleOffset = mvhdOffset + 12 + (version == 1 ? 16 : 8);
             int durationOffset = timescaleOffset + 4;
             int durationFieldSize = version == 1 ? 8 : 4;
@@ -44,8 +43,8 @@ public static class Fmp4DurationPatcher
             long duration = Math.Min(durationMs * timescale / 1000, version == 1 ? long.MaxValue : Max32BitMs);
 
             var patched = new byte[data.Length + 16];
-            // mehd (movie extension header, версия 0) — после mvhd внутри moov: именно по нему
-            // fragmented-читатели берут полную длительность ролика.
+            // mehd (movie extension header, v0), after mvhd inside moov: fragmented readers
+            // take the full duration from it.
             var mehd = new byte[16];
             WriteUInt32BE(mehd, 0, 16);
             mehd[4] = (byte)'m'; mehd[5] = (byte)'e'; mehd[6] = (byte)'h'; mehd[7] = (byte)'d';
@@ -53,20 +52,20 @@ public static class Fmp4DurationPatcher
 
             int insertAt = mvhdOffset + mvhdSize;
 
-            // копируем всё до точки вставки
+            // copy everything up to the insertion point
             Buffer.BlockCopy(data, 0, patched, 0, insertAt);
             // mehd
             Buffer.BlockCopy(mehd, 0, patched, insertAt, mehd.Length);
-            // хвост
+            // tail
             Buffer.BlockCopy(data, insertAt, patched, insertAt + mehd.Length, data.Length - insertAt);
 
-            // патчим duration в mvhd (уже в patched — смещения те же)
+            // patch the mvhd duration (already in patched — same offsets)
             if (version == 1)
                 WriteUInt64BE(patched, durationOffset, duration);
             else
                 WriteUInt32BE(patched, durationOffset, (uint)duration);
 
-            // moov подрос на размер mehd
+            // moov grew by the mehd size
             WriteUInt32BE(patched, moovOffset, (uint)(moovSize + mehd.Length));
 
             return patched;
@@ -88,14 +87,14 @@ public static class Fmp4DurationPatcher
             uint size = ReadUInt32BE(data, i);
             if (size == 1)
             {
-                // largesize (64-бит) — не патчим, но идём дальше корректно.
+                // largesize (64-bit) — not patched, but skipped correctly.
                 if (i + 16 > end) break;
                 long large = (long)ReadUInt64BE(data, i + 8);
                 if (large < 16) break;
                 i += checked((int)Math.Min(large, int.MaxValue));
                 continue;
             }
-            if (size < 8) break; // нулевой/битый размер — дальше не идём
+            if (size < 8) break; // zero/invalid size — stop walking
 
             if (data[i + 4] == type[0] && data[i + 5] == type[1] &&
                 data[i + 6] == type[2] && data[i + 7] == type[3])

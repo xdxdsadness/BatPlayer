@@ -15,13 +15,13 @@ using BatPlayer.Database;
 namespace BatPlayer.Services.Spotify;
 
 /// <summary>
-/// Spotify Web API клиент: OAuth 2.0 Authorization Code + PKCE, обмен кода на токены,
-/// авто-refresh, синхронизация Saved Tracks (Liked Songs) пагинацией по 50.
+/// Spotify Web API client: OAuth 2.0 Authorization Code + PKCE, token exchange,
+/// auto-refresh, Saved Tracks (Liked Songs) sync with pages of 50.
 ///
-/// Client ID НЕ зашит в код (в старых сборках был плейсхолдер YOUR_SPOTIFY_CLIENT_ID,
-/// из-за которого Spotify отвечал «client_id: Invalid»): он читается из
-/// %LOCALAPPDATA%/BatPlayer/spotify_client.json. Окно входа даёт ввести его
-/// прямо в приложении (SpotifyLoginWindow) — пересборка не нужна.
+/// The Client ID is not hardcoded (older builds shipped a YOUR_SPOTIFY_CLIENT_ID
+/// placeholder that made Spotify answer "client_id: Invalid"): it is read from
+/// %LOCALAPPDATA%/BatPlayer/spotify_client.json and can be entered in the login
+/// window (SpotifyLoginWindow) without rebuilding.
 /// </summary>
 public sealed class SpotifyService
 {
@@ -45,20 +45,20 @@ public sealed class SpotifyService
 
     private static readonly JsonSerializerOptions JsonOpts = new();
 
-    /// <summary>Один HttpClient на процесс: создание на каждый запрос жгло сокеты
-    /// (паджинированный синк тысяч лайков = десятки соединений подряд).</summary>
+    /// <summary>One HttpClient per process: per-request creation burned sockets
+    /// (a paged sync of thousands of likes means dozens of connections in a row).</summary>
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     private readonly SpotifyAuthStore _auth;
 
-    /// <summary>Семафор вокруг записи auth-файла: UI-поток и фоновые синки пишут его параллельно.</summary>
+    /// <summary>Guard around auth-file writes: the UI thread and background syncs write it concurrently.</summary>
     private readonly SemaphoreSlim _authGate = new(1, 1);
 
     public bool HasAuthFile => _auth.Exists;
 
     public bool HasAccessToken => !string.IsNullOrWhiteSpace(_auth.Load().AccessToken);
 
-    /// <summary>Прогресс синка: (done, total).</summary>
+    /// <summary>Sync progress: (done, total).</summary>
     public event EventHandler<(int done, int total)>? SyncProgress;
 
     public SpotifyService(string authFilePath)
@@ -76,7 +76,7 @@ public sealed class SpotifyService
         public string ClientId { get; set; } = string.Empty;
     }
 
-    /// <summary>Есть ли настроенный Client ID (не пустой и не старый плейсхолдер).</summary>
+    /// <summary>Whether a Client ID is configured (non-empty and not the legacy placeholder).</summary>
     public static bool IsClientIdConfigured
     {
         get
@@ -87,10 +87,10 @@ public sealed class SpotifyService
         }
     }
 
-    /// <summary>Текущий Client ID (пустая строка, если не настроен).</summary>
+    /// <summary>Current Client ID (empty string when not configured).</summary>
     public static string GetClientId() => LoadClientIdFile() ?? string.Empty;
 
-    /// <summary>Сохранить Client ID (spotify_client.json в AppData); регистронезависимо к пробелам.</summary>
+    /// <summary>Saves the Client ID (spotify_client.json in AppData); trims surrounding spaces.</summary>
     public static void SaveClientId(string clientId)
     {
         clientId = (clientId ?? string.Empty).Trim();
@@ -131,9 +131,9 @@ public sealed class SpotifyService
     // ============================== OAuth ===============================
 
     /// <summary>
-    /// Сгенерировать PKCE-пару и ссылку авторизации.
-    /// Бросает InvalidOperationException, если Client ID не настроен —
-    /// вызывающий (окно входа) сначала должен запросить его у пользователя.
+    /// Generates the PKCE pair and the authorization URL.
+    /// Throws InvalidOperationException when the Client ID is not configured —
+    /// the caller (login window) must ask the user for it first.
     /// </summary>
     public static (string AuthUrl, string CodeVerifier) GenerateAuthUrl()
     {
@@ -184,7 +184,7 @@ public sealed class SpotifyService
 
             await SaveTokenAsync(token);
 
-            // Профиль (/v1/me): Settings показывает «Connected as …»; сбой не критичен.
+            // Profile (/v1/me): Settings shows "Connected as ..."; failure is not critical.
             try
             {
                 await FetchAndStoreProfileAsync(ct);
@@ -287,8 +287,8 @@ public sealed class SpotifyService
     // ============================ Saved Tracks ==========================
 
     /// <summary>
-    /// Синхронизация Liked Songs в репозиторий (батчево по страницам);
-    /// возвращает число синхронизированных треков.
+    /// Syncs Liked Songs into the repository page by page;
+    /// returns the number of synced tracks.
     /// </summary>
     public async Task<int> SyncSavedTracksAsync(SpotifyTracksRepository repository, CancellationToken ct)
     {
@@ -296,9 +296,8 @@ public sealed class SpotifyService
         var all = new List<SpotifyTrackRow>();
         var offset = 0;
 
-        // Пагинация по Next из ответа, а не по размеру страницы: укороченная страница
-        // (items.Count < PageSize при ещё непустом Next) раньше обрывала синк на середине
-        // библиотеки — отсюда «будто не все треки синканулись».
+        // Paginate by the response's Next link, not by page size: a short page
+        // (items.Count < PageSize with Next still set) used to cut the sync in half.
         for (var iteration = 0; iteration < MaxSyncIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
@@ -317,9 +316,9 @@ public sealed class SpotifyService
             if (response.Next == null)
                 break;
 
-            // Сдвиг: эху offset от сервера доверяем, только если оно увело нас вперёд;
-            // иначе (обычное эхо == offset, либо API вернул ту же страницу) шагаем
-            // сами — offset строго растёт, цикл не может застрять.
+            // Trust the server-echoed offset only when it moved forward; otherwise
+            // (echo == offset, or the API returned the same page) step ourselves —
+            // offset strictly grows, so the loop cannot stall.
             offset = response.Offset > offset ? response.Offset : offset + PageSize;
         }
 
@@ -327,14 +326,14 @@ public sealed class SpotifyService
         return all.Count;
     }
 
-    /// <summary>Гард пагинации синка: 10000 страниц по 50 — заведомо больше любой библиотеки.</summary>
+    /// <summary>Sync pagination guard: 10000 pages of 50 is larger than any library.</summary>
     private const int MaxSyncIterations = 10000;
 
     /// <summary>
-    /// Одна страница /me/tracks с единственной повторной попыткой: 429/5xx/сетевые сбои
-    /// и пустая страница при 200 — transient-ошибки, из-за которых синк раньше обрывался.
-    /// Повторный фейл: сетевое исключение — наружу как есть, bad status — SpotifyApiException,
-    /// вторая пустая страница — null (конец библиотеки).
+    /// One /me/tracks page with a single retry: 429/5xx/network errors and an empty
+    /// page with HTTP 200 are transient failures that used to cut the sync short.
+    /// On a second failure: network exceptions propagate as is, bad statuses throw
+    /// SpotifyApiException, a second empty page returns null (end of library).
     /// </summary>
     private async Task<SpotifySavedTracksResponse?> FetchSavedTracksPageAsync(string url, CancellationToken ct)
     {
@@ -382,8 +381,8 @@ public sealed class SpotifyService
         foreach (var item in items)
         {
             var track = item.Track;
-            // is_local — «локальные файлы» библиотеки Spotify: без Id и неиграбельны
-            // через Web API, пропуск чтобы не ломать нумерацию/подсчёт.
+            // is_local = Spotify's "local files": no Id, unplayable via the Web API —
+            // skip without breaking the numbering/count.
             if (track == null || string.IsNullOrEmpty(track.Id) || track.IsLocal)
                 continue;
 

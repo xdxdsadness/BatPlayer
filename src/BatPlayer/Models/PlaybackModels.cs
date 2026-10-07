@@ -33,7 +33,7 @@ public enum ViewMode
 }
 
 /// <summary>
-/// Сохраняемое между запусками состояние плеера.
+/// Player state persisted across runs.
 /// </summary>
 public sealed class PlaybackState
 {
@@ -48,8 +48,8 @@ public sealed class PlaybackState
     public long? LastPlaylistId { get; set; }
 }
 
-/// <summary>Тип полосы эквалайзера: Bell — колокольный (усиление), LowCut/HighCut —
-/// срезы НЧ/ВЧ с выбираемой крутизной (12/18/24/30/36/48 дБ/окт, шаг 6), у срезов нет усиления.</summary>
+/// <summary>EQ band type: Bell — peaking (has gain); LowCut/HighCut — low/high cut
+/// filters with selectable slope (12/18/24/30/36/48 dB/oct, step 6); cuts have no gain.</summary>
 public enum EqualizerBandType
 {
     Bell = 0,
@@ -58,10 +58,9 @@ public enum EqualizerBandType
 }
 
 /// <summary>
-/// Полоса эквалайзера. Gain и Frequency наблюдаемы: график эквалайзера
-/// перетаскивает узлы (по вертикали усиление, по горизонтали частота),
-/// подписи дБ обновляются вместе с ползунком, а EqualizerViewModel по
-/// уведомлениям применяет значения к аудиодвижку.
+/// Equalizer band. Gain and Frequency are observable: the EQ graph drags nodes
+/// (gain vertically, frequency horizontally), dB labels update with the slider,
+/// and EqualizerViewModel applies values to the audio engine on change notifications.
 /// </summary>
 public sealed class EqualizerBand : System.ComponentModel.INotifyPropertyChanged
 {
@@ -79,7 +78,7 @@ public sealed class EqualizerBand : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
-    private double _gain; // dB, -12..+12 (только для Bell; у срезов усиления нет)
+    private double _gain; // dB, -12..+12 (Bell only; cut filters have no gain)
     public double Gain
     {
         get => _gain;
@@ -103,7 +102,7 @@ public sealed class EqualizerBand : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
-    private int _slopeDbOct = 12; // крутизна среза: 12/18/24/30/36/48 дБ/окт
+    private int _slopeDbOct = 12; // cut slope: 12/18/24/30/36/48 dB/oct
     public int SlopeDbOct
     {
         get => _slopeDbOct;
@@ -115,7 +114,7 @@ public sealed class EqualizerBand : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
-    private double _q = 1.41; // ширина Bell-полосы (0.3…8): больше Q — уже подъём
+    private double _q = 1.41; // Bell band width (0.3..8): higher Q = narrower boost
     public double Q
     {
         get => _q;
@@ -127,7 +126,7 @@ public sealed class EqualizerBand : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
-    private bool _isSolo; // «слушать гармонику»: через полосу проходит только она
+    private bool _isSolo; // solo listen: only this band passes through
     public bool IsSolo
     {
         get => _isSolo;
@@ -149,9 +148,9 @@ public sealed class EqualizerPreset
     public double PreGain { get; set; } // dB
     public List<EqualizerBand> Bands { get; set; } = new();
 
-    // Кастомный шаблон DarkComboBox не применяет DisplayMemberPath к выбранному
-    // элементу (SelectionBoxItem рендерится как есть) — без ToString в поле
-    // комбобокса отображался тип "BatPlayer.Models.EqualizerPreset".
+    // The DarkComboBox template does not apply DisplayMemberPath to the selected item
+    // (SelectionBoxItem renders as-is) — without ToString the combo box showed the
+    // type name "BatPlayer.Models.EqualizerPreset".
     public override string ToString() => Name;
 }
 

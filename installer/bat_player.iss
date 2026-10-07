@@ -5,9 +5,7 @@
 ; Build steps:
 ;   1. Publish the app:
 ;        dotnet publish src/BatPlayer/BatPlayer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
-;   2. Generate icon (if missing):
-;        python scripts/generate_icon.py
-;   3. Compile installer:
+;   2. Compile installer:
 ;        iscc installer/bat_player.iss
 ; =====================================================================
 
@@ -48,23 +46,20 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-; Ярлык на рабочий стол — ВКЛЮЧЁН по умолчанию (без флага unchecked)
+; Desktop shortcut is ON by default
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startup"; Description: "Запускать вместе с Windows"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "startup"; Description: "Start with Windows"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\src\BatPlayer\Resources\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Ярлыки меню «Пуск» + деинсталлятор (Uninstall Создаётся Inno автоматически:
-; unins000.exe + запись в «Установка и удаление программ»)
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"
+; Inno Setup generates the uninstaller (unins000.exe) and the Add/Remove Programs entry
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-; {autodesktop}: рабочий стол ТЕКУЩЕГО пользователя при PrivilegesRequired=lowest
-; ({commondesktop} требует прав администратора и падал бы без UAC)
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\app.ico"
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startup; IconFilename: "{app}\app.ico"
+; {autodesktop}: current-user desktop with PrivilegesRequired=lowest
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startup
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent

@@ -6,15 +6,15 @@ using BatPlayer.Services;
 namespace BatPlayer.Database;
 
 /// <summary>
-/// Инициализация SQLite-базы: создаёт файл, схему, индексы, выполняет миграции.
+/// SQLite database initialization: creates the file, schema, indexes, and runs migrations.
 /// </summary>
 public static class DatabaseContext
 {
     public const int CurrentSchemaVersion = 7;
 
-    // v2: soundcloud_likes.artwork_local_path — локальный кэш обложек лайков
-    // (artworks_cache/{scId}.jpg): i1.sndcdn.com недоступен напрямую, обложки
-    // качаются через прокси-слой SoundCloudHttp и хранятся локальным файлом.
+    // v2: soundcloud_likes.artwork_local_path — local cache of like artworks
+    // (artworks_cache/{scId}.jpg): i1.sndcdn.com is not directly reachable; covers
+    // are downloaded via the SoundCloudHttp proxy layer and stored as local files.
 
     public static async Task InitializeAsync(string dbPath)
     {
@@ -28,9 +28,8 @@ public static class DatabaseContext
         await using var conn = new SqliteConnection($"Data Source={dbPath}");
         await conn.OpenAsync();
 
-        // WAL: параллельное чтение (страница статистики, оффлайн-срезы) не
-        // блокируется записью прослушек и наоборот. Режим персистентный —
-        // выставляется один раз на файл базы.
+        // WAL: concurrent reads (stats page, offline slices) are not blocked by
+        // play-log writes and vice versa. Persistent mode — set once per database file.
         try
         {
             await using var wal = conn.CreateCommand();
@@ -39,7 +38,7 @@ public static class DatabaseContext
         }
         catch
         {
-            // Не критично: при неудаче база остаётся в delete-режиме.
+            // Non-critical: on failure the database stays in delete mode.
         }
 
         await ExecuteSchemaAsync(conn);
@@ -124,8 +123,8 @@ public static class DatabaseContext
             );
             CREATE INDEX IF NOT EXISTS idx_playlist_tracks_pid ON playlist_tracks(playlist_id);
 
-            -- Платформенные треки плейлиста (SoundCloud/VK/Яндекс): снимок метаданных,
-            -- id в tracks нет — резолв файла при воспроизведении через FilePathResolver.
+            -- Platform tracks in playlists (SoundCloud/VK/Yandex): metadata snapshot;
+            -- no tracks.id — file resolved at playback via FilePathResolver.
             CREATE TABLE IF NOT EXISTS playlist_platform_tracks (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 playlist_id INTEGER NOT NULL,
@@ -148,7 +147,7 @@ public static class DatabaseContext
                 FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE
             );
 
-            -- ===== play log: каждая прослушка отдельной строкой (для статистики) =====
+            -- ===== play log: one row per play (for statistics) =====
             CREATE TABLE IF NOT EXISTS play_log (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 track_title   TEXT NOT NULL DEFAULT '',
@@ -176,7 +175,7 @@ public static class DatabaseContext
                 updated_at           TEXT NOT NULL
             );
 
-            -- ===== soundcloud likes (только метаданные, без файлов) =====
+            -- ===== soundcloud likes (metadata only, no files) =====
             CREATE TABLE IF NOT EXISTS soundcloud_likes (
                 sc_id         TEXT PRIMARY KEY,
                 title         TEXT NOT NULL DEFAULT '',
@@ -191,7 +190,7 @@ public static class DatabaseContext
             );
             CREATE INDEX IF NOT EXISTS idx_soundcloud_likes_liked_at ON soundcloud_likes(liked_at);
 
-            -- ===== vk music (только метаданные, без файлов) =====
+            -- ===== vk music (metadata only, no files) =====
             CREATE TABLE IF NOT EXISTS vk_tracks (
                 vk_id         TEXT PRIMARY KEY,
                 title         TEXT NOT NULL DEFAULT '',
@@ -203,7 +202,7 @@ public static class DatabaseContext
                 synced_at     TEXT NOT NULL DEFAULT ''
             );
 
-            -- ===== yandex music (только метаданные, без файлов) =====
+            -- ===== yandex music (metadata only, no files) =====
             CREATE TABLE IF NOT EXISTS ym_tracks (
                 ym_id         TEXT PRIMARY KEY,
                 title         TEXT NOT NULL DEFAULT '',
@@ -216,12 +215,12 @@ public static class DatabaseContext
                 synced_at     TEXT NOT NULL DEFAULT ''
             );
 
-            -- ===== «Моя волна»: локальные рекомендации =====
+            -- ===== My Wave: local recommendations =====
 
-            -- Кэш ответов /tracks/{id}/similar: сид ym_id → похожие треки (снимок
-            -- метаданных кандидата). Ответ целиком раскладывается по строкам, чтобы
-            -- генерация волны не ходила в сеть по каждому сиду. TTL регулирует
-            -- RecommendationService по fetched_at.
+            -- Cache of /tracks/{id}/similar responses: seed ym_id -> similar tracks
+            -- (candidate metadata snapshot). The whole response is stored row-by-row so
+            -- wave generation does not hit the network per seed. TTL is enforced
+            -- by RecommendationService via fetched_at.
             CREATE TABLE IF NOT EXISTS wave_similar (
                 seed_ym_id  TEXT NOT NULL,
                 ym_id       TEXT NOT NULL,
@@ -236,9 +235,9 @@ public static class DatabaseContext
             );
             CREATE INDEX IF NOT EXISTS idx_wave_similar_fetched ON wave_similar(seed_ym_id, fetched_at);
 
-            -- Сопоставление сидов не-Яндекс источников (vk_tracks/soundcloud_likes/local)
-            -- с ym_id через /search. ym_id='' — матч не найден (негативный кэш,
-            -- поиск не долбит API на каждой генерации).
+            -- Maps non-Yandex seeds (vk_tracks/soundcloud_likes/local) to ym_id via
+            -- /search. ym_id='' means no match found (negative cache, so the search
+            -- does not hammer the API on every generation).
             CREATE TABLE IF NOT EXISTS wave_seed_map (
                 source      TEXT NOT NULL,
                 seed_id     TEXT NOT NULL,
@@ -247,9 +246,9 @@ public static class DatabaseContext
                 PRIMARY KEY(source, seed_id)
             );
 
-            -- Что уже предлагалось: повторные генерации не крутят один и тот же список.
-            -- played — трек после предложения был прослушан (позитив: предлагать можно
-            -- снова); непрослушанные недавно предложенные исключаются на время.
+            -- Tracks already suggested: repeated generations do not repeat the same list.
+            -- played = the track was played after being suggested (positive: it may be
+            -- suggested again); recently suggested unplayed tracks are excluded for a while.
             CREATE TABLE IF NOT EXISTS wave_suggested (
                 ym_id        TEXT PRIMARY KEY,
                 artist_key   TEXT NOT NULL DEFAULT '',
@@ -279,8 +278,8 @@ public static class DatabaseContext
 
         if (current < 2)
         {
-            // artwork_local_path: путь к обложке в локальном кэше (artworks_cache/{scId}.jpg).
-            // Свежие БД получают колонку из схемы; PRAGMA-проверка делает ALTER идемпотентным.
+            // artwork_local_path: cover path in the local cache (artworks_cache/{scId}.jpg).
+            // Fresh databases get the column from the schema; the PRAGMA check makes the ALTER idempotent.
             if (!await ColumnExistsAsync(conn, "soundcloud_likes", "artwork_local_path"))
             {
                 await using var alter = new SqliteCommand(
@@ -291,7 +290,7 @@ public static class DatabaseContext
 
         if (current < 3)
         {
-            // Обложка плейлиста (путь к загруженному файлу) + таблица платформенных треков.
+            // Playlist cover (uploaded file path) + platform tracks table.
             if (!await ColumnExistsAsync(conn, "playlists", "cover_path"))
             {
                 await using var alter = new SqliteCommand(
@@ -319,7 +318,7 @@ public static class DatabaseContext
 
         if (current < 4)
         {
-            // url_hash: хеш ссылки на поток (reload_audio строит mp3-ссылку из него).
+            // url_hash: stream URL hash (reload_audio builds the mp3 URL from it).
             if (!await ColumnExistsAsync(conn, "vk_tracks", "url_hash"))
             {
                 await using var alter = new SqliteCommand(
@@ -330,8 +329,8 @@ public static class DatabaseContext
 
         if (current < 5)
         {
-            // «Моя волна»: кэш похожести, сопоставление сидов с YM и журнал предложений.
-            // CREATE IF NOT EXISTS — идемпотентно: свежие БД получили таблицы из схемы.
+            // My Wave: similarity cache, seed-to-YM mapping, and suggestion log.
+            // CREATE IF NOT EXISTS is idempotent: fresh databases already have the tables.
             await using var wave = new SqliteCommand(
             """
             CREATE TABLE IF NOT EXISTS wave_similar (
@@ -368,9 +367,9 @@ public static class DatabaseContext
 
         if (current < 6)
         {
-            // platform_id/artwork_path в play_log: прослушки платформенных треков вне
-            // справочников (например, рекомендации «Моей волны», которых нет среди
-            // лайков) восстанавливаются на «Недавно прослушанных» по снимку + id.
+            // platform_id/artwork_path in play_log: plays of platform tracks missing from
+            // the catalogs (e.g. My Wave recommendations absent among likes) are restored
+            // on Recently Played from the snapshot + id.
             if (!await ColumnExistsAsync(conn, "play_log", "platform_id"))
             {
                 await using var pid = new SqliteCommand(
@@ -387,9 +386,9 @@ public static class DatabaseContext
 
         if (current < 7)
         {
-            // liked_at в ym_tracks: время лайка из API (timestamp записи likes). Каталог
-            // сортируется по нему («свежие лайки сверху») — rowid-порядок держит новые
-            // лайки в конце длинного списка, и они «не добавляются» на видных местах.
+            // liked_at in ym_tracks: like time from the API (likes entry timestamp). The
+            // catalog is sorted by it (newest likes on top) — rowid order keeps new likes
+            // at the end of a long list, so they never surface in visible positions.
             if (!await ColumnExistsAsync(conn, "ym_tracks", "liked_at"))
             {
                 await using var liked = new SqliteCommand(
@@ -407,7 +406,7 @@ public static class DatabaseContext
         await upsert.ExecuteNonQueryAsync();
     }
 
-    /// <summary>Есть ли колонка в таблице (PRAGMA table_info) — для идемпотентных ALTER'ов.</summary>
+    /// <summary>Whether the column exists in the table (PRAGMA table_info) — for idempotent ALTERs.</summary>
     private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string table, string column)
     {
         await using var cmd = new SqliteCommand($"PRAGMA table_info({table})", conn);

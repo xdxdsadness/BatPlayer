@@ -15,14 +15,13 @@
                         <Border Height="{TemplateBinding TrackHeight}"
                                 Background="{TemplateBinding Background}"
                                 CornerRadius="{TemplateBinding CornerRadius}"/>
-                        <!-- RepeatButtons (LargeChange-клики) убраны: они перехватывали мышь,
-                             ломали перемотку из DragBehavior и не нужны для seek-бара.
-                             Клик по дорожке обрабатывает сам Slider (IsMoveToPointEnabled). -->
+                        <!-- RepeatButtons (LargeChange clicks) removed: they intercepted the mouse,
+                             broke drag seeking via DragBehavior and are not needed for a seek bar.
+                             Track clicks are handled by the Slider itself (IsMoveToPointEnabled). -->
                         <Track x:Name="PART_Track" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
-                                <!-- Заполненная часть дорожки (визуал). IsHitTestVisible=false:
-                                     клики проходят сквозь неё к Slider (move-to-point) —
-                                     RepeatButton-логика перехватывала мышь и ломала перемотку. -->
+                                <!-- Filled part of the track (visual only). IsHitTestVisible=false:
+                                     clicks pass through to the Slider (move-to-point). -->
                                 <primitives:RepeatButton Focusable="False" IsHitTestVisible="False">
                                     <primitives:RepeatButton.Template>
                                         <ControlTemplate TargetType="primitives:RepeatButton">

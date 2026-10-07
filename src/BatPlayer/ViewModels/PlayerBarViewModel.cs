@@ -14,7 +14,7 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Нижний мини-плеер. Привязан к AudioService и CurrentTrack.
+/// Bottom mini-player. Bound to AudioService and CurrentTrack.
 /// </summary>
 public partial class PlayerBarViewModel : ObservableObject
 {
@@ -25,24 +25,24 @@ public partial class PlayerBarViewModel : ObservableObject
 
     [ObservableProperty] private Track? _currentTrack;
     [ObservableProperty] private bool _isPlaying;
-    /// <summary>Id плейлиста, чья очередь играет (null — очередь не из плейлиста):
-    /// карточки плейлистов по нему показывают Pause и держат оверлей.</summary>
+    /// <summary>Id of the playlist whose queue is playing (null — queue is not a playlist):
+    /// playlist cards use it to show Pause and keep the overlay.</summary>
     [ObservableProperty] private long? _currentPlaylistId;
     [ObservableProperty] private TimeSpan _position;
     [ObservableProperty] private TimeSpan _duration;
-    // double 0..100: слайдер TwoWay без округления при перетаскивании (дрожание бегунка исчезло)
+    // double 0..100: TwoWay slider without rounding while dragging (thumb jitter gone)
     [ObservableProperty] private double _volume = 70;
     [ObservableProperty] private bool _isMuted;
     [ObservableProperty] private bool _isShuffle;
     [ObservableProperty] private RepeatMode _repeatMode = RepeatMode.None;
     [ObservableProperty] private bool _isFavorite;
     [ObservableProperty] private BitmapImage? _coverImage;
-    /// <summary>Идёт перемотка: тики позиции глушатся, пока движок не догонит цель.</summary>
+    /// <summary>Seeking in progress: position ticks are muted until the engine catches up.</summary>
     [ObservableProperty] private bool _isSeeking;
 
-    /// <summary>Guard перемотки (чистая логика — см. SeekSyncGuard).</summary>
+    /// <summary>Seek guard (pure logic — see SeekSyncGuard).</summary>
     private readonly SeekSyncGuard _seekGuard = new();
-    /// <summary>Предохранитель: сбрасывает guard, если PositionChanged не придёт (пауза/ошибка).</summary>
+    /// <summary>Fuse: resets the guard if PositionChanged never arrives (pause/error).</summary>
     private DispatcherTimer? _seekFuseTimer;
 
     public double ProgressPercent => Duration.TotalSeconds > 0
@@ -59,8 +59,8 @@ public partial class PlayerBarViewModel : ObservableObject
         _audio.CurrentTrackChanged += (_, t) => OnTrackChanged(t);
         _audio.PlayStateChanged      += (_, _) => IsPlaying = _audio.IsPlaying;
         _audio.QueueSourceChanged    += (_, id) => CurrentPlaylistId = id;
-        // Тик позиции с guard'ом перемотки: пока движок не догнал цель seek'а,
-        // старые позиции проглатываются (иначе биндинг откатывает ползунок).
+        // Position tick with the seek guard: while the engine has not caught up with the
+        // seek target, stale positions are swallowed (otherwise the binding yanks the slider back).
         _audio.PositionChanged       += OnAudioPositionChanged;
         _audio.VolumeChanged         += (_, v) => Volume = v;
         _audio.MuteChanged           += (_, m) => IsMuted = m;
@@ -70,7 +70,7 @@ public partial class PlayerBarViewModel : ObservableObject
 
     private void OnTrackChanged(Track? t)
     {
-        EndSeekGuard(); // смена трека обнуляет позиции — guard перемотки больше не нужен
+        EndSeekGuard(); // track change zeroes positions — the seek guard is no longer needed
         CurrentTrack = t;
         Duration = t?.Duration ?? TimeSpan.Zero;
         Position = TimeSpan.Zero;
@@ -86,25 +86,24 @@ public partial class PlayerBarViewModel : ObservableObject
 
         if (_seekGuard.IsActive)
         {
-            // Guard активен: принимаем тик только когда движок догнал цель seek'а
-            // (или истёк предохранитель) — см. SeekSyncGuard.
+            // Guard active: accept a tick only when the engine reached the seek target
+            // (or the fuse expired) — see SeekSyncGuard.
             if (!_seekGuard.TryAccept(p, Environment.TickCount64)) return;
             _seekFuseTimer?.Stop();
             IsSeeking = false;
 
-            // Первый тик после accept'а обязан быть у цели. Если движок отчитался
-            // сильно не там (гонка чтения/сбой декодера) — ползунок не двигаем:
-            // следующий тик (250 мс) покажет реальную позицию, и «отката» нет.
+            // The first tick after accept must be at the target. If the engine reported
+            // being far off (read race/decoder fault), do not move the slider:
+            // the next tick (250 ms) will show the real position, avoiding a "snap-back".
             if (Duration > TimeSpan.Zero &&
                 Math.Abs((p - _seekGuard.Target).TotalSeconds) > 1.0)
                 return;
         }
 
-        // Фильтр мусорных тиков: позиция не может быть вне длительности трека.
-        // РЫВКИ при этом НЕ фильтруем: движок перематывается не только через
-        // SeekTo (resume с сохранённой позиции, RepeatOne, Previous) — после
-        // таких seek'ов VM обязана принять новое значение, иначе таймлайн
-        // замирает на старом месте и любой клик «откатывается» назад.
+        // Filter garbage ticks: position cannot be outside the track duration.
+        // JUMPS are NOT filtered here: the engine seeks not only via SeekTo (resume
+        // with saved position, RepeatOne, Previous) — after such seeks the VM must
+        // accept the new value, otherwise the timeline freezes and any click "snaps back".
         if (Duration > TimeSpan.Zero &&
             (p < TimeSpan.Zero || p > Duration + TimeSpan.FromMilliseconds(500)))
             return;
@@ -127,9 +126,9 @@ public partial class PlayerBarViewModel : ObservableObject
         var pos = TimeSpan.FromSeconds(Duration.TotalSeconds * Math.Clamp(percent, 0, 1));
         BatPlayer.Services.Logger.Info($"[SEEK] target={pos.TotalSeconds:0.00}");
         _audio.Seek(pos);
-        // Оптимистично показываем целевую позицию и глушим тики PositionChanged,
-        // пока движок её не догонит: seek асинхронный, без этого биндинг сразу
-        // откатывает ползунок таймлайна на старую позицию.
+        // Optimistically show the target position and mute PositionChanged ticks
+        // until the engine catches up: seek is asynchronous, and without this the
+        // binding immediately snaps the timeline slider back to the old position.
         Position = pos;
         BeginSeekGuard(pos);
     }
@@ -140,13 +139,13 @@ public partial class PlayerBarViewModel : ObservableObject
         IsSeeking = true;
         if (_seekFuseTimer == null)
         {
-            // Предохранитель на случай, когда PositionChanged не придёт вовсе
-            // (пауза без тиков, ошибка движка): guard не должен зависнуть навсегда.
+            // Fuse for the case when PositionChanged never arrives
+            // (pause without ticks, engine error): the guard must not hang forever.
             _seekFuseTimer = new DispatcherTimer(SeekSyncGuard.Fuse, DispatcherPriority.Background,
                 (_, _) => EndSeekGuard(), Dispatcher.CurrentDispatcher);
         }
         _seekFuseTimer.Stop();
-        _seekFuseTimer.Start(); // перевзводим на каждый новый seek
+        _seekFuseTimer.Start(); // re-arm on every new seek
     }
 
     private void EndSeekGuard()
@@ -164,10 +163,10 @@ public partial class PlayerBarViewModel : ObservableObject
             return;
         }
 
-        // Порядок резолва обложки:
-        // 1) CoverHash → CoverCacheService (обложка из тегов локального файла);
-        // 2) fallback: CoverCachePath (готовый файл в кэше) — путь SC-runtime-карточек
-        //    (artwork_local_path): у них CoverHash пуст, но обложка уже скачана.
+        // Cover resolve order:
+        // 1) CoverHash → CoverCacheService (cover from local file tags);
+        // 2) fallback: CoverCachePath (ready file in cache) — the path of SC runtime
+        //    cards (artwork_local_path): they have no CoverHash but the cover is downloaded.
         var path = string.IsNullOrEmpty(t.CoverHash)
             ? null
             : await _covers.GetOrCreateCoverAsync(t.FilePath, t.CoverHash);
@@ -175,10 +174,10 @@ public partial class PlayerBarViewModel : ObservableObject
             && File.Exists(t.CoverCachePath))
             path = t.CoverCachePath;
 
-        // Промежуточный сброс CoverImage в null УБРАН: старая обложка остаётся
-        // видимой до готовности новой — смена трека без «провала» в плейсхолдер,
-        // кроссфейд-слои бара и Now Playing получают одну смену значения вместо
-        // двух (null → картинка), которые выглядели как рывок.
+        // Intermediate CoverImage = null reset REMOVED: the old cover stays visible
+        // until the new one is ready — track changes without dropping into the
+        // placeholder, and the bar/Now Playing crossfade layers get a single value
+        // change instead of two (null → image) that looked like a glitch.
         if (string.IsNullOrEmpty(path))
         {
             CoverImage = null;
@@ -189,11 +188,11 @@ public partial class PlayerBarViewModel : ObservableObject
             var bmp = new BitmapImage();
             bmp.BeginInit();
             bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.DecodePixelWidth = 256; // мини-обложка плеера: полноразмерный декод не нужен
+            bmp.DecodePixelWidth = 256; // player mini-cover: full-size decode not needed
             bmp.UriSource = new Uri(path, UriKind.Absolute);
             bmp.EndInit();
             bmp.Freeze();
-            // Трек сменился, пока декодировали — чужую обложку не показываем.
+            // The track changed while decoding — do not show a foreign cover.
             if (!ReferenceEquals(CurrentTrack, t)) return;
             CoverImage = bmp;
         }
@@ -217,21 +216,21 @@ public partial class PlayerBarViewModel : ObservableObject
         if (CurrentTrack == null) return;
         var track = CurrentTrack;
 
-        // Лайк YM-трека уходит в АККАУНТ Яндекс Музыки (POST/DELETE likes/tracks):
-        // после синка трек появится на странице ЯМ и в «Фаворитах». Раньше сердечко
-        // молча писало в локальную БД по отрицательному runtime-id — строки там не
-        // было, лайк терялся («лайкаю в миксе — в фаворитах не появляется»).
+        // Liking a YM track goes to the Yandex Music ACCOUNT (POST/DELETE likes/tracks):
+        // after a sync the track appears on the YM page and in Favorites. Previously the
+        // heart silently wrote to the local DB by negative runtime id — no row existed
+        // there and the like was lost ("like in a mix — never shows in favorites").
         if (track.Source == Track.SourceYandex)
         {
             var target = !track.IsFavorite;
             if (!await _ym.SetTrackLikedAsync(track.ScId, target))
-                return; // API не подтвердил — сердечко не переключаем
+                return; // API did not confirm — do not toggle the heart
             track.IsFavorite = target;
             IsFavorite = target;
             return;
         }
 
-        // Прочие платформенные runtime-карточки (VK/SC/Spotify): лайков в этой модели нет.
+        // Other platform runtime cards (VK/SC/Spotify): no likes in this model.
         if (track.Id <= 0) return;
 
         IsFavorite = !IsFavorite;

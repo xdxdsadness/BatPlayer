@@ -17,8 +17,8 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Карточка трека Яндекс Музыки. Строится один раз при загрузке страницы и после синка —
-/// поэтому вычисляемые свойства (IsPlayable и т.п.) не нужны в INPC.
+/// Yandex Music track card. Built once at page load and after sync — so computed
+/// properties (IsPlayable etc.) do not need INPC.
 /// </summary>
 public sealed class YmCard
 {
@@ -27,30 +27,30 @@ public sealed class YmCard
     public required string Artist { get; init; }
     public required long DurationMs { get; init; }
     public required string ArtworkUrl { get; init; }
-    /// <summary>Имя исполнителя для отображения (общий ArtistHoverTemplate биндит
-    /// именно его): пустое значение заменяется локализованным «Unknown artist».</summary>
+    /// <summary>Artist name for display (ArtistHoverTemplate binds exactly this): an empty
+    /// value is replaced by the localized "Unknown artist".</summary>
     public string DisplayArtist => string.IsNullOrWhiteSpace(Artist)
         ? Localization.Loc.Get("UnknownArtist")
         : Artist;
 
-    /// <summary>Путь обложки в локальном кэше (artworks_cache/ym_{ym_id}.jpg); null — ещё
-    /// не скачана, карточка показывает плейсхолдер IconYm.</summary>
+    /// <summary>Cover path in the local cache (artworks_cache/ym_{ym_id}.jpg); null — not
+    /// downloaded yet, the card shows an IconYm placeholder.</summary>
     public required string? ArtworkLocalPath { get; init; }
 
-    /// <summary>Трек доступен на текущем тарифе (поле available API): недоступные
-    /// приглушены и не играют (стримную ссылку API на них не отдаёт).</summary>
+    /// <summary>Whether the track is available on the current plan (API field available): unavailable
+    /// ones are dimmed and do not play (the API gives no stream link for them).</summary>
     public bool Streamable { get; init; } = true;
 
-    /// <summary>Совпавший трек локальной библиотеки (null — матча нет).</summary>
+    /// <summary>Matched track from the local library (null — no match).</summary>
     public Track? LocalTrack { get; init; }
 
-    /// <summary>Есть ли матч с локальной библиотекой (бейдж IconFile, офлайн-воспроизведение).</summary>
+    /// <summary>Whether there is a local-library match (IconFile badge, offline playback).</summary>
     public bool HasLocalMatch => LocalTrack != null;
 
-    /// <summary>Можно ли воспроизвести: стрим доступен ИЛИ есть локальный матч.</summary>
+    /// <summary>Playable: stream available OR a local match exists.</summary>
     public bool IsPlayable => Streamable || HasLocalMatch;
 
-    /// <summary>Недоступные треки приглушаются (по образцу недоступных локальных файлов).</summary>
+    /// <summary>Unavailable tracks are dimmed (modeled on unavailable local files).</summary>
     public double CardOpacity => IsPlayable ? 1.0 : 0.45;
 
 
@@ -58,11 +58,11 @@ public sealed class YmCard
 }
 
 /// <summary>
-/// Страница «Яндекс Музыка»: сетка треков из локальной БД (ym_tracks), синхронизация
-/// лайков через api.music.yandex.net (OAuth-токен Яндекс ID), матчинг с локальной
-/// библиотекой, стриминг. Онлайн-треки качаются в дисковый кэш (YmStreamCache) и играются
-/// локальным файлом; скачивание файлов пользователю не предоставляется — только кэш
-/// для воспроизведения.
+/// Yandex Music page: grid of tracks from the local DB (ym_tracks), like sync
+/// via api.music.yandex.net (Yandex ID OAuth token), matching with the local
+/// library, streaming. Online tracks are downloaded to the disk cache (YmStreamCache)
+/// and played from the local file; user-facing file downloads are not provided —
+/// the cache is for playback only.
 /// </summary>
 public partial class YmMusicViewModel : PageViewModel, ISearchablePage
 {
@@ -71,25 +71,25 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     private readonly AudioService _audio;
     private readonly YmTracksRepository _repository;
 
-    // Локальная библиотека для матчинга; перечитывается при каждой загрузке страницы.
+    // Local library for matching; re-read on every page load.
     private List<Track> _localTracks = new();
 
-    // Авто-синк «при первом открытии» — выполняется один раз за жизнь приложения.
+    // "Auto-sync on first open" — runs once per app lifetime.
     private bool _autoSyncChecked;
 
-    // Карточки уже прочитаны из БД: повторный вход на страницу
-    // не пересобирает список (данные меняет только синк).
+    // Cards already read from the DB: re-entering the page
+    // does not rebuild the list (only the sync changes the data).
     private bool _cardsLoaded;
 
     public ObservableCollection<YmCard> Cards { get; } = new();
 
-    // === Универсальный поиск (строка в шапке окна) ===
-    // Полный список карточек хранится отдельно: Cards показывает либо всё, либо
-    // отфильтрованное подмножество; после синка/перезагрузки фильтр применяется заново.
+    // === Universal search (the bar in the window header) ===
+    // The full card list is stored separately: Cards shows either everything or the
+    // filtered subset; after a sync/reload the filter is applied again.
     private List<YmCard> _allCards = new();
     private string _searchQuery = string.Empty;
 
-    /// <summary>Фильтр карточек страницы по названию и исполнителю; пустой запрос — полный список.</summary>
+    /// <summary>Filters the page's cards by title and artist; an empty query shows the full list.</summary>
     public void ApplySearch(string? query)
     {
         _searchQuery = query ?? string.Empty;
@@ -115,19 +115,19 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     [ObservableProperty] private string _counterText = string.Empty;
     [ObservableProperty] private string _lastSyncedText = string.Empty;
 
-    /// <summary>Идёт загрузка YM-трека в кэш: синк и клики по карточкам игнорируются.</summary>
+    /// <summary>A YM track is being loaded into the cache: sync and card clicks are ignored.</summary>
     [ObservableProperty] private bool _isLoadingTrack;
 
-    /// <summary>Идёт чтение карточек из БД: на это время показываются скелетоны.</summary>
+    /// <summary>Cards are being read from the DB: skeletons are shown meanwhile.</summary>
     [ObservableProperty] private bool _isLoading = true;
 
-    /// <summary>Ошибки для тоста главного окна (MainViewModel.ErrorMessage).</summary>
+    /// <summary>Errors for the main window toast (MainViewModel.ErrorMessage).</summary>
     public event EventHandler<string>? ErrorOccurred;
 
-    /// <summary>Подключён ли аккаунт по наличию OAuth-токена в ym_auth.json (без сетевой проверки).</summary>
+    /// <summary>Whether an account is connected, by the presence of an OAuth token in ym_auth.json (no network check).</summary>
     public bool IsConnected => _ym.HasToken;
 
-    /// <summary>Показывать «пустую страницу»: загрузка закончена и карточек нет.</summary>
+    /// <summary>Show the "empty page": loading finished and there are no cards.</summary>
     public bool ShowEmptyState => !IsLoading && Cards.Count == 0;
 
     public YmMusicViewModel(YmService ym, LibraryService library, AudioService audio,
@@ -156,8 +156,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Вызывается из MainViewModel.Navigate("YandexMusic"): перечитать карточки из БД;
-    /// при первом открытии — авто-синк, если подключено и прошло &gt;30 минут.
+    /// Called from MainViewModel.Navigate("YandexMusic"): re-read cards from the DB;
+    /// on first open — auto-sync, if connected and &gt;30 minutes have passed.
     /// </summary>
     public async Task OnNavigatedAsync()
     {
@@ -170,9 +170,9 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
 
         if (IsConnected && !IsSyncing)
         {
-            // Обычный авто-синк по давности + ДОГОНЯЮЩИЙ после миграции v7: у старых
-            // строк нет времени лайка (liked_at), и каталог не отсортирован «свежие
-            // сверху», пока не пройдёт один синк.
+            // Regular staleness-based auto-sync + a BACKFILL after the v7 migration: old
+            // rows have no like time (liked_at), and the catalog stays unsorted
+            // "newest first" until one sync has run.
             var last = _ym.GetLastSyncedUtc();
             var needsBackfill = await _repository.CountWithoutLikedAtAsync() > 0;
             if (needsBackfill || last == null || DateTime.UtcNow - last.Value > TimeSpan.FromMinutes(30))
@@ -191,9 +191,10 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
             _localTracks = localTask.Result;
             var rows = rowsTask.Result;
 
-            // Матчинг через прединдекс: O(M) на индекс + O(1) на карточку.
-            // Тяжёлая часть (индекс матчинга + сборка карточек по всей библиотеке) —
-            // в фоне: на UI-потоке она держала компоновку, и переход на страницу лагал.
+            // Matching via a prebuilt index: O(M) for the index + O(1) per card.
+            // The heavy part (match index + card building over the whole library) —
+            // in the background: on the UI thread it held up layout and the page
+            // transition lagged.
             var fresh = await Task.Run(() =>
             {
                 var index = MatchHelper.BuildIndex(_localTracks);
@@ -231,8 +232,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
         }
     }
 
-    /// <summary>Перемешать карточки страницы; если играет YM-трек из этого списка —
-    /// очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the page's cards; if a YM track from this list is playing,
+    /// the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShuffleCards()
     {
@@ -256,8 +257,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
         OnPropertyChanged(nameof(AccountDisplay));
     }
 
-    /// <summary>Имя аккаунта, чьи лайки синхронизируются (из ym_auth.json): лайки читаются
-    /// по uid этого аккаунта — если треки добавляются в другом, они не приедут синком.</summary>
+    /// <summary>Name of the account whose likes are synced (from ym_auth.json): likes are read
+    /// by that account's uid — tracks added on a different one never arrive via sync.</summary>
     public string AccountDisplay => IsConnected ? _ym.GetSavedDisplayName() : string.Empty;
 
     [RelayCommand]
@@ -265,8 +266,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     {
         if (IsSyncing || IsLoadingTrack)
         {
-            // Раньше guard отсекал клик молча: зависший синк навсегда держал
-            // IsSyncing, и кнопка «умирала» без единой строки в логе.
+            // Previously the guard swallowed the click silently: a hung sync held
+            // IsSyncing forever, and the button "died" without a single log line.
             Logger.Warn($"Yandex Music SyncNow ignored: IsSyncing={IsSyncing}, IsLoadingTrack={IsLoadingTrack}");
             return;
         }
@@ -281,8 +282,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
         SyncTotal = 0;
         Logger.Info("Yandex Music SyncNow: started");
 
-        // Таймаут всей операции: зависший запрос не должен навсегда блокировать
-        // кнопку (без него IsSyncing оставался true до перезапуска приложения).
+        // Timeout for the whole operation: a hung request must not block the button
+        // forever (without it IsSyncing stayed true until the app restarted).
         using var syncCts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
         try
         {
@@ -312,8 +313,8 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Понятное сообщение по коду ошибки API: 401/403 — токен отозван (сессия сброшена
-    /// сервисом), остальное — общий текст синка.
+    /// Friendly message by API error code: 401/403 — token revoked (session reset by
+    /// the service), otherwise — generic sync text.
     /// </summary>
     private static string DescribeSyncError(YmApiException ex)
     {
@@ -322,13 +323,13 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Клик по карточке: играет её (файл резолвится плеером через FilePathResolver —
-    /// локальный матч или mp3 из кэша/сети). Очередь = все играбельные карточки страницы,
-    /// поэтому Previous/Next ходят по всему списку. Недоступные — ничего.
+    /// Card click: plays it (the file is resolved by the player via FilePathResolver —
+    /// local match or mp3 from cache/network). Queue = all playable cards of the page,
+    /// so Previous/Next walk the whole list. Unavailable — nothing happens.
     /// </summary>
-    /// <summary>Анти-дубль клика: команда кнопки Play на обложке и всплывший до карточки
-    /// MouseLeftButtonUp дёргают одну команду дважды за миллисекунды; второй вызов видел
-    /// «трек уже играет» и ставил его на паузу — клик «не работал с первого раза».</summary>
+    /// <summary>Anti-double-click: the artwork Play button's command and a MouseLeftButtonUp
+    /// bubbling to the card fire the same command twice within milliseconds; the second
+    /// call saw "track already playing" and paused it — the click "did not work first time".</summary>
     private YmCard? _lastClickedCard;
     private DateTime _lastClickTime;
 
@@ -346,19 +347,19 @@ public partial class YmMusicViewModel : PageViewModel, ISearchablePage
 
         try
         {
-            // Повторный клик по играющей YM-карточке — пауза/возобновление.
+            // Clicking the playing YM card again — pause/resume.
             if (_audio.CurrentTrack is Track current
                 && current.Source == Track.SourceYandex && current.ScId == card.YmId)
             {
-                // Тоггл только при живом воспроизведении: пока трек ещё открывается
-                // (резолв потока), PlayPauseToggle ломал цепочку открытия.
+                // Toggle only during live playback: while the track is still opening
+                // (stream resolution), PlayPauseToggle broke the open chain.
                 if (_audio.IsPlaying || _audio.IsPaused)
                     _audio.PlayPauseToggle();
                 return Task.CompletedTask;
             }
 
-            // Runtime-карточки строятся на клик (не хранятся в карточках страницы):
-            // FilePath пуст — резолвится на каждом переходе по очереди.
+            // Runtime cards are built on click (not stored on the page's cards):
+            // FilePath is empty — resolved on every step through the queue.
             var queue = Cards.Where(c => c.IsPlayable)
                              .Select((c, i) => YmRuntimeTracks.BuildRuntimeTrack(
                                  c.YmId, c.Title, c.Artist, c.DurationMs, c.ArtworkLocalPath,

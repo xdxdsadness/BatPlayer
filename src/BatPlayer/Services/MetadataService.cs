@@ -9,7 +9,7 @@ using TagLib;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Чтение метаданных через TagLib#. Извлекает теги, обложку, технические параметры.
+/// Metadata reading via TagLib#. Extracts tags, cover art and technical parameters.
 /// </summary>
 public sealed class MetadataService
 {

@@ -1,30 +1,23 @@
-# Сборка Bat Player
+# Build
 
-## Требования
+## Requirements
 
-| Компонент | Версия | Зачем |
+| Component | Version | Purpose |
 |---|---|---|
-| Windows | 10 1903+ / 11 | WPF требует Windows |
-| .NET 8 SDK | 8.0.x | [скачать](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| Inno Setup | 6.2+ | для установщика (опц.) |
-| Python + Pillow | 3.9+ | для регенерации иконки (опц.) |
+| Windows | 10 1903+ / 11 | WPF requires Windows |
+| .NET 8 SDK | 8.0.x | [download](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| Inno Setup | 6.2+ | installer only (optional) |
 
-## 1. Сборка Debug (для разработки)
+## Debug build
 
 ```bash
-git clone <repo>
-cd BatPlayer
 dotnet build
-```
-
-Запуск:
-```bash
 dotnet run --project src/BatPlayer/BatPlayer.csproj
 ```
 
-Или открыть `BatPlayer.sln` в Visual Studio 2022 и нажать F5.
+Or open `BatPlayer.sln` in Visual Studio 2022 and press F5.
 
-## 2. Сборка Release (готовый .exe)
+## Release build
 
 ```bash
 dotnet publish src/BatPlayer/BatPlayer.csproj ^
@@ -36,61 +29,42 @@ dotnet publish src/BatPlayer/BatPlayer.csproj ^
     -o publish
 ```
 
-Результат: `publish/BatPlayer.exe` — автономный `.exe`, не требует установленного .NET на целевой машине.
+Result: `publish/BatPlayer.exe` — self-contained, no .NET install required on the target machine.
+Size: ~150 MB single-file, ~70 MB after installer compression.
 
-### Размер сборки
-
-- self-contained, single-file: ~150 MB (включает .NET runtime + NAudio)
-- после Inno Setup LZMA2: ~70 MB
-
-## 3. Сборка установщика
+## Installer
 
 ```bash
-# Сначала выполните шаг 2 — нужен каталог publish/
-
+# step 2 output is required first
 iscc installer\bat_player.iss
 ```
 
-Результат: `dist/BatPlayer-Setup-1.0.0.exe`.
+Result: `installer/dist/BatPlayer-Setup-1.0.0.exe`. See [INSTALLER.md](INSTALLER.md).
 
-## 4. Регенерация иконки
-
-```bash
-pip install Pillow
-python scripts/generate_icon.py
-```
-
-Иконка сохраняется в `src/BatPlayer/Resources/app.ico`. В csproj уже есть ссылка на неё.
-
-## 5. Запуск тестов
+## Tests
 
 ```bash
 dotnet test
 ```
 
-Тесты покрывают: DatabaseContext, LibraryService, SearchService, MetadataService, SettingsService, EqualizerService.
+## Third-party tools
 
-## Частые проблемы
+Binaries under `src/BatPlayer/Tools/` (bypass/bin) are not tracked by git
+and are not required to build — only at runtime for streaming and the DPI bypass.
+See "Third-party tools" in the README for sources.
 
-**Ошибка: "WPF requires Windows"** — текущая ОС не Windows. WPF нельзя собрать на Linux/macOS. Используй Windows-машину или виртуалку.
+## Which exe is which
 
-**Ошибка: "Could not find taglib-sharp"** — выполни `dotnet restore`.
-
-**Большой размер .exe** — это норма для self-contained .NET-приложений. Чтобы уменьшить: `dotnet publish -p:PublishTrimmed=true` (но требует тщательной настройки — reflection в NAudio может ломаться).
-
-**Приложение не запускается на старой Windows** — минимальная поддержка Windows 10 1903+. Указано в `app.manifest`.
-
-## Сторонние инструменты
-
-
-## Какой exe какой (не путаться)
-
-| Путь | Что это |
+| Path | What it is |
 |---|---|
-| `%LocalAppData%\Programs\Bat Player\BatPlayer.exe` | **Установленная программа** — её запускает ярлык на рабочем столе и меню «Пуск». Обновляется переустановкой (`BatPlayer-Setup-*.exe`) |
-| `installer/dist/BatPlayer-Setup-1.0.0.exe` | **Установщик** — двойной клик ставит/обновляет программу |
-| `publish/BatPlayer.exe` | Промежуточная Release-сборка: из неё собирается установщик. Сама по себе не нужна — можно удалять |
-| `src/BatPlayer/bin/Debug/.../BatPlayer.exe` | Debug-сборка для разработки (`dotnet build` / F5). Пересоздаётся при каждой сборке |
-| `Tools/zapret/bin/*` | Вспомогательные процессы антиблокировки (winws и т.п.) — не плеер, запускаются сами |
+| `%LocalAppData%\Programs\Bat Player\BatPlayer.exe` | **Installed program** — launched by the desktop / Start Menu shortcuts; updated by reinstalling |
+| `installer/dist/BatPlayer-Setup-1.0.0.exe` | **Installer** |
+| `publish/BatPlayer.exe` | Intermediate release build used by the installer; safe to delete |
+| `src/BatPlayer/bin/Debug/.../BatPlayer.exe` | Debug build (`dotnet build` / F5), recreated on every build |
+| `Tools/bypass/bin/*` | Bypass engine helper processes — not the player, started on demand |
 
-Единственный exe для повседневного использования — установленный (первая строка). Остальные — строительные леса.
+## Troubleshooting
+
+- **"WPF requires Windows"** — building on Linux/macOS; use a Windows machine.
+- **"Could not find taglib-sharp"** — run `dotnet restore`.
+- **Large exe** — expected for self-contained .NET; `PublishTrimmed=true` can reduce it but may break NAudio reflection.

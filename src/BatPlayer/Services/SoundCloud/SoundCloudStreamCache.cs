@@ -6,54 +6,54 @@ using System.Net.Http;
 namespace BatPlayer.Services.SoundCloud;
 
 /// <summary>
-/// Дисковый кэш аудио-стримов SoundCloud: качает аудио (mp3 progressive / склейка
-/// HLS-сегментов mp3 или AAC) в локальный файл через общий сетевой слой
-/// <see cref="SoundCloudHttp"/> (тот же direct ↔ прокси фолбэк, что и у API-запросов)
-/// и отдаёт путь к файлу — плеер всегда играет локальный файл.
+/// Disk cache of SoundCloud audio streams: downloads audio (mp3 progressive / stitched HLS
+/// mp3 or AAC segments) into a local file via the shared <see cref="SoundCloudHttp"/> network
+/// layer (same direct ↔ proxy fallback as API requests) and returns the file path — the
+/// player always plays a local file.
 ///
-/// Зачем: MediaFoundationReader в AudioEngine не умеет SOCKS-прокси пользователя и открывает
-/// http-URL синхронно на UI-потоке (секунды блокировки). Локальный файл снимает обе проблемы,
-/// а заодно даёт естественный офлайн-кэш: повторный клик играет без сети.
+/// Why: AudioEngine's MediaFoundationReader can't use the user's SOCKS proxy and opens http
+/// URLs synchronously on the UI thread (seconds of blocking). A local file removes both
+/// problems and doubles as a natural offline cache: a repeated click plays without network.
 ///
-/// Имя файла — {scId}.mp3 (mp3) или {scId}.m4a (AAC, качество веб-плеера);
-/// каталог по умолчанию %LOCALAPPDATA%/BatPlayer/sc_cache/.
-/// Скачивание идёт в .part и атомарно переезжает в финальное имя (обрезанный файл не попадёт
-/// в кэш как валидный). Параллельные запросы одного трека сериализуются на scId.
+/// File name is {scId}.mp3 (mp3) or {scId}.m4a (AAC, web-player quality); default directory
+/// %LOCALAPPDATA%/BatPlayer/sc_cache/. Downloads go to .part and are atomically renamed to
+/// the final name (a truncated file never lands in the cache as valid). Parallel requests
+/// for one track serialize on scId.
 /// </summary>
 public sealed class SoundCloudStreamCache
 {
-    /// <summary>Лимит каталога кэша: при превышении чистятся самые старые файлы.</summary>
+    /// <summary>Cache directory limit: oldest files are cleaned when exceeded.</summary>
     public const long DefaultMaxCacheBytes = 500L * 1024 * 1024;
 
-    /// <summary>До какого размера чистим каталог (гистерезис, чтобы не чистить на каждый трек).</summary>
+    /// <summary>Cleanup target size (hysteresis, so we don't clean on every track).</summary>
     public const long DefaultTargetCacheBytes = 300L * 1024 * 1024;
 
-    /// <summary>Расширение mp3-кэша (progressive / склейка HLS mp3-сегментов).</summary>
+    /// <summary>mp3 cache extension (progressive / stitched HLS mp3 segments).</summary>
     private const string Extension = ".mp3";
 
-    /// <summary>Расширение AAC-кэша (HLS audio/mp4 — то же качество, что у веб-плеера).
-    /// public: резолв потока сохраняет AAC именно с ним (AudioEngine открывает .m4a через Media Foundation).</summary>
+    /// <summary>AAC cache extension (HLS audio/mp4 — same quality as the web player).
+    /// public: stream resolve saves AAC with exactly it (AudioEngine opens .m4a via Media Foundation).</summary>
     public const string AacExtension = ".m4a";
 
-    /// <summary>Все расширения, которые живут в каталоге кэша (для метлы и лимита).</summary>
+    /// <summary>All extensions living in the cache directory (for eviction and the limit).</summary>
     private static readonly string[] KnownExtensions = { Extension, AacExtension };
 
     private readonly string _cacheDir;
     private readonly long _maxCacheBytes;
     private readonly long _targetCacheBytes;
 
-    /// <summary>Замок на scId: одновременная загрузка одного трека даёт один файл.</summary>
+    /// <summary>Per-scId gate: concurrent downloads of one track produce a single file.</summary>
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.Ordinal);
 
-    /// <summary>Сколько живёт невостребованный mp3 в кэше: разгрузка диска/памяти —
-    /// давно не игравшиеся и не префетченные файлы выгружаются, повторный клик
-    /// просто перекачивает. Файл играющего трека удалён не будет: занят плеером
-    /// (delete падает — пропускаем) либо уже целиком в памяти движка.</summary>
+    /// <summary>How long an untouched mp3 lives in the cache: relieves disk/memory —
+    /// files not played or prefetched for a while are evicted; a repeated click simply
+    /// re-downloads. The playing track's file is never removed: held by the player
+    /// (delete fails — skipped) or already fully in engine memory.</summary>
     public static readonly TimeSpan IdleEntryTtl = TimeSpan.FromMinutes(5);
 
     private readonly System.Threading.Timer? _idleEvictor;
 
-    /// <param name="cacheDir">Каталог кэша; null — %LOCALAPPDATA%/BatPlayer/sc_cache (тесты передают временный).</param>
+    /// <param name="cacheDir">Cache directory; null — %LOCALAPPDATA%/BatPlayer/sc_cache (tests pass a temp one).</param>
     public SoundCloudStreamCache(string? cacheDir = null,
                                  long maxCacheBytes = DefaultMaxCacheBytes,
                                  long targetCacheBytes = DefaultTargetCacheBytes,
@@ -62,9 +62,8 @@ public sealed class SoundCloudStreamCache
         _cacheDir = cacheDir ?? Path.Combine(App.AppDataDir, "sc_cache");
         _maxCacheBytes = maxCacheBytes;
         _targetCacheBytes = targetCacheBytes;
-        // Метла: раз в минуту выгружаем mp3, к которым >5 минут никто не обращался.
-        // Юнит-тесты передают временный каталог с enableIdleEviction=false, чтобы не
-        // гонять таймер и не терять фикс fstures посреди теста.
+        // Evictor: once a minute, evict mp3s untouched for over 5 minutes. Unit tests pass
+        // a temp dir with enableIdleEviction=false, to avoid the timer and losing fixtures mid-test.
         _idleEvictor = enableIdleEviction
             ? new System.Threading.Timer(
                 _ => EvictIdle(IdleEntryTtl), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1))
@@ -72,10 +71,9 @@ public sealed class SoundCloudStreamCache
     }
 
     /// <summary>
-    /// Выгрузка «протухших» записей: mp3-файлы, время записи которых старше
-    /// <paramref name="idle"/>. Обращение к кэш-файлу (GetStreamFileAsync) обновляет
-    /// его время — играемый/переигрываемый трек не выгружается. Ошибки удаления
-    /// (файл занят плеером) — тихо пропускаются.
+    /// Evicts stale entries: mp3 files whose write time is older than <paramref name="idle"/>.
+    /// Touching a cache file (GetStreamFileAsync) refreshes its time — playing/replayed tracks
+    /// are not evicted. Delete errors (file held by the player) are silently skipped.
     /// </summary>
     public void EvictIdle(TimeSpan idle)
     {
@@ -94,15 +92,15 @@ public sealed class SoundCloudStreamCache
         }
     }
 
-    /// <summary>Каталог кэша (для диагностики/тестов).</summary>
+    /// <summary>Cache directory (for diagnostics/tests).</summary>
     public string CacheDir => _cacheDir;
 
-    /// <summary>mp3/AAC трека уже в кэше (файл существует и непустой) — можно играть офлайн без сети.</summary>
+    /// <summary>The track's mp3/AAC is already cached (file exists and non-empty) — playable offline without network.</summary>
     public bool IsTrackCached(string scId) => GetExistingCachePath(scId) != null;
 
     /// <summary>
-    /// Существующий кэш-файл трека или null. При наличии обоих вариантов предпочитаем
-    /// .m4a (AAC 160 kbps) — он качается после .mp3 и звучит лучше.
+    /// Existing cache file for a track, or null. When both variants exist, .m4a (AAC 160 kbps)
+    /// is preferred — it is downloaded after the .mp3 and sounds better.
     /// </summary>
     public string? GetExistingCachePath(string scId)
     {
@@ -113,8 +111,8 @@ public sealed class SoundCloudStreamCache
     }
 
     /// <summary>
-    /// Путь кэш-файла для трека. scId — id трека из API (цифры); на всякий случай
-    /// всё, кроме [A-Za-z0-9_-], заменяется на '_' — чтобы id из БД не вывел путь наружу каталога.
+    /// Cache file path for a track. scId is the track id from the API (digits); as a guard,
+    /// anything outside [A-Za-z0-9_-] is replaced with '_' — a DB id must not escape the directory.
     /// </summary>
     public string GetCacheFilePath(string scId, string extension = Extension)
     {
@@ -126,8 +124,9 @@ public sealed class SoundCloudStreamCache
     }
 
     /// <summary>
-    /// Файл трека в кэше: уже скачанный — сразу путь; иначе скачивание стрима и путь к нему.
-    /// Бросает <see cref="SoundCloudApiException"/> на HTTP-неуспехе (файл .part удаляется).
+    /// Track file in cache: already downloaded — path right away; otherwise downloads the
+    /// stream and returns its path. Throws <see cref="SoundCloudApiException"/> on HTTP
+    /// failure (the .part file is removed).
     /// </summary>
     public async Task<string> GetStreamFileAsync(string streamUrl, string scId, CancellationToken ct)
     {
@@ -142,10 +141,10 @@ public sealed class SoundCloudStreamCache
         await gate.WaitAsync(ct);
         try
         {
-            // Повторная проверка: пока ждали замок, трек мог скачать другой запрос.
+            // Double-check: while waiting on the gate, another request may have downloaded the track.
             if (IsCached(finalPath)) { Touch(finalPath); return finalPath; }
 
-            // Чистим каталог перед записью (по спеке — «перед каждой записью»), затем качаем.
+            // Enforce the limit before writing (per spec — "before each write"), then download.
             EnforceLimit();
 
             return await DownloadAsync(streamUrl, scId, finalPath, ct);
@@ -157,8 +156,8 @@ public sealed class SoundCloudStreamCache
     }
 
     /// <summary>
-    /// Готовые байты (склейка HLS-сегментов) в кэш: .part → атомарная публикация.
-    /// Уже скачанный трек — сразу путь, байты игнорируются.
+    /// Writes ready bytes (stitched HLS segments) to the cache: .part → atomic publish.
+    /// Already-downloaded track — path right away, bytes ignored.
     /// </summary>
     public async Task<string> SaveTrackBytesAsync(byte[] data, string scId, CancellationToken ct,
         string extension = Extension)
@@ -197,7 +196,7 @@ public sealed class SoundCloudStreamCache
         }
     }
 
-    /// <summary>Уже скачан и непустой (нулевой файл — след оборванной записи, качаем заново).</summary>
+    /// <summary>Downloaded and non-empty (a zero-length file is a remnant of an interrupted write; re-download).</summary>
     private static bool IsCached(string path)
     {
         var info = new FileInfo(path);
@@ -227,7 +226,7 @@ public sealed class SoundCloudStreamCache
                     await stream.CopyToAsync(file, ct);
             }
 
-            // Атомарная публикация: до Move в кэше лежит только .part.
+            // Atomic publish: until the Move, only .part sits in the cache.
             File.Move(tempPath, finalPath, overwrite: true);
         }
         catch (Exception ex)
@@ -243,9 +242,9 @@ public sealed class SoundCloudStreamCache
     }
 
     /// <summary>
-    /// Держит каталог в лимите: если суммарный размер mp3-файлов больше
-    /// <see cref="_maxCacheBytes"/> — удаляет самые старые (по LastWriteTime) до
-    /// <see cref="_targetCacheBytes"/>. .part-файлы не трогаем: их пишут активные загрузки.
+    /// Keeps the directory within its limit: if total mp3 size exceeds
+    /// <see cref="_maxCacheBytes"/> — deletes the oldest files (by LastWriteTime) down to
+    /// <see cref="_targetCacheBytes"/>. .part files are untouched: active downloads write them.
     /// </summary>
     public void EnforceLimit()
     {
@@ -267,7 +266,7 @@ public sealed class SoundCloudStreamCache
                 }
                 catch (Exception ex)
                 {
-                    // Файл занят (играется) или уже удалён — пропускаем, лимит не критичен.
+                    // File in use (playing) or already gone — skip; the limit is not critical.
                     Logger.Error(ex, $"SoundCloud cache eviction failed ({file.Name})");
                 }
             }
@@ -299,7 +298,7 @@ public sealed class SoundCloudStreamCache
         }
     }
 
-    /// <summary>Обновить время файла кэша (метка обращения — от неё тикает TTL выгрузки).</summary>
+    /// <summary>Refreshes the cache file's time (access mark — the eviction TTL counts from it).</summary>
     private static void Touch(string path)
     {
         try
@@ -308,7 +307,7 @@ public sealed class SoundCloudStreamCache
         }
         catch (Exception)
         {
-            // нет файла / занят — не критично: метла просто сносит его раньше
+            // missing/in-use — not critical: the evictor just removes it sooner
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using Microsoft.Data.Sqlite;
 using BatPlayer.Audio;
@@ -39,10 +39,10 @@ public sealed class ServiceContainer : IServiceProvider
         c.RegisterSingleton<SearchService>(sp => new SearchService(sp.GetRequiredService<SqliteConnection>(), coverCacheDir));
         c.RegisterSingleton<EqualizerService>(sp => new EqualizerService(sp.GetRequiredService<SettingsService>()));
 
-        // SoundCloud: веб-сессия (cookies) в sc_auth.json рядом с settings.json;
-        // SettingsService нужен сетевому слою (настройка SoundCloudProxy).
+        // SoundCloud: web session (cookies) in sc_auth.json next to settings.json;
+        // SettingsService is needed by the network layer (SoundCloudProxy setting).
         var scAuthPath = Path.Combine(App.AppDataDir, SoundCloudService.AuthFileName);
-        // Официальный SoundCloud API (pairing-подключение + стримы/related/лайки).
+        // Official SoundCloud API (pairing connection + streams/related/likes).
         var scApiAuthPath = Path.Combine(App.AppDataDir, "sc_api_auth.json");
         c.RegisterSingleton<SoundCloudApiAuthStore>(_ => new SoundCloudApiAuthStore(scApiAuthPath));
         c.RegisterSingleton<SoundCloudOfficialAuth>(sp => new SoundCloudOfficialAuth(
@@ -54,28 +54,29 @@ public sealed class ServiceContainer : IServiceProvider
             sp.GetRequiredService<SoundCloudOfficialApi>()));
         c.RegisterSingleton<SoundCloudLoginService>(sp => new SoundCloudLoginService(sp.GetRequiredService<SoundCloudService>()));
         c.RegisterSingleton<SoundCloudLikesRepository>(sp => new SoundCloudLikesRepository(sp.GetRequiredService<SqliteConnection>()));
-        // Дисковый кэш mp3-стримов: один синглтон на все VM (общие замки на scId, общий лимит каталога).
+        // On-disk cache of mp3 streams: one singleton for all VMs (shared locks per scId, shared folder limit).
         c.RegisterSingleton<SoundCloudStreamCache>(_ => new SoundCloudStreamCache());
 
-        // VK: OAuth-токен в vk_auth.json рядом с settings.json; отдельный дисковый кэш
-        // стримов vk_cache (механика общая со SC-кэшем, каталог свой).
+        // VK: OAuth token in vk_auth.json next to settings.json; a separate on-disk
+        // stream cache vk_cache (mechanics shared with the SC cache, own folder).
         var vkAuthPath = Path.Combine(App.AppDataDir, VkService.AuthFileName);
         c.RegisterSingleton<VkService>(_ => new VkService(vkAuthPath));
         c.RegisterSingleton<VkLoginService>(sp => new VkLoginService(sp.GetRequiredService<VkService>()));
         c.RegisterSingleton<VkTracksRepository>(sp => new VkTracksRepository(sp.GetRequiredService<SqliteConnection>()));
         c.RegisterSingleton<VkStreamCache>(_ => new VkStreamCache());
 
-        // Yandex Music: cookies веб-сессии .yandex.ru в ym_auth.json рядом с settings.json;
-        // отдельный дисковый кэш стримов ym_cache (механика общая со SC-кэшем, каталог свой).
+        // Yandex Music: .yandex.ru web session cookies in ym_auth.json next to settings.json;
+        // a separate on-disk stream cache ym_cache (mechanics shared with the SC cache, own folder).
         var ymAuthPath = Path.Combine(App.AppDataDir, YmService.AuthFileName);
         c.RegisterSingleton<YmService>(_ => new YmService(ymAuthPath));
         c.RegisterSingleton<YmLoginService>(sp => new YmLoginService(sp.GetRequiredService<YmService>()));
         c.RegisterSingleton<YmTracksRepository>(sp => new YmTracksRepository(sp.GetRequiredService<SqliteConnection>()));
         c.RegisterSingleton<YmStreamCache>(_ => new YmStreamCache());
 
-        // «Моя волна»: локальные рекомендации по кэшу /similar Яндекса + сигналам из
-        // play_log/библиотек. Свой репозиторий с отдельными соединениями на операцию —
-        // генерация идёт в фоне и не спорит за общее соединение с UI.
+        // "My wave": local recommendations from the Yandex /similar cache plus signals
+        // from play_log/libraries. Its own repository with a separate connection per
+        // operation — generation runs in the background and does not contend for the
+        // shared connection with the UI.
         c.RegisterSingleton<RecommendationRepository>(_ => new RecommendationRepository(dbPath));
         c.RegisterSingleton<RecommendationService>(sp => new RecommendationService(
             sp.GetRequiredService<YmService>(),
@@ -86,8 +87,8 @@ public sealed class ServiceContainer : IServiceProvider
             sp.GetRequiredService<SoundCloudLikesRepository>(),
             sp.GetRequiredService<LibraryService>()));
 
-        // Spotify: OAuth токены в spotify_auth.json рядом с settings.json;
-        // синхронизация через официальный Spotify Web API.
+        // Spotify: OAuth tokens in spotify_auth.json next to settings.json;
+        // synchronization via the official Spotify Web API.
         var spotifyAuthPath = Path.Combine(App.AppDataDir, SpotifyService.AuthFileName);
         c.RegisterSingleton<SpotifyService>(_ => new SpotifyService(spotifyAuthPath));
         c.RegisterSingleton<SpotifyTracksRepository>(sp => new SpotifyTracksRepository(sp.GetRequiredService<SqliteConnection>()));
@@ -110,11 +111,6 @@ public sealed class ServiceContainer : IServiceProvider
 
     public void RegisterSingleton<T>(Func<IServiceProvider, T> factory) where T : class
         => _factories[typeof(T)] = sp => factory(sp);
-
-    public void RegisterSingleton<TInterface, TImplementation>(Func<IServiceProvider, TImplementation> factory)
-        where TImplementation : class, TInterface
-        where TInterface : class
-        => _factories[typeof(TInterface)] = sp => factory(sp);
 
     public T GetRequiredService<T>() => (T)GetService(typeof(T))!;
 

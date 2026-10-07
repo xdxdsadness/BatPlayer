@@ -6,7 +6,7 @@ using Xunit;
 namespace BatPlayer.Tests.Helpers;
 
 /// <summary>
-/// Нормализация и сопоставление треков SoundCloud с локальной библиотекой.
+/// Normalization and matching of SoundCloud tracks against the local library.
 /// </summary>
 public class MatchHelperTests
 {
@@ -44,7 +44,7 @@ public class MatchHelperTests
     [Fact]
     public void NormalizeArtist_UsesArtistHelperKeyForLegacyUnknowns()
     {
-        // Legacy-значения старых записей БД схлопываются в тот же ключ, что и пустая строка.
+        // Legacy values of old DB records collapse into the same key as an empty string.
         Assert.Equal(MatchHelper.NormalizeArtist(""), MatchHelper.NormalizeArtist("Неизвестный исполнитель"));
         Assert.Equal(MatchHelper.NormalizeArtist(""), MatchHelper.NormalizeArtist("Unknown Artist"));
         Assert.Equal("neon fox", MatchHelper.NormalizeArtist("Neon Fox"));
@@ -83,7 +83,7 @@ public class MatchHelperTests
     [Fact]
     public void FindLocalMatch_SplitEmbeddedTitle_Matches()
     {
-        // SoundCloud часто отдаёт название в виде «Artist - Title».
+        // SoundCloud often returns titles as "Artist - Title".
         var local = new List<Track> { Local("Neon Fox", "Midnight Drive") };
 
         var match = MatchHelper.FindLocalMatch(local, "Neon Fox", "Neon Fox - Midnight Drive");

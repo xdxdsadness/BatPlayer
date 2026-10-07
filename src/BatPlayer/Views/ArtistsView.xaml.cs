@@ -8,7 +8,7 @@ public partial class ArtistsView : UserControl
 {
     public ArtistsView() => InitializeComponent();
 
-    // Клик по карточке открывает профиль исполнителя.
+    // Clicking a card opens the artist profile.
     private void ArtistCard_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is not ListViewItem item) return;

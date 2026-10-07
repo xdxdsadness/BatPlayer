@@ -87,7 +87,7 @@ public class DatabaseContextTests
         var tmp = Path.GetTempFileName();
         try
         {
-            // Имитация БД версии 1: таблица лайков без artwork_local_path + schema_version = 1.
+            // Simulate a v1 DB: likes table without artwork_local_path + schema_version = 1.
             await using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={tmp}"))
             {
                 await conn.OpenAsync();
@@ -116,9 +116,9 @@ public class DatabaseContextTests
 
             var columns = await GetSoundcloudLikesColumnsAsync(tmp);
             Assert.Contains("artwork_local_path", columns);
-            Assert.Contains("sc_id", columns); // миграция не ломает существующие колонки
+            Assert.Contains("sc_id", columns); // migration keeps existing columns
 
-            // Данные пережили миграцию, новая колонка пуста.
+            // Data survived the migration; the new column is empty.
             await using var check = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={tmp}");
             await check.OpenAsync();
             var select = check.CreateCommand();

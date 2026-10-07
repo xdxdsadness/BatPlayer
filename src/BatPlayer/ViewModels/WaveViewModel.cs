@@ -18,16 +18,16 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Карточка трека волны (любого источника: Яндекс-кандидат или «реанимированный»
-/// трек из своих библиотек VK/SC/локальных). Артибути ArtworkLocalPath и IsCurrent
-/// поднимают PropertyChanged: обложки докачиваются фоном после генерации, а флаг
-/// «сейчас играет» обновляется при каждом переключении трека плеером.
+/// Wave track card (any source: a Yandex candidate or a "revived" track from the
+/// user's own VK/SC/local libraries). ArtworkLocalPath and IsCurrent raise
+/// PropertyChanged: covers are downloaded in the background after generation, and the
+/// "now playing" flag updates on every player track change.
 /// </summary>
 public sealed class WaveCard : System.ComponentModel.INotifyPropertyChanged
 {
     public required string Source { get; init; }
-    /// <summary>Идентификатор платформы (ym_id / vk_id / sc_id / local:{id}); для local
-    /// совпадает с Track.ScId runtime-трека.</summary>
+    /// <summary>Platform identifier (ym_id / vk_id / sc_id / local:{id}); for local
+    /// it equals the runtime track's Track.ScId.</summary>
     public required string PlatformId { get; init; }
     public required string Title { get; init; }
     public required string Artist { get; init; }
@@ -35,8 +35,8 @@ public sealed class WaveCard : System.ComponentModel.INotifyPropertyChanged
     public required string ArtworkUrl { get; init; }
     public bool Streamable { get; init; } = true;
 
-    /// <summary>Совпавший трек локальной библиотеки (для local — сам трек): бейдж
-    /// «есть локально» на карточке.</summary>
+    /// <summary>Matched track from the local library (for local — the track itself): the
+    /// "available locally" badge on the card.</summary>
     public Track? LocalTrack { get; init; }
 
     public bool HasLocalMatch => LocalTrack != null;
@@ -50,7 +50,7 @@ public sealed class WaveCard : System.ComponentModel.INotifyPropertyChanged
 
     private string? _artworkLocalPath;
 
-    /// <summary>Путь обложки в локальном кэше; null — плейсхолдер.</summary>
+    /// <summary>Cover path in the local cache; null — placeholder.</summary>
     public string? ArtworkLocalPath
     {
         get => _artworkLocalPath;
@@ -64,7 +64,7 @@ public sealed class WaveCard : System.ComponentModel.INotifyPropertyChanged
 
     private bool _isCurrent;
 
-    /// <summary>Этот трек сейчас в плеере (любой источник, сверка Source+PlatformId).</summary>
+    /// <summary>This track is currently in the player (any source, matched by Source+PlatformId).</summary>
     public bool IsCurrent
     {
         get => _isCurrent;
@@ -80,13 +80,15 @@ public sealed class WaveCard : System.ComponentModel.INotifyPropertyChanged
 }
 
 /// <summary>
-/// Страница «Моя волна»: рекомендации по вкусу из уже добавленной музыки. Слева —
-/// «пластинка»: текущий трек волны (крутится при игре), слева от него прошлый,
-/// под ним следующий — оба приглушены. Справа — сетка всей волны: Яндекс-кандидаты
-/// и треки своих библиотек (VK/SC/локальные), у каждого свой логотип источника.
+/// "My Wave" page: taste-based recommendations from the user's own music. On the left —
+/// the "vinyl": the wave's current track (spins while playing), with the previous one
+/// to its left and the next one below — both dimmed. On the right — a grid of the whole
+/// wave: Yandex candidates and tracks from the user's libraries (VK/SC/local), each with
+/// its own source logo.
 ///
-/// Воспроизведение — runtime-треки соответствующего источника: резолв плеера
-/// (грид или hero) играет волну как очередь: Next/Previous ходят по рекомендациям.
+/// Playback uses runtime tracks of the corresponding source: the player resolves
+/// local match → cache → platform stream. Clicking any card
+/// (grid or hero) plays the wave as a queue: Next/Previous walk the recommendations.
 /// </summary>
 public partial class WaveViewModel : PageViewModel, ISearchablePage
 {
@@ -97,21 +99,21 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
     private readonly AudioService _audio;
     private readonly YmTracksRepository _ymTracks;
 
-    /// <summary>Минимальный интервал между синками лайков ЯМ при автоматических
-    /// перегенерациях (радио после конца очереди): не дёргать API каждый трек.</summary>
+    /// <summary>Minimum interval between YM like syncs during automatic
+    /// regenerations (radio after queue end): do not hit the API on every track.</summary>
     private static readonly TimeSpan AutoResyncInterval = TimeSpan.FromMinutes(5);
 
     private List<Track> _localTracks = new();
 
     public ObservableCollection<WaveCard> Cards { get; } = new();
 
-    // === Универсальный поиск (строка в шапке окна) ===
-    // Последняя сгенерированная волна хранится целиком: Cards показывает либо всё,
-    // либо отфильтрованное подмножество. Hero-зона и очередь плеера строятся по Cards.
+    // === Universal search (the bar in the window header) ===
+    // The last generated wave is stored in full: Cards shows either everything or the
+    // filtered subset. The hero zone and the player queue are built from Cards.
     private List<WaveCard> _allCards = new();
     private string _searchQuery = string.Empty;
 
-    /// <summary>Фильтр карточек волны по названию и исполнителю; пустой запрос — полный список.</summary>
+    /// <summary>Filters the wave's cards by title and artist; an empty query shows the full list.</summary>
     public void ApplySearch(string? query)
     {
         _searchQuery = query ?? string.Empty;
@@ -135,18 +137,18 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
     [ObservableProperty] private bool _isGenerating;
     [ObservableProperty] private string _counterText = string.Empty;
 
-    // ===== Hero-зона «пластинки» (левая половина страницы) =====
+    // ===== Hero "vinyl" zone (left half of the page) =====
     [ObservableProperty] private WaveCard? _heroCurrent;
     [ObservableProperty] private WaveCard? _heroPrev;
     [ObservableProperty] private WaveCard? _heroNext;
 
-    /// <summary>Hero-трек реально играет плеер (а не просто выбран): крутит пластинку.</summary>
+    /// <summary>The hero track is actually playing (not merely selected): spins the vinyl.</summary>
     [ObservableProperty] private bool _isHeroPlaying;
 
-    /// <summary>Ошибки для тоста главного окна (MainViewModel.ErrorMessage).</summary>
+    /// <summary>Errors for the main window toast (MainViewModel.ErrorMessage).</summary>
     public event EventHandler<string>? ErrorOccurred;
 
-    /// <summary>Подключён ли Яндекс Музыки — без него граф похожести недоступен.</summary>
+    /// <summary>Whether Yandex Music is connected — without it the similarity graph is unavailable.</summary>
     public bool IsConnected => _ym.HasToken;
 
     public bool ShowEmptyState => !IsLoading && !IsGenerating && Cards.Count == 0;
@@ -168,16 +170,16 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
             RefreshHeaderText();
         };
 
-        // Плеер сам листает волну по окончании трека (очередь = волна): hero и подсветка
-        // текущей карточки обязаны следовать за CurrentTrack, игра/пауза крутят пластинку.
+        // The player advances the wave itself at track end (queue = wave): the hero and
+        // the current card highlight must follow CurrentTrack; play/pause spins the vinyl.
         _audio.CurrentTrackChanged += (_, _) => OnPlaybackChanged();
         _audio.PlayStateChanged += (_, _) => OnPlaybackChanged();
-        // Волна доиграла до конца — микс обновляется сам и продолжает играть (радио).
+        // The wave played to the end — the mix refreshes itself and keeps playing (radio).
         _audio.QueueEnded += OnWaveQueueEnded;
     }
 
-    /// <summary>Синхронизация hero/подсветки с плеером (события могут приходить из
-    /// не-UI потока — уводим на диспетчер).</summary>
+    /// <summary>Syncs hero/highlight with the player (events may arrive off the UI
+    /// thread — move onto the dispatcher).</summary>
     private void OnPlaybackChanged()
     {
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
@@ -185,20 +187,20 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
         else dispatcher.BeginInvoke(UpdateCurrentFlags);
     }
 
-    /// <summary>Вызывается из MainViewModel.Navigate("Wave") после анимации перехода:
-    /// первая генерация на сессии выполняется сразу, повторные входы показывают тот же
-    /// список — обновление кнопкой (волна должна быть предсказуемой в пределах сессии).</summary>
+    /// <summary>Called from MainViewModel.Navigate("Wave") after the transition animation:
+    /// the first generation of a session runs immediately, re-entries show the same
+    /// list — refresh is via the button (the wave must be predictable within a session).</summary>
     public async Task OnNavigatedAsync()
     {
         if (Cards.Count > 0 || IsGenerating) return;
-        await RunRefreshAsync(forceSync: true); // первый микс сессии — по свежим лайкам
+        await RunRefreshAsync(forceSync: true); // first mix of the session — from fresh likes
     }
 
     [RelayCommand]
     private Task RefreshAsync() => RunRefreshAsync(forceSync: true);
 
-    /// <summary>Ядро генерации: true — волна заменена успешно (для авто-обновления,
-    /// которое решает, запускать ли новый микс).</summary>
+    /// <summary>Generation core: true — the wave was replaced successfully (for auto-refresh,
+    /// which decides whether to start a new mix).</summary>
     private async Task<bool> RunRefreshAsync(bool forceSync = false)
     {
         if (IsGenerating) return false;
@@ -217,7 +219,7 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
         {
             await SyncYmLikesAsync(forceSync, cts.Token);
             _localTracks = await _library.GetAllTracksAsync();
-            // Источники сидов — на потоке вызывающего (общее соединение); генерация — фон.
+            // Seed sources — on the caller's thread (shared connection); generation — background.
             var sources = await _wave.GatherSourcesAsync(cts.Token);
             var items = await _wave.GenerateWaveAsync(sources, cts.Token);
             Logger.Info($"Wave: generated {items.Count} candidates");
@@ -225,7 +227,7 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
             var cards = await Task.Run(() => BuildCards(items), cts.Token);
             _allCards = cards;
             RebuildCards();
-            UpdateCurrentFlags(); // hero появляется сразу; обложки докатятся фоном
+            UpdateCurrentFlags(); // the hero appears right away; covers catch up in the background
 
             await DownloadArtworksAsync(cards, cts.Token);
             return true;
@@ -255,12 +257,12 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
         return false;
     }
 
-    /// <summary>Синхронизация лайков Яндекс Музыки перед генерацией: микс собирается из
-    /// локальной БД (ym_tracks), и без синка «Обновить микс» не видит треки, добавленные
-    /// в ЯМ после прошлого синка. Ручное обновление и первый микс сессии синкают всегда,
-    /// авто-перезапуск радио — не чаще AutoResyncInterval. Сбой синка (сеть/токен) не
-    /// роняет генерацию: микс соберётся по текущей БД, а ошибку сессии покажут сами
-    /// запросы рекомендаций.</summary>
+    /// <summary>Syncs Yandex Music likes before generation: the mix is built from the
+    /// local DB (ym_tracks), and without a sync "Refresh mix" would not see tracks added
+    /// to YM after the last sync. Manual refresh and the first mix of a session always
+    /// sync; auto radio restart — no more often than AutoResyncInterval. A sync failure
+    /// (network/token) does not kill generation: the mix builds from the current DB, and
+    /// a session error will surface from the recommendation requests themselves.</summary>
     private async Task SyncYmLikesAsync(bool force, CancellationToken ct)
     {
         if (!IsConnected) return;
@@ -283,10 +285,10 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Волна доиграла до конца (очередь плеера исчерпана): микс обновляется сам,
-    /// новый микс сразу играет — радио без действий пользователя. Кончившаяся
-    /// очередь не волна — игнорируем; событие может прийти из аудио-потока —
-    /// продолжаем на UI-потоке.
+    /// The wave played to the end (player queue exhausted): the mix refreshes itself
+    /// and the new mix plays right away — radio with no user action. An exhausted
+    /// queue that is not the wave — ignore; the event may come from the audio thread —
+    /// continue on the UI thread.
     /// </summary>
     private async void OnWaveQueueEnded(object? sender, Track? lastTrack)
     {
@@ -300,11 +302,11 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
             if (dispatcher == null) return;
             if (!dispatcher.CheckAccess())
             {
-                dispatcher.BeginInvoke(() => OnWaveQueueEnded(sender, lastTrack));
+                _ = dispatcher.BeginInvoke(() => OnWaveQueueEnded(sender, lastTrack));
                 return;
             }
 
-            if (!await RunRefreshAsync()) return; // ошибка генерации уже показана
+            if (!await RunRefreshAsync()) return; // a generation error is already shown
             if (Cards.Count > 0) await PlayCardAsync(Cards[0]);
         }
         catch (Exception ex)
@@ -332,14 +334,14 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
                 ArtworkUrl = YmJsonParser.BuildArtworkUrl(item.CoverUri) ?? string.Empty,
                 Streamable = item.Available,
                 LocalTrack = localTrack,
-                ArtworkLocalPath = item.LocalPath // VK/SC: обложка уже в кэше
+                ArtworkLocalPath = item.LocalPath // VK/SC: cover already in cache
             };
         }).ToList();
     }
 
-    /// <summary>Батч-закачка обложек кандидатов в общий artworks_cache (до 4 параллельных
-    /// скачиваний): Яндекс — через YmArtworkCache, SoundCloud — через прокси-слой SC
-    /// (i1.sndcdn.com напрямую недоступен). VK/локальные приходят с готовыми путями.</summary>
+    /// <summary>Batch download of candidate covers into the shared artworks_cache (up to 4
+    /// parallel downloads): Yandex — via YmArtworkCache, SoundCloud — via the SC proxy
+    /// layer (i1.sndcdn.com is not directly reachable). VK/local arrive with ready paths.</summary>
     private async Task DownloadArtworksAsync(List<WaveCard> cards, CancellationToken ct)
     {
         var pending = cards
@@ -377,17 +379,17 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
         foreach (var (card, path) in results)
         {
             if (path == null) continue;
-            card.ArtworkLocalPath = path; // INPC карточки → LazyCover.Path перечитает
+            card.ArtworkLocalPath = path; // card INPC → LazyCover.Path re-reads
         }
     }
 
     private void RefreshHeaderText()
         => CounterText = $"{Cards.Count} {Loc.Get("WaveCounter")}";
 
-    // ===================== Hero «пластинка» =====================
+    // ===================== Hero "vinyl" =====================
 
-    /// <summary>Пересчёт hero-тройки и подсветки текущей карточки по состоянию плеера.
-    /// Ничего не играет — hero показывает первую карточку волны (не крутится).</summary>
+    /// <summary>Recomputes the hero trio and the current-card highlight from player state.
+    /// Nothing playing — the hero shows the wave's first card (not spinning).</summary>
     private void UpdateCurrentFlags()
     {
         var current = _audio.CurrentTrack;
@@ -402,9 +404,9 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
 
         if (idx < 0)
         {
-            // Трек волны не играет: hero = первая карточка, но пластинка не крутится.
-            // Боковые слоты выставляются ДО HeroCurrent: в обработчике PropertyChanged
-            // (анимация перелёта во View) оба слота уже должны быть актуальны.
+            // No wave track playing: hero = first card, vinyl not spinning.
+            // Side slots are set BEFORE HeroCurrent: in the PropertyChanged handler
+            // (fly-over animation in the View) both slots must already be current.
             HeroPrev = null;
             HeroNext = Cards.Count > 1 ? Cards[1] : null;
             HeroCurrent = Cards.Count > 0 ? Cards[0] : null;
@@ -418,11 +420,11 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
         IsHeroPlaying = _audio.IsPlaying;
     }
 
-    // ===================== Воспроизведение =====================
+    // ===================== Playback =====================
 
-    /// <summary>Runtime-трек карточки по её источнику: Яндекс — как карточки страницы
-    /// ЯМ, VK/SC — как карточки своих страниц, local — файл библиотеки (играет офлайн,
-    /// без резолва). FilePath пуст у платформенных — резолвится плеером на переходах.</summary>
+    /// <summary>Runtime track of a card by its source: Yandex — like the YM page cards,
+    /// VK/SC — like their pages' cards, local — a library file (plays offline, no
+    /// resolve). Platform cards have an empty FilePath — resolved by the player on transitions.</summary>
     private static Track BuildRuntimeTrack(WaveCard card, int index)
     {
         if (card.Source == Track.SourceYandex)
@@ -438,7 +440,7 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
                 card.PlatformId, card.Title, card.Artist, card.DurationMs,
                 card.ArtworkLocalPath, index);
 
-        // local: файл известен — играется напрямую, резолв не нужен.
+        // local: the file is known — plays directly, no resolve needed.
         return new Track
         {
             Id = -1 - index,
@@ -454,9 +456,9 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Клик по карточке (hero, прошлый/следующий, сетка): играет волну как очередь.
-    /// Повторный клик по играющей — пауза/возобновление. Анти-дубль клика — по образцу
-    /// YmMusicViewModel (Play-кнопка и MouseLeftButtonUp за миллисекунды).
+    /// Card click (hero, prev/next, grid): plays the wave as a queue.
+    /// Clicking the playing one again — pause/resume. Anti-double-click follows
+    /// the YmMusicViewModel pattern (Play button and MouseLeftButtonUp within milliseconds).
     /// </summary>
     private WaveCard? _lastClickedCard;
     private DateTime _lastClickTime;
@@ -475,7 +477,7 @@ public partial class WaveViewModel : PageViewModel, ISearchablePage
 
         try
         {
-            // Повторный клик по играющей карточке волны — пауза/возобновление.
+            // Clicking the playing wave card again — pause/resume.
             if (_audio.CurrentTrack is Track current
                 && current.Source == card.Source && current.ScId == card.PlatformId)
             {

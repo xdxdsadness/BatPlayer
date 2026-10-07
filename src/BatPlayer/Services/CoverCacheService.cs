@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Кэш обложек альбомов на диске. Имя файла = SHA256(coverBytes).jpg.
-/// При запросе обложки сервис сначала проверяет кэш, иначе извлекает из файла.
+/// On-disk cache of album covers. File name = SHA256(coverBytes).jpg.
+/// On request the service checks the cache first, otherwise extracts from the file.
 /// </summary>
 public sealed class CoverCacheService
 {
@@ -51,14 +51,5 @@ public sealed class CoverCacheService
                 File.Delete(f);
         }
         catch (Exception ex) { Logger.Error(ex, "Cover cache clear failed"); }
-    }
-
-    public long GetCacheSizeBytes()
-    {
-        try
-        {
-            return Directory.EnumerateFiles(_cacheDir).Sum(f => new FileInfo(f).Length);
-        }
-        catch { return 0; }
     }
 }

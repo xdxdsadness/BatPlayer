@@ -16,8 +16,8 @@ using BatPlayer.Services.SoundCloud;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Карточка лайкнутого трека SoundCloud. Строится один раз при загрузке страницы и
-/// после синка — поэтому вычисляемые свойства (IsPlayable и т.п.) не нуждаются в INPC.
+/// Card of a liked SoundCloud track. Built once at page load and after sync — so
+/// computed properties (IsPlayable etc.) do not need INPC.
 /// </summary>
 public sealed class SoundCloudCard
 {
@@ -26,39 +26,40 @@ public sealed class SoundCloudCard
     public required string Artist { get; init; }
     public required long DurationMs { get; init; }
     public required string ArtworkUrl { get; init; }
-    /// <summary>Имя исполнителя для отображения (общий ArtistHoverTemplate биндит
-    /// именно его): пустое значение заменяется локализованным «Unknown artist».</summary>
+    /// <summary>Artist name for display (ArtistHoverTemplate binds exactly this): an empty
+    /// value is replaced by the localized "Unknown artist".</summary>
     public string DisplayArtist => string.IsNullOrWhiteSpace(Artist)
         ? Localization.Loc.Get("UnknownArtist")
         : Artist;
 
-    /// <summary>Путь обложки в локальном кэше (artworks_cache); null — ещё не скачана,
-    /// карточка показывает плейсхолдер IconCloud. Биндим именно локальный путь: i1.sndcdn.com
-    /// недоступен напрямую, а BitmapImage качает без прокси.</summary>
+    /// <summary>Cover path in the local cache (artworks_cache); null — not downloaded yet,
+    /// the card shows an IconCloud placeholder. We bind the local path: i1.sndcdn.com is
+    /// not directly reachable, and BitmapImage downloads without a proxy.</summary>
     public required string? ArtworkLocalPath { get; init; }
 
     public required string PermalinkUrl { get; init; }
     public required bool Streamable { get; init; }
 
-    /// <summary>Совпавший трек локальной библиотеки (null — матча нет).</summary>
+    /// <summary>Matched track from the local library (null — no match).</summary>
     public Track? LocalTrack { get; init; }
 
-    /// <summary>Есть ли матч с локальной библиотекой (бейдж IconFile, офлайн-воспроизведение).</summary>
+    /// <summary>Whether there is a local-library match (IconFile badge, offline playback).</summary>
     public bool HasLocalMatch => LocalTrack != null;
 
-    /// <summary>Можно ли воспроизвести: стрим доступен ИЛИ есть локальный матч.</summary>
+    /// <summary>Playable: stream available OR a local match exists.</summary>
     public bool IsPlayable => Streamable || HasLocalMatch;
 
-    /// <summary>Недоступные треки приглушаются (по образцу недоступных локальных файлов).</summary>
+    /// <summary>Unavailable tracks are dimmed (modeled on unavailable local files).</summary>
     public double CardOpacity => IsPlayable ? 1.0 : 0.45;
 
     public TimeSpan Duration => TimeSpan.FromMilliseconds(DurationMs);
 }
 
 /// <summary>
-/// Страница «SoundCloud»: сетка лайкнутых треков из локальной БД (soundcloud_likes),
-/// синхронизация с /me/likes/tracks, матчинг с локальной библиотекой, стриминг.
-/// Онлайн-треки качаются в дисковый кэш (SoundCloudStreamCache) и играются локальным файлом.
+/// SoundCloud page: grid of liked tracks from the local DB (soundcloud_likes),
+/// sync with /me/likes/tracks, matching with the local library, streaming.
+/// Online tracks are downloaded to the disk cache (SoundCloudStreamCache) and played
+/// from the local file.
 /// </summary>
 public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
 {
@@ -67,29 +68,29 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
     private readonly AudioService _audio;
     private readonly SoundCloudLikesRepository _repository;
 
-    // Локальная библиотека для матчинга; перечитывается при каждой загрузке страницы.
+    // Local library for matching; re-read on every page load.
     private List<Track> _localTracks = new();
 
-    // Авто-синк «при первом открытии» — выполняется один раз за жизнь приложения.
+    // "Auto-sync on first open" — runs once per app lifetime.
     private bool _autoSyncChecked;
 
-    // Карточки уже прочитаны из БД: повторный вход на страницу
-    // не пересобирает список (данные меняет только синк).
+    // Cards already read from the DB: re-entering the page does not rebuild
+    // the list (only the sync changes the data).
     private bool _cardsLoaded;
 
-    /// <summary>Карта «путь кэш-файла обложки → карточка» для лоадера LazyCover:
-    /// видимая карточка без скачанной обложки качает её по требованию (см. ctor).</summary>
+    /// <summary>Map "cover cache-file path → card" for the LazyCover loader: a visible
+    /// card without a downloaded cover fetches it on demand (see ctor).</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SoundCloudCard> _cardsByArtworkPath = new();
 
     public ObservableCollection<SoundCloudCard> Cards { get; } = new();
 
-    // === Универсальный поиск (строка в шапке окна) ===
-    // Полный список карточек хранится отдельно: Cards показывает либо всё, либо
-    // отфильтрованное подмножество; после синка/перезагрузки фильтр применяется заново.
+    // === Universal search (the bar in the window header) ===
+    // The full card list is stored separately: Cards shows either everything or the
+    // filtered subset; after a sync/reload the filter is applied again.
     private List<SoundCloudCard> _allCards = new();
     private string _searchQuery = string.Empty;
 
-    /// <summary>Фильтр карточек страницы по названию и исполнителю; пустой запрос — полный список.</summary>
+    /// <summary>Filters the page's cards by title and artist; an empty query shows the full list.</summary>
     public void ApplySearch(string? query)
     {
         _searchQuery = query ?? string.Empty;
@@ -115,23 +116,23 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
     [ObservableProperty] private string _counterText = string.Empty;
     [ObservableProperty] private string _lastSyncedText = string.Empty;
 
-    /// <summary>Идёт загрузка SC-трека в кэш: синк и клики по карточкам игнорируются.</summary>
+    /// <summary>An SC track is being loaded into the cache: sync and card clicks are ignored.</summary>
     [ObservableProperty] private bool _isLoadingTrack;
 
-    /// <summary>Идёт чтение карточек из БД: на это время показываются скелетоны.</summary>
+    /// <summary>Cards are being read from the DB: skeletons are shown meanwhile.</summary>
     [ObservableProperty] private bool _isLoading = true;
 
-    /// <summary>Ошибки для тоста главного окна (MainViewModel.ErrorMessage).</summary>
+    /// <summary>Errors for the main window toast (MainViewModel.ErrorMessage).</summary>
     public event EventHandler<string>? ErrorOccurred;
 
-    /// <summary>Подключён ли аккаунт по наличию sc_auth.json (без сетевой проверки).</summary>
+    /// <summary>Whether an account is connected, by the presence of sc_auth.json (no network check).</summary>
     public bool IsConnected => _soundCloud.HasAuthFile;
 
-    /// <summary>Показывать «пустую страницу»: загрузка закончена и карточек нет.</summary>
+    /// <summary>Show the "empty page": loading finished and there are no cards.</summary>
     public bool ShowEmptyState => !IsLoading && Cards.Count == 0;
 
-    /// <param name="streamCache">Не используется: файлы SC-карточек резолвит плеер
-    /// (AudioService.FilePathResolver); параметр оставлен для совместимости вызовов.</param>
+    /// <param name="streamCache">Unused: SC card files are resolved by the player
+    /// (AudioService.FilePathResolver); the parameter is kept for call-site compatibility.</param>
     public SoundCloudLikesViewModel(SoundCloudService soundCloud, LibraryService library,
                                     AudioService audio, SoundCloudLikesRepository repository,
                                     SoundCloudStreamCache? streamCache = null)
@@ -157,10 +158,10 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
             });
         };
 
-        // Лоадер LazyCover: у реализовавшейся (видимой) карточки файл обложки ещё не
-        // скачан → качаем его сейчас. Очередь LazyCover приоритетная, поэтому сначала
-        // качаются обложки ближних карточек, при скролле — только видимые. Батч-синк
-        // докачивает остальное фоном через тот же дедуп SoundCloudService.
+        // LazyCover loader: a realized (visible) card whose cover file is not yet
+        // downloaded → fetch it now. The LazyCover queue is priority-based, so nearby
+        // cards' covers download first; on scroll only visible ones. Batch sync
+        // downloads the rest in the background via the same SoundCloudService dedup.
         Controls.LazyCover.SetFileLoader(async path =>
         {
             if (!_cardsByArtworkPath.TryGetValue(path, out var card)) return false;
@@ -173,8 +174,8 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Вызывается из MainViewModel.Navigate("SoundCloud"): перечитать карточки из БД;
-    /// при первом открытии — авто-синк, если подключено и прошло &gt;30 минут.
+    /// Called from MainViewModel.Navigate("SoundCloud"): re-read cards from the DB;
+    /// on first open — auto-sync, if connected and &gt;30 minutes have passed.
     /// </summary>
     public async Task OnNavigatedAsync()
     {
@@ -204,16 +205,18 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
             _localTracks = localTask.Result;
             var rows = rowsTask.Result;
 
-            // Тяжёлая часть (индекс матчинга + сборка карточек по всей библиотеке) —
-            // в фоне: на UI-потоке она держала компоновку, и переход на страницу лагал.
+            // The heavy part (match index + card building over the whole library) —
+            // in the background: on the UI thread it held up layout and the page
+            // transition lagged.
             var fresh = await Task.Run(() =>
             {
-                // Матчинг через прединдекс: O(M) на индекс + O(1) на карточку
-                // (раньше O(N*M) сравнений строк на каждый вход в бар).
+                // Matching via a prebuilt index: O(M) for the index + O(1) per card
+                // (previously O(N*M) string comparisons on every page entry).
                 var index = MatchHelper.BuildIndex(_localTracks);
 
-                // Батчевое обновление: панель реализует только окно, но Clear+Add по одному
-                // даёт N уведомлений; при сотнях карточек заметно. Собираем в список.
+                // Batched update: the panel implements only window virtualization, but
+                // Clear+Add one by one gives N notifications; noticeable with hundreds
+                // of cards. Build into a list.
                 var list = new List<SoundCloudCard>(rows.Count);
                 foreach (var row in rows)
                 {
@@ -231,9 +234,9 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
                     });
                 }
 
-                // Карта для лоадера LazyCover: по пути кэша он находит карточку и качает
-                // ей обложку по требованию (файл может появиться и позже, от батч-синка —
-                // тогда лоадер просто вернёт уже скачанный файл мгновенно).
+                // Map for the LazyCover loader: from a cache path it finds the card and
+                // downloads its cover on demand (the file may appear later via batch sync —
+                // the loader then instantly returns the already-downloaded file).
                 _cardsByArtworkPath.Clear();
                 foreach (var card in list)
                     _cardsByArtworkPath[_soundCloud.GetArtworkCachePath(card.ScId)] = card;
@@ -254,8 +257,8 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
         }
     }
 
-    /// <summary>Перемешать карточки страницы; если играет SC-трек из этого списка —
-    /// очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the page's cards; if an SC track from this list is playing,
+    /// the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShuffleCards()
     {
@@ -313,14 +316,14 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Клик по карточке: играет её (файл резолвится плеером через FilePathResolver —
-    /// локальный матч или mp3 из кэша/сети). Очередь = все играбельные карточки страницы
-    /// (streamable или с локальным матчем), поэтому Previous/Next ходят по всему списку.
-    /// Недоступные (не streamable, без матча) — тост объясняет.
+    /// Card click: plays it (the file is resolved by the player via FilePathResolver —
+    /// local match or mp3 from cache/network). Queue = all playable cards of the page
+    /// (streamable or with a local match), so Previous/Next walk the whole list.
+    /// Unavailable (not streamable, no match) — a toast explains.
     /// </summary>
-    /// <summary>Анти-дубль клика: команда кнопки Play на обложке и всплывший до карточки
-    /// MouseLeftButtonUp дёргают одну команду дважды за миллисекунды; второй вызов видел
-    /// «трек уже играет» и ставил его на паузу — клик «не работал с первого раза».</summary>
+    /// <summary>Anti-double-click: the artwork Play button's command and a MouseLeftButtonUp
+    /// bubbling to the card fire the same command twice within milliseconds; the second
+    /// call saw "track already playing" and paused it — the click "did not work first time".</summary>
     private SoundCloudCard? _lastClickedCard;
     private DateTime _lastClickTime;
 
@@ -330,8 +333,8 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
         if (card == null || IsSyncing || IsLoadingTrack) return Task.CompletedTask;
         if (!card.IsPlayable)
         {
-            // Нестримуемая и без локального матча — клик по дизайну пустой; молчание
-            // выглядело как «плеер сломался», объясняем тостом.
+            // Not streamable and no local match — the click is empty by design; silence
+            // looked like "the player is broken", so we explain with a toast.
             ErrorOccurred?.Invoke(this, Loc.Get("SoundCloudUnavailable"));
             return Task.CompletedTask;
         }
@@ -344,9 +347,9 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
 
         try
         {
-            // Повторный клик по играющей SC-карточке — пауза/возобновление. Но пока трек
-            // ещё ОТКРЫВАЕТСЯ (ни Playing, ни Paused — идёт резолв потока), тоггл ломал
-            // цепочку открытия и звук не появлялся с первого клика.
+            // Clicking the playing SC card again — pause/resume. But while the track is
+            // still OPENING (neither Playing nor Paused — stream resolution in progress),
+            // toggling broke the open chain and sound did not appear on the first click.
             if (_audio.CurrentTrack is Track current
                 && current.Source == Track.SourceSoundCloud && current.ScId == card.ScId)
             {
@@ -355,8 +358,8 @@ public partial class SoundCloudLikesViewModel : PageViewModel, ISearchablePage
                 return Task.CompletedTask;
             }
 
-            // Runtime-карточки строятся на клик (не хранятся в карточках страницы):
-            // FilePath пуст — резолвится на каждом переходе по очереди.
+            // Runtime cards are built on click (not stored on the page's cards):
+            // FilePath is empty — resolved on every step through the queue.
             var queue = Cards.Where(c => c.IsPlayable)
                              .Select((c, i) => SoundCloudRuntimeTracks.BuildRuntimeTrack(
                                  c.ScId, c.Title, c.Artist, c.DurationMs, c.ArtworkLocalPath, i))

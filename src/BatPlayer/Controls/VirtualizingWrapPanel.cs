@@ -9,21 +9,22 @@ using System.Windows.Media;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Виртуализирующая панель-сетка: фиксированное число колонок равной ширины, высота строки —
-/// по самому высокому ребёнку окна. Замена UniformGrid в списке карточек (Library/SoundCloud/
-/// YM/VK/Artists/Downloads/ArtistProfile): UniformGrid не виртуализирует — сотни карточек
-/// реализуются все сразу (память + лаг при навигации), а здесь создаются только строки
-/// видимой области ± буфер: обложки загружаются лениво, «по мере скролла».
+/// Virtualizing grid panel: a fixed number of equal-width columns, row height —
+/// by the tallest child of the window. Replaces UniformGrid in card lists (Library/
+/// SoundCloud/YM/VK/Artists/Downloads/ArtistProfile): UniformGrid doesn't virtualize —
+/// hundreds of cards realize all at once (memory + navigation lag), while here only the
+/// rows of the visible area ± buffer are created: covers load lazily, "as you scroll".
 ///
-/// Реализация по канону VirtualizingPanel + IScrollInfo: ScrollViewer (CanContentScroll)
-/// делегирует скролл панели; экстент = строки × высота строки; контейнеры ре-реализуются
-/// под окно видимости через ItemContainerGenerator. Вертикальный скролл — пиксельный.
+/// Implementation follows the VirtualizingPanel + IScrollInfo canon: the ScrollViewer
+/// (CanContentScroll) delegates scrolling to the panel; extent = rows × row height;
+/// containers are re-realized for the visibility window via ItemContainerGenerator.
+/// Vertical scrolling is pixel-based.
 /// </summary>
 public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 {
-    // ========================= Настройки =========================
+    // ========================= Settings =========================
 
-    /// <summary>Число колонок сетки (как Columns у UniformGrid).</summary>
+    /// <summary>Number of grid columns (like UniformGrid's Columns).</summary>
     public static readonly DependencyProperty ColumnsProperty = DependencyProperty.Register(
         nameof(Columns), typeof(int), typeof(VirtualizingWrapPanel),
         new PropertyMetadata(4, OnGeometryInvalidated));
@@ -34,62 +35,61 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         set => SetValue(ColumnsProperty, value);
     }
 
-    /// <summary>Строк выше/ниже видимой области держим реализованными (запас при скролле).
-    /// 2, а не 1: ряд реализуется ЗАГОДЯ до въезда в кадр — длинный плавный глайд
-    /// SmoothScroll не спотыкается о создание тяжёлого шаблона карточки на лету.</summary>
+    /// <summary>Rows above/below the visible area kept realized (scroll margin).
+    /// 2, not 1: a row is realized AHEAD of entering the frame — SmoothScroll's long
+    /// smooth glide doesn't stumble on creating a heavy card template on the fly.</summary>
     private const int BufferRows = 2;
 
     private const double ScrollLineDelta = 16.0;
     private const double WheelLinesPerTick = 3.0;
 
-    // ===== Плавный (анимированный) скролл =====
-    // Колесо/построчный скролл не прыгают мгновенно: цель пишется в _targetOffsetY,
-    // а _offsetY догоняет её экспоненциально в таймере ~60 fps — контент «скользит»,
-    // а не дёргается. Прямые установки offset (скроллбар, MakeVisible, сбросы
-    // коллекции) идут мимо анимации: и offset, и цель выставляются сразу.
-    /// <summary>Доля приближения к цели за тик: 0.35 — дистанция схлопывается за ~4-5
-    /// кадров (~70мс), движение остаётся быстрым, но с видимой инерцией.</summary>
+    // ===== Smooth (animated) scrolling =====
+    // Wheel/line scrolling doesn't jump instantly: the target is written to _targetOffsetY
+    // and _offsetY catches up exponentially in a ~60fps timer — content "glides" instead
+    // of jerking. Direct offset assignments (scrollbar, MakeVisible, collection resets)
+    // bypass the animation: both the offset and the target are set immediately.
+    /// <summary>Fraction of the distance to the target per tick: 0.35 closes the gap in
+    /// ~4-5 frames (~70ms); the motion stays fast but with visible inertia.</summary>
     private const double SmoothScrollLerp = 0.35;
-    /// <summary>Ближе этого (px) к цели — доезжаем мгновенно и останавливаем таймер.</summary>
+    /// <summary>Closer than this (px) to the target — snap instantly and stop the timer.</summary>
     private const double SmoothScrollSnap = 0.5;
-    /// <summary>Период тика анимации ~ один кадр при 60 Гц.</summary>
+    /// <summary>Animation tick period ≈ one frame at 60 Hz.</summary>
     private const int SmoothScrollIntervalMs = 16;
 
-    /// <summary>Оценка высоты строки до первого измерения: карточка с квадратной обложкой
-    /// ≈ ширина ячейки + подписи. После первого измерения уточняется фактической высотой.</summary>
+    /// <summary>Row height estimate before the first measure: a card with a square cover
+    /// ≈ cell width + captions. After the first measure it's refined to the actual height.</summary>
     private const double InitialRowHeightFactor = 1.2;
 
-    /// <summary>Оценка вьюпорта до первого подключения ScrollViewer (px):
-    /// достаточно для первых рядов, не даёт реализовать весь список.</summary>
+    /// <summary>Viewport estimate before the ScrollViewer is attached (px):
+    /// enough for the first rows, doesn't realize the whole list.</summary>
     private const double InitialEstimatedViewport = 720.0;
 
-    // ======================= Состояние ===========================
+    // ======================= State ===========================
 
     private ScrollViewer? _scrollOwner;
 
-    private double _offsetY;                 // вертикальный скролл в пикселях
-    private double _targetOffsetY;           // цель плавного скролла (колесо/построчно)
+    private double _offsetY;                 // vertical scroll in pixels
+    private double _targetOffsetY;           // smooth scroll target (wheel/line)
     private System.Windows.Threading.DispatcherTimer? _smoothScrollTimer;
     private double _viewportHeight;
     private double _extentHeight;
-    private double _itemWidth;               // ширина ячейки = viewport / Columns
+    private double _itemWidth;               // cell width = viewport / Columns
     private double _lastItemWidth = double.NaN;
-    private double _rowHeight = double.NaN;  // высота строки; NaN — переоценить
-    // Ширина, которой карточки мерились последний раз: скролл-таймер дёргает
-    // InvalidateMeasure ~60 раз/с, и без этого поля каждый тик ПЕРЕМЕРИВАЛ все
-    // реализованные карточки (десятки тяжёлых шаблонов на кадр — главный источник
-    // рывков при скролле больших библиотек). Дети с валидным measure и той же
-    // шириной пропускаются; любое изменение содержимого карточки само сбрасывает
-    // её IsMeasureValid → она перемеряется штатно.
+    private double _rowHeight = double.NaN;  // row height; NaN — re-estimate
+    // The width the cards were last measured at: the scroll timer fires InvalidateMeasure
+    // ~60 times/sec, and without this field every tick RE-MEASURED all realized cards
+    // (dozens of heavy templates per frame — the main source of jank when scrolling
+    // large libraries). Children with valid measure and the same width are skipped; any
+    // change to a card's content resets its IsMeasureValid itself → it re-measures normally.
     private double _measuredChildWidth = double.NaN;
 
     /// <summary>
-    /// Владелец панели: ближайший ItemsControl вверх по визуальному дереву
-    /// (ListView и есть предок: ListView → Border → ScrollViewer → … →
-    /// ItemsPresenter → панель). ВАЖНО: ItemsControl.ItemsControlFromItemContainer
-    /// для самой панели-хоста возвращает null всегда (STA-зонд подтвердил даже
-    /// для штатного VirtualizingStackPanel) — генератор панели подключается
-    /// только через ItemsPresenter, а ItemsControl надёжнее искать по дереву.
+    /// Panel owner: the nearest ItemsControl up the visual tree (ListView is an ancestor:
+    /// ListView → Border → ScrollViewer → … → ItemsPresenter → panel). IMPORTANT:
+    /// ItemsControl.ItemsControlFromItemContainer for the host panel itself always returns
+    /// null (verified via an STA probe even for the stock VirtualizingStackPanel) — the
+    /// panel's generator is attached only through ItemsPresenter, so the ItemsControl is
+    /// more reliably found by walking the tree.
     /// </summary>
     private ItemsControl? FindItemsOwner()
     {
@@ -105,14 +105,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     }
 
     /// <summary>
-    /// Коллекция элементов владельца. Пока панель не вставлена в дерево
-    /// ItemsControl-а (первый measure может случиться раньше), ведём себя
-    /// как пустая панель — вместо падения всего layout-а.
-    /// ВАЖНО: уведомления генератора WPF доставляет только штатным панелям
-    /// (STA-зонд: у нашей панели VirtualizingPanel.ItemContainerGenerator
-    /// навсегда null), поэтому изменения Items слушаем напрямую —
-    /// ItemCollection реализует INotifyCollectionChanged. Без этого
-    /// Clear/Add карточек при навигации не перерисовывали бы панель.
+    /// The owner's item collection. Until the panel is inserted into the ItemsControl's
+    /// tree (the first measure can happen earlier), behave like an empty panel — instead
+    /// of crashing the whole layout.
+    /// IMPORTANT: WPF delivers generator notifications only to stock panels (STA probe:
+    /// our panel's VirtualizingPanel.ItemContainerGenerator is null forever), so Items
+    /// changes are listened to directly — ItemCollection implements
+    /// INotifyCollectionChanged. Without this, Clear/Add of cards on navigation
+    /// wouldn't repaint the panel.
     /// </summary>
     private System.Windows.Controls.ItemCollection? _subscribedItems;
 
@@ -134,7 +134,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         return false;
     }
 
-    /// <summary>Изменение Items (Clear/Add при навигации и синках): сброс окна и перелейаут.</summary>
+    /// <summary>Items change (Clear/Add on navigation and syncs): reset the window and re-layout.</summary>
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)
@@ -159,13 +159,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     private ItemContainerGenerator? _panelGenerator;
 
     /// <summary>
-    /// Генератор, привязанный к этой панели. Приоритет — штатный
-    /// VirtualizingPanel.ItemContainerGenerator (его подключает ItemsPresenter
-    /// у штатных панелей); если он не пришёл — создаём панельный view сами
-    /// через публичный IItemContainerGenerator.GetItemContainerGeneratorForPanel.
-    /// ВАЖНО: «сырой» ItemContainerGenerator владельца использовать нельзя —
-    /// у него своя сессия генерации, и GenerateNext с ним падает
-    /// («Must call GenerateNext while content generation is in progress»).
+    /// The generator bound to this panel. Priority goes to the stock
+    /// VirtualizingPanel.ItemContainerGenerator (attached by ItemsPresenter for stock
+    /// panels); if it didn't arrive, create a panel view ourselves via the public
+    /// IItemContainerGenerator.GetItemContainerGeneratorForPanel.
+    /// IMPORTANT: the owner's "raw" ItemContainerGenerator must not be used — it has its
+    /// own generation session, and GenerateNext with it throws
+    /// ("Must call GenerateNext while content generation is in progress").
     /// </summary>
     private ItemContainerGenerator? PanelGenerator
     {
@@ -185,7 +185,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         }
     }
 
-    /// <summary>Ближайший ItemsControl над элементом (контейнером карточки).</summary>
+    /// <summary>Nearest ItemsControl above the element (a card container).</summary>
     private static ItemsControl? FindItemsOwnerFrom(DependencyObject start)
     {
         DependencyObject d = start;
@@ -244,14 +244,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     public void PageLeft() { }
     public void PageRight() { }
 
-    public void SetHorizontalOffset(double offset) { /* горизонтального скролла нет */ }
+    public void SetHorizontalOffset(double offset) { /* no horizontal scrolling */ }
 
     public void SetVerticalOffset(double offset)
     {
         var max = Math.Max(0, _extentHeight - _viewportHeight);
         var clamped = Math.Max(0, Math.Min(offset, max));
-        // Прямая установка (скроллбар, MakeVisible, сброс при изменении коллекции):
-        // без анимации — гасим таймер и синхронно ставим offset и цель.
+        // Direct assignment (scrollbar, MakeVisible, reset on collection change):
+        // no animation — stop the timer and set the offset and target synchronously.
         StopSmoothScroll();
         if (Math.Abs(clamped - _offsetY) < 0.5 && Math.Abs(clamped - _targetOffsetY) < 0.5) return;
         _offsetY = clamped;
@@ -260,9 +260,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _scrollOwner?.InvalidateScrollInfo();
     }
 
-    /// <summary>Задать цель плавного скролла (колесо/построчно): кламп по экстенту,
-    /// таймер анимации запускается лениво и переиспользуется (панель живёт долго —
-    /// таймер один на всю жизнь панели, не плодится на каждый скролл).</summary>
+    /// <summary>Set the smooth scroll target (wheel/line): clamp to the extent; the
+    /// animation timer is started lazily and reused (the panel lives long — one timer
+    /// for the panel's lifetime, not one per scroll).</summary>
     private void SmoothScrollTo(double target)
     {
         var max = Math.Max(0, _extentHeight - _viewportHeight);
@@ -277,9 +277,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _smoothScrollTimer.Start();
     }
 
-    /// <summary>Тик анимации: _offsetY экспоненциально догоняет цель; на дистанции
-    /// меньше порога — доезжаем и останавливаемся. Кламп цели по экстенту закрывает
-    /// случай, когда список сократился в середине анимации.</summary>
+    /// <summary>Animation tick: _offsetY catches up to the target exponentially; below
+    /// the threshold distance — snap and stop. Clamping the target to the extent covers
+    /// the case where the list shrank mid-animation.</summary>
     private void OnSmoothScrollTick(object? sender, EventArgs e)
     {
         var max = Math.Max(0, _extentHeight - _viewportHeight);
@@ -306,7 +306,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             _smoothScrollTimer.Stop();
     }
 
-    /// <summary>Сброс скролла в начало без анимации (сбросы коллекции, пересборка списка).</summary>
+    /// <summary>Reset scroll to the top without animation (collection resets, list rebuilds).</summary>
     private void ResetScrollOffset()
     {
         StopSmoothScroll();
@@ -314,19 +314,19 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _targetOffsetY = 0;
     }
 
-    // ====================== Измерение ============================
+    // ====================== Measuring ============================
 
     protected override Size MeasureOverride(Size availableSize)
     {
         if (Columns <= 0) return default;
-        // Владелец ещё не подключил панель: ведём себя как пустая панель.
-        // availableSize может быть бесконечным (measure вне ScrollViewer) —
-        // бесконечность возвращать нельзя, отдаём нулевой желаемый размер.
+        // The owner hasn't attached the panel yet: behave like an empty panel.
+        // availableSize can be infinite (measure outside a ScrollViewer) —
+        // infinity must not be returned; give a zero desired size.
         if (!TryGetItems(out var items))
             return double.IsInfinity(availableSize.Height) ? default : availableSize;
         if (items.Count == 0)
         {
-            // Пустой список: сохраняем вьюпорт, чтобы страница не схлопывалась.
+            // Empty list: keep the viewport so the page doesn't collapse.
             _viewportHeight = double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height;
             return availableSize;
         }
@@ -334,7 +334,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _itemWidth = double.IsInfinity(availableSize.Width) ? double.NaN : availableSize.Width / Columns;
         if (double.IsNaN(_itemWidth) || _itemWidth <= 0) return default;
 
-        // Изменение ширины ячейки (ресайз окна) — высоты строк устарели.
+        // Cell width change (window resize) — row heights are stale.
         if (!double.IsNaN(_lastItemWidth) && Math.Abs(_itemWidth - _lastItemWidth) > 0.5)
             _rowHeight = double.NaN;
         _lastItemWidth = _itemWidth;
@@ -344,11 +344,11 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         var rowsTotal = (items.Count + Columns - 1) / Columns;
         _extentHeight = rowsTotal * _rowHeight;
 
-        // Бесконечная высота (measure до подключения ScrollViewer либо
-        // CanContentScroll=false): прокрутка всё равно ведётся по пикселям от
-        // DesiredSize. Реализуем только начальное окно по оценочному вьюпорту —
-        // НЕ все строки (реализация всех карточек = прежний фриз на больших
-        // библиотеках), а высоту отдаём полную, чтобы скроллбар был честным.
+        // Infinite height (measure before the ScrollViewer is attached, or
+        // CanContentScroll=false): scrolling is still pixel-based from DesiredSize.
+        // Realize only the initial window by the estimated viewport — NOT all rows
+        // (realizing every card = the old freeze on large libraries), and report the
+        // full height so the scrollbar is honest.
         if (double.IsInfinity(availableSize.Height))
         {
             if (_viewportHeight <= 0) _viewportHeight = InitialEstimatedViewport;
@@ -360,12 +360,12 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _viewportHeight = availableSize.Height;
         MeasureWindow(availableSize);
 
-        // Высота строки по факту измерения окна; если оценка врала — пересчитать окно
-        // ещё раз с точной высотой. Смещение при коррекции МАСШТАБИРУЕТСЯ под новую
-        // высоту: без этого та же пиксельная позиция после смены _rowHeight указывала
-        // на другой ряд, и при скролле контент «рывком» уезжал (дёргалось от того,
-        // что свежереализованный контейнер мерился до применения квадратной высоты
-        // обложки). Порог 2px — гасит болтанку от шума измерений.
+        // Row height from the actual window measurement; if the estimate was wrong,
+        // re-measure the window once more with the exact height. The offset during the
+        // correction is SCALED to the new height: without it the same pixel position
+        // after _rowHeight changed pointed at a different row, and scrolling "yanked"
+        // the content (a freshly realized container was measured before the square
+        // cover height applied). The 2px threshold damps measurement-noise jitter.
         var actual = ActualRowHeight();
         if (actual > 0 && Math.Abs(actual - _rowHeight) > 2)
         {
@@ -382,8 +382,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         return availableSize;
     }
 
-    /// <summary>Реализация контейнеров окна видимости [firstBuffered..lastBuffered] ± буфер;
-    /// остальные — де-реализуются (ленивая загрузка обложек).</summary>
+    /// <summary>Realize containers of the visibility window [firstBuffered..lastBuffered]
+    /// ± buffer; the rest are de-realized (lazy cover loading).</summary>
     private void MeasureWindow(Size availableSize)
     {
         if (!TryGetItems(out var items)) return;
@@ -400,15 +400,15 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         if (classGenerator == null) return;
         var iface = (IItemContainerGenerator)classGenerator;
 
-        // Смена ширины ячейки (ресайз окна) — все дети мерились старой шириной,
-        // перемериваем принудительно; в обычных проходах (в т.ч. каждый тик
-        // плавного скролла) перемериваются только новые/инвалидные дети.
+        // Cell width change (window resize) — all children were measured at the old
+        // width, force a re-measure; in normal passes (including every smooth-scroll
+        // tick) only new/invalidated children are measured.
         var remeasureAll = double.IsNaN(_measuredChildWidth)
                            || Math.Abs(_measuredChildWidth - _itemWidth) > 0.5;
 
-        // 1) Де-реализация вышедших из окна (и сирот после изменений коллекции).
-        //    VirtualizingPanel не имеет одиночного RemoveInternalChild — используем
-        //    RemoveInternalChildRange(i, 1) по индексу ребёнка во внутренней коллекции.
+        // 1) De-realize those out of the window (and orphans after collection changes).
+        //    VirtualizingPanel has no single RemoveInternalChild — use
+        //    RemoveInternalChildRange(i, 1) by the child's index in the internal collection.
         for (var i = Children.Count - 1; i >= 0; i--)
         {
             var child = Children[i];
@@ -421,9 +421,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             RemoveInternalChildRange(i, 1);
         }
 
-        // 2) Реализация окна (контейнеры уже в окне — переиспользуем).
-        //    Классический паттерн VSP: StartAt(позиция первого индекса,
-        //    allowStartAtRealizedItems) + GenerateNext на каждый индекс окна.
+        // 2) Realize the window (containers already in the window are reused).
+        //    Classic VSP pattern: StartAt(position of the first index,
+        //    allowStartAtRealizedItems) + GenerateNext for each window index.
         using (iface.StartAt(iface.GeneratorPositionFromIndex(firstIndex),
                              GeneratorDirection.Forward, true))
         {
@@ -444,8 +444,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         _measuredChildWidth = _itemWidth;
     }
 
-    /// <summary>Фактическая высота строки: максимум желаемой высоты реализованных детей
-    /// (карточки одной строки одинаковой высоты по образцу UniformGrid).</summary>
+    /// <summary>Actual row height: the max desired height of realized children
+    /// (cards of one row are equal-height, UniformGrid style).</summary>
     private double ActualRowHeight()
     {
         var max = 0.0;
@@ -454,7 +454,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         return max;
     }
 
-    // ====================== Раскладка ============================
+    // ====================== Layout ============================
 
     protected override Size ArrangeOverride(Size finalSize)
     {
@@ -473,7 +473,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         return finalSize;
     }
 
-    // ==================== Изменения коллекции ====================
+    // ==================== Collection changes ====================
 
     protected override void OnItemsChanged(object sender, ItemsChangedEventArgs args)
     {
@@ -481,13 +481,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
         if (args.Action == NotifyCollectionChangedAction.Reset)
         {
-            // Генератор уже сброшен ItemsControl-ом — выкидываем детей, скролл в начало.
+            // The generator was already reset by the ItemsControl — drop the children, scroll to the top.
             RemoveInternalChildRange(0, InternalChildren.Count);
             _rowHeight = double.NaN;
             ResetScrollOffset();
         }
-        // Add/Remove/Move/Replace: индексы контейнеров пересчитывает генератор,
-        // сироты вычищаются в ближайшем MeasureWindow (IndexFromContainer → -1).
+        // Add/Remove/Move/Replace: the generator recomputes container indices,
+        // orphans are cleaned up in the next MeasureWindow (IndexFromContainer → -1).
 
         _scrollOwner?.InvalidateScrollInfo();
         InvalidateMeasure();

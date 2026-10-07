@@ -17,7 +17,7 @@ using BatPlayer.Services.Spotify;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Карточка трека Spotify для UI (аналогично SoundCloudCard).
+/// Spotify track card for the UI (similar to SoundCloudCard).
 /// </summary>
 public sealed class SpotifyCard
 {
@@ -27,24 +27,24 @@ public sealed class SpotifyCard
     public required string Album { get; init; }
     public required long DurationMs { get; init; }
     public required string ArtworkUrl { get; init; }
-    /// <summary>Имя исполнителя для отображения (общий ArtistHoverTemplate биндит
-    /// именно его): пустое значение заменяется локализованным «Unknown artist».</summary>
+    /// <summary>Artist name for display (ArtistHoverTemplate binds exactly this): an empty
+    /// value is replaced by the localized "Unknown artist".</summary>
     public string DisplayArtist => string.IsNullOrWhiteSpace(Artist)
         ? Localization.Loc.Get("UnknownArtist")
         : Artist;
     public required string? ArtworkLocalPath { get; init; }
     public required bool IsPlayable { get; init; }
 
-    /// <summary>Совпавший трек локальной библиотеки (null — матча нет).</summary>
+    /// <summary>Matched track from the local library (null — no match).</summary>
     public Track? LocalTrack { get; init; }
 
-    /// <summary>Есть ли матч с локальной библиотекой.</summary>
+    /// <summary>Whether there is a local-library match.</summary>
     public bool HasLocalMatch => LocalTrack != null;
 
-    /// <summary>Можно ли воспроизвести: только если есть локальный матч.</summary>
+    /// <summary>Playable: only with a local match.</summary>
     public bool CanPlay => HasLocalMatch;
 
-    /// <summary>Недоступные треки приглушаются.</summary>
+    /// <summary>Unavailable tracks are dimmed.</summary>
     public double CardOpacity => CanPlay ? 1.0 : 0.45;
 
 
@@ -52,10 +52,10 @@ public sealed class SpotifyCard
 }
 
 /// <summary>
-/// Страница «Spotify»: сетка Saved Tracks (Liked Songs) из локальной БД,
-/// синхронизация через официальный Spotify Web API, матчинг с локальной библиотекой.
-/// 
-/// Spotify API не позволяет стриминг MP3 — воспроизведение только через локальные матчи.
+/// Spotify page: grid of Saved Tracks (Liked Songs) from the local DB,
+/// sync via the official Spotify Web API, matching with the local library.
+///
+/// The Spotify API does not allow MP3 streaming — playback only via local matches.
 /// </summary>
 public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
 {
@@ -64,25 +64,25 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     private readonly AudioService _audio;
     private readonly SpotifyTracksRepository _repository;
 
-    // Локальная библиотека для матчинга
+    // Local library for matching
     private List<Track> _localTracks = new();
 
-    // Авто-синк при первом открытии
+    // Auto-sync on first open
     private bool _autoSyncChecked;
 
-    // Карточки уже прочитаны из БД: повторный вход на страницу
-    // не пересобирает список (данные меняет только синк).
+    // Cards already read from the DB: re-entering the page
+    // does not rebuild the list (only the sync changes the data).
     private bool _cardsLoaded;
 
     public ObservableCollection<SpotifyCard> Cards { get; } = new();
 
-    // === Универсальный поиск (строка в шапке окна) ===
-    // Полный список карточек хранится отдельно: Cards показывает либо всё, либо
-    // отфильтрованное подмножество; после синка/перезагрузки фильтр применяется заново.
+    // === Universal search (the bar in the window header) ===
+    // The full card list is stored separately: Cards shows either everything or the
+    // filtered subset; after a sync/reload the filter is applied again.
     private List<SpotifyCard> _allCards = new();
     private string _searchQuery = string.Empty;
 
-    /// <summary>Фильтр карточек страницы по названию и исполнителю; пустой запрос — полный список.</summary>
+    /// <summary>Filters the page's cards by title and artist; an empty query shows the full list.</summary>
     public void ApplySearch(string? query)
     {
         _searchQuery = query ?? string.Empty;
@@ -110,13 +110,13 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     [ObservableProperty] private string _counterText = string.Empty;
     [ObservableProperty] private string _lastSyncedText = string.Empty;
 
-    /// <summary>Ошибки для тоста главного окна.</summary>
+    /// <summary>Errors for the main window toast.</summary>
     public event EventHandler<string>? ErrorOccurred;
 
-    /// <summary>Подключён ли аккаунт Spotify.</summary>
+    /// <summary>Whether a Spotify account is connected.</summary>
     public bool IsConnected => _spotify.HasAuthFile;
 
-    /// <summary>Показывать «пустую страницу»: загрузка закончена и карточек нет.</summary>
+    /// <summary>Show the "empty page": loading finished and there are no cards.</summary>
     public bool ShowEmptyState => !IsLoading && Cards.Count == 0;
 
     public SpotifyMusicViewModel(SpotifyService spotify, LibraryService library,
@@ -145,8 +145,8 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Вызывается при переходе на страницу: перечитать карточки из БД;
-    /// при первом открытии — авто-синк, если подключено и прошло >30 минут.
+    /// Called on page navigation: re-read cards from the DB;
+    /// on first open — auto-sync, if connected and &gt;30 minutes have passed.
     /// </summary>
     public async Task OnNavigatedAsync()
     {
@@ -176,7 +176,7 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
             _localTracks = localTask.Result;
             var rows = rowsTask.Result;
 
-            // Матчинг через прединдекс
+            // Matching via a prebuilt index
             var index = MatchHelper.BuildIndex(_localTracks);
 
             var fresh = new List<SpotifyCard>(rows.Count);
@@ -211,8 +211,8 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
         }
     }
 
-    /// <summary>Перемешать карточки страницы; если играет трек этого списка (играются
-    /// локальные матчи) — очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the page's cards; if a track of this list is playing (local
+    /// matches are what play), the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShuffleCards()
     {
@@ -235,7 +235,7 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Открыть окно входа в Spotify.
+    /// Open the Spotify login window.
     /// </summary>
     [RelayCommand]
     private async Task ConnectAsync()
@@ -257,7 +257,7 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Отключить аккаунт Spotify (удалить токены).
+    /// Disconnect the Spotify account (delete tokens).
     /// </summary>
     [RelayCommand]
     private void Disconnect()
@@ -282,7 +282,7 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Синхронизация Saved Tracks с Spotify.
+    /// Sync Saved Tracks with Spotify.
     /// </summary>
     [RelayCommand]
     private async Task SyncNowAsync()
@@ -320,10 +320,10 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Бесплатный импорт библиотеки без Web API (Development Mode Spotify с
-    /// февраля 2026 требует Premium): официальный экспорт «Download your data»
-    /// (ZIP/JSON с YourLibrary.json / Playlist*.json) или CSV экспортёров.
-    /// Результат — в тот же spotify_tracks, что и синк Web API.
+    /// Free library import without the Web API (Spotify Development Mode requires
+    /// Premium since February 2026): the official "Download your data" export
+    /// (ZIP/JSON with YourLibrary.json / Playlist*.json) or CSV from exporters.
+    /// Results go into the same spotify_tracks table as the Web API sync.
     /// </summary>
     [RelayCommand]
     private async Task ImportFromFileAsync()
@@ -367,11 +367,11 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
     }
 
     /// <summary>
-    /// Воспроизведение трека Spotify (только через локальный матч).
+    /// Play a Spotify track (only via a local match).
     /// </summary>
-    /// <summary>Анти-дубль клика: команда кнопки Play на обложке и всплывший до карточки
-    /// MouseLeftButtonUp дёргают одну команду дважды за миллисекунды; второй вызов видел
-    /// «трек уже играет» и ставил его на паузу — клик «не работал с первого раза».</summary>
+    /// <summary>Anti-double-click: the artwork Play button's command and a MouseLeftButtonUp
+    /// bubbling to the card fire the same command twice within milliseconds; the second
+    /// call saw "track already playing" and paused it — the click "did not work first time".</summary>
     private SpotifyCard? _lastClickedCard;
     private DateTime _lastClickTime;
 
@@ -389,18 +389,18 @@ public partial class SpotifyMusicViewModel : PageViewModel, ISearchablePage
 
         try
         {
-            // Повторный клик — пауза/возобновление
+            // Repeat click — pause/resume
             if (_audio.CurrentTrack is Track current
                 && current.Source == Track.SourceSpotify && current.SpotifyId == card.SpotifyId)
             {
-                // Тоггл только при живом воспроизведении: пока трек ещё открывается
-                // (резолв потока), PlayPauseToggle ломал цепочку открытия.
+                // Toggle only during live playback: while the track is still opening
+                // (stream resolution), PlayPauseToggle broke the open chain.
                 if (_audio.IsPlaying || _audio.IsPaused)
                     _audio.PlayPauseToggle();
                 return Task.CompletedTask;
             }
 
-            // Воспроизводим локальный матч
+            // Play the local match
             if (card.LocalTrack != null)
             {
                 var queue = Cards.Where(c => c.CanPlay && c.LocalTrack != null)

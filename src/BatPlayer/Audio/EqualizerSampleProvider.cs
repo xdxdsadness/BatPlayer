@@ -7,15 +7,15 @@ using BatPlayer.Models;
 namespace BatPlayer.Audio;
 
 /// <summary>
-/// Параметрический эквалайзер на BiQuad-фильтрах с ДИНАМИЧЕСКИМ набором полос.
-/// Полосы добавляются/удаляются пользователем на графике (как в FabFilter Pro-Q):
-/// пустой набор = прозрачная прямая линия. Каждая полоса — peaking-фильтр со своей
-/// частотой (20 Гц…20 кГц) и усилением (±12 дБ), Q = 1.41.
+/// Parametric equalizer on BiQuad filters with a DYNAMIC set of bands.
+/// Bands are added/removed by the user on the graph (like FabFilter Pro-Q):
+/// an empty set = a transparent straight line. Each band is a peaking filter
+/// with its own frequency (20 Hz…20 kHz) and gain (±12 dB), Q = 1.41.
 /// </summary>
 public sealed class EqualizerSampleProvider : ISampleProvider
 {
-    // Стандартные частоты для дефолтных пресетов (кривая при этом рисуется
-    // по фактическим частотам полос, а не по этой сетке).
+    // Standard frequencies for the default presets (the curve is drawn from the
+    // actual band frequencies, not from this grid).
     public static readonly double[] BandFrequencies = { 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
 
     private readonly ISampleProvider _source;
@@ -34,11 +34,11 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         set { _userPreGain = value; RecomputeEffectiveGain(); }
     }
 
-    // Слайдер PreGain (линейный множитель из дБ) и итоговый множитель выхода.
-    // Итог = PreGain × авто-запас (headroom): подъёмы полос на громких мастерах,
-    // записанных в упор до 0 dBFS, выталкивают сэмплы за полную шкалу — выход
-    // клипует и звук «хрипит». Гасим выход ровно на максимальный подъём,
-    // сохраняя форму кривой; на плоском наборе множитель равен 1.
+    // PreGain slider (linear multiplier converted from dB) and the final output
+    // multiplier. Total = PreGain × auto headroom: band boosts on loud masters
+    // recorded right up to 0 dBFS push samples past full scale — the output clips
+    // and sounds raspy. Attenuate by exactly the max boost, preserving the curve
+    // shape; on a flat set the multiplier is 1.
     private float _userPreGain = 1f;
     private float _effectiveGain = 1f;
 
@@ -59,11 +59,11 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         _channels = source.WaveFormat.Channels;
     }
 
-    // Набор полос: параметры + матрица фильтров [полоса][каскад][канал].
-    // Срез с крутизной N дБ/окт = N/12 каскадных HP/LP биквадов (+ секция первого
-    // порядка для дробных 18/30 — BiQuadFilter из NAudio своих коэффициентов не даёт).
-    // Структурные изменения (add/remove/apply) строят новый массив целиком и
-    // подменяют ссылку — аудиопоток всегда читает согласованный набор.
+    // Band set: parameters + filter matrix [band][stage][channel].
+    // A cut with slope N dB/oct = N/12 cascaded HP/LP biquads (+ a first-order
+    // section for fractional 18/30 — NAudio's BiQuadFilter exposes no coefficients).
+    // Structural changes (add/remove/apply) build a new array wholesale and swap
+    // the reference — the audio thread always reads a consistent set.
     private readonly List<double> _bandFreqs = new();
     private readonly List<double> _bandGains = new();
     private readonly List<EqualizerBandType> _bandTypes = new();
@@ -71,7 +71,7 @@ public sealed class EqualizerSampleProvider : ISampleProvider
     private readonly List<double> _bandQs = new();
     private IFilterSection[][][] _bandFilters = Array.Empty<IFilterSection[][]>();
 
-    /// <summary>Заменить весь набор полос (пресет, загрузка, удаление).</summary>
+    /// <summary>Replaces the whole set of bands (preset, load, deletion).</summary>
     public void ApplyBands(IReadOnlyList<EqualizerBand> bands)
     {
         _bandFreqs.Clear();
@@ -91,7 +91,7 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         RecomputeEffectiveGain();
     }
 
-    /// <summary>Обновить одну полосу (перетаскивание узла на графике) — без пересборки набора.</summary>
+    /// <summary>Updates a single band (node drag on the graph) — no full rebuild.</summary>
     public void UpdateBand(int index, EqualizerBand band)
     {
         if (index < 0 || index >= _bandFreqs.Count) return;
@@ -106,7 +106,7 @@ public sealed class EqualizerSampleProvider : ISampleProvider
 
     private double ClampFreq(double freqHz)
     {
-        // Частота не выше ~45% Найквиста, иначе фильтр теряет устойчивость.
+        // Frequency capped at ~45% of Nyquist, otherwise the filter loses stability.
         var maxFreq = Math.Min(20000, _source.WaveFormat.SampleRate * 0.45);
         return Math.Clamp(freqHz, 20, maxFreq);
     }
@@ -126,10 +126,10 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         filters[index] = BuildBand(index);
     }
 
-    /// <summary>Каскад фильтров полосы: Bell — один peaking; срез N дБ/окт — N/12
-    /// каскадных HP/LP-биквадов (Butterworth, Q=0.7071) на ту же частоту. Дробная
-    /// дюжина (18/30 дБ/окт) добирается секцией ПЕРВОГО порядка (6 дБ/окт) —
-    /// нечётный порядок биквадами не собирается.</summary>
+    /// <summary>Band filter cascade: Bell — one peaking; a cut of N dB/oct — N/12
+    /// cascaded HP/LP biquads (Butterworth, Q=0.7071) at the same frequency. The
+    /// fractional dozen (18/30 dB/oct) is completed with a FIRST-order section
+    /// (6 dB/oct) — odd orders cannot be built from biquads.</summary>
     private IFilterSection[][] BuildBand(int index)
     {
         var sr = _source.WaveFormat.SampleRate;
@@ -138,7 +138,7 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         var isCut = type is EqualizerBandType.LowCut or EqualizerBandType.HighCut;
         var slope = _bandSlopes[index];
 
-        // Целые двенадцатки — каскады биквадов; хвост 6 дБ/окт (18/30) — first-order.
+        // Whole dozens — biquad cascades; the 6 dB/oct tail (18/30) — first-order.
         var stages = isCut ? Math.Max(1, slope / 12) : 1;
         var firstOrder = isCut && slope % 12 == 6;
 
@@ -168,13 +168,13 @@ public sealed class EqualizerSampleProvider : ISampleProvider
         return result;
     }
 
-    /// <summary>ФВЧ/ФНЧ первого порядка (6 дБ/окт): билинейное преобразование
-    /// аналогового H(s)=s/(s+w) для ФВЧ и H(s)=w/(s+w) для ФНЧ. BiQuadFilter из
-    /// NAudio свои коэффициенты не выставляет (конструктор закрыт) — потому своя
-    /// секция в прямом форме DF1.</summary>
+    /// <summary>First-order HP/LP (6 dB/oct): bilinear transform of the analog
+    /// H(s)=s/(s+w) for HP and H(s)=w/(s+w) for LP. NAudio's BiQuadFilter does not
+    /// expose its coefficients (closed constructor) — hence a custom section in
+    /// direct form DF1.</summary>
     private static IFilterSection FirstOrderCut(int sampleRate, double freqHz, bool lowPass)
     {
-        var k = (float)Math.Tan(Math.PI * freqHz / sampleRate); // prewarp половины такта
+        var k = (float)Math.Tan(Math.PI * freqHz / sampleRate); // bilinear prewarp
         var a1 = (k - 1) / (k + 1);
         return lowPass
             ? new FirstOrderSection(k / (1 + k), k / (1 + k), a1)
@@ -182,9 +182,9 @@ public sealed class EqualizerSampleProvider : ISampleProvider
     }
 
     /// <summary>
-    /// Соло-режим «слушать гармонику»: через цепочку проходит только узкая полоса
-    /// вокруг заданной частоты (2 каскадных bandpass, пик 0 дБ). Работает даже при
-    /// выключенном эквалайзере — это инструмент прослушивания.
+    /// Solo mode "listen to harmonic": only a narrow band around the given frequency
+    /// passes through (2 cascaded bandpasses, 0 dB peak). Works even when the
+    /// equalizer is disabled — it is a listening tool.
     /// </summary>
     public void SetSolo(double? freqHz, double? q)
     {
@@ -211,7 +211,7 @@ public sealed class EqualizerSampleProvider : ISampleProvider
     {
         var read = _source.Read(buffer, offset, count);
 
-        // Соло: только выбранная гармоника, в обход выключателя эквалайзера.
+        // Solo: only the selected harmonic, bypassing the equalizer's on/off switch.
         var solo = _soloFilters;
         if (solo != null)
         {
@@ -247,14 +247,14 @@ public sealed class EqualizerSampleProvider : ISampleProvider
     }
 }
 
-/// <summary>Секция фильтра в каскаде полосы: NAudio-биквад либо секция первого порядка
-/// (дробные крутизны 18/30 дБ/окт) — у NAudio.Dsp.BiQuadFilter коэффициенты закрыты.</summary>
+/// <summary>A filter section in a band cascade: an NAudio biquad or a first-order section
+/// (fractional slopes 18/30 dB/oct) — NAudio.Dsp.BiQuadFilter keeps its coefficients closed.</summary>
 internal interface IFilterSection
 {
     float Transform(float sample);
 }
 
-/// <summary>Обёртка над NAudio-биквадом в интерфейс секции.</summary>
+/// <summary>Wraps an NAudio biquad in the section interface.</summary>
 internal sealed class BiquadSection : IFilterSection
 {
     private readonly BiQuadFilter _filter;
@@ -262,12 +262,12 @@ internal sealed class BiquadSection : IFilterSection
     public float Transform(float sample) => _filter.Transform(sample);
 }
 
-/// <summary>ФВЧ/ФНЧ первого порядка (6 дБ/окт) в прямой форме DF1:
-/// y[n] = b0·x[n] + b1·x[n−1] − a1·y[n−1]. Один порядок биквадом не выразить.</summary>
+/// <summary>First-order HP/LP (6 dB/oct) in direct form DF1:
+/// y[n] = b0·x[n] + b1·x[n−1] − a1·y[n−1]. A single order cannot be expressed as a biquad.</summary>
 internal sealed class FirstOrderSection : IFilterSection
 {
-    // double-состояние: полюс секции стоит у единичного круга (a1 ~ -0.997 на
-    // низких частотах), float-рекурсия DF1 на нём шумит заметно сильнее.
+    // double state: the section pole sits near the unit circle (a1 ~ -0.997 at
+    // low frequencies), where float DF1 recursion is noticeably noisier.
     private readonly double _b0, _b1, _a1;
     private double _x1, _y1;
 

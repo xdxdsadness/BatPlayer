@@ -6,11 +6,11 @@ using Microsoft.Data.Sqlite;
 namespace BatPlayer.Database;
 
 /// <summary>
-/// Одна запись трека Яндекс Музыки: только метаданные (скачивание аудио не предусмотрено).
-/// ym_id — числовой id трека в API Яндекс Музыки, храним TEXT. Временные mp3-ссылки из
-/// download-info в БД НЕ пишутся: они живут недолго и разрешаются заново в памяти
-/// при стриминге (YmService.GetStreamUrlAsync). Available — флаг тарифной доступности
-/// (поле available API): недоступные треки видны в каталоге, но приглушены.
+/// One Yandex Music track row: metadata only (no audio downloading).
+/// ym_id is the numeric track id in the Yandex Music API, stored as TEXT. Temporary
+/// mp3 URLs from download-info are NOT persisted: they expire quickly and are
+/// re-resolved in memory at streaming time (YmService.GetStreamUrlAsync). Available is
+/// the tariff-availability flag (API field): unavailable tracks stay visible but dimmed.
 /// </summary>
 public sealed class YmTrackRow
 {
@@ -20,21 +20,21 @@ public sealed class YmTrackRow
     public long DurationMs { get; set; }
     public string ArtworkUrl { get; set; } = string.Empty;
 
-    /// <summary>Путь обложки в локальном кэше (artworks_cache/ym_{ym_id}.jpg); null — ещё не скачана.</summary>
+    /// <summary>Cover path in the local cache (artworks_cache/ym_{ym_id}.jpg); null = not downloaded yet.</summary>
     public string? ArtworkLocalPath { get; set; }
 
     public bool Available { get; set; } = true;
 
-    /// <summary>Время лайка из API (ISO 8601): каталог сортируется по нему — «свежие
-    /// лайки сверху». null у строк, синкнутых до появления колонки.</summary>
+    /// <summary>Like time from the API (ISO 8601): the catalog is sorted by it — newest
+    /// likes first. null for rows synced before the column existed.</summary>
     public string? LikedAt { get; set; }
 
     public string SyncedAt { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// Репозиторий таблицы ym_tracks. Upsert по ym_id, выдача по времени лайка (свежие
-/// сверху — как в Яндекс Музыке); строки без времени лайка (старые синки) — в конце.
+/// Repository for the ym_tracks table. Upsert by ym_id, ordered by like time (newest
+/// first, as in Yandex Music); rows without a like time (old syncs) go last.
 /// </summary>
 public sealed class YmTracksRepository
 {
@@ -42,9 +42,8 @@ public sealed class YmTracksRepository
 
     public YmTracksRepository(SqliteConnection conn) => _conn = conn;
 
-    /// <summary>Пакетный upsert: повторная синхронизация не дублирует записи
-    /// (artwork_local_path при пере-синке сохраняется — не трогаем; liked_at
-    /// обновляется временем лайка из API).</summary>
+    /// <summary>Batch upsert: re-syncing does not duplicate rows (artwork_local_path is
+    /// preserved on re-sync; liked_at is updated with the like time from the API).</summary>
     public async Task UpsertBatchAsync(IEnumerable<YmTrackRow> rows)
     {
         var sql = """
@@ -62,8 +61,8 @@ public sealed class YmTracksRepository
         await _conn.ExecuteAsync(sql, rows);
     }
 
-    /// <summary>Все треки Яндекс Музыки по времени лайка — «свежие сверху», как в
-    /// Яндекс Музыке. Строки без liked_at (синкнутые до появления колонки) — в конце.</summary>
+    /// <summary>All Yandex Music tracks by like time — newest first, as in the app.
+    /// Rows without liked_at (synced before the column existed) go last.</summary>
     public async Task<List<YmTrackRow>> GetAllAsync()
     {
         var rows = await _conn.QueryAsync<YmTrackRow>(
@@ -71,16 +70,11 @@ public sealed class YmTracksRepository
         return rows.AsList();
     }
 
-    /// <summary>Трек по ym_id или null — резолверу плеера нужна строка для получения стрима.</summary>
-    public async Task<YmTrackRow?> GetByYmIdAsync(string ymId)
-        => await _conn.QueryFirstOrDefaultAsync<YmTrackRow>(
-            "SELECT * FROM ym_tracks WHERE ym_id = @ymId", new { ymId });
-
     public async Task<int> CountAsync()
         => await _conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ym_tracks");
 
-    /// <summary>Сколько строк ещё без liked_at: после миграции v7 время лайка появляется
-    /// только синком — по этому счётчику страница делает догоняющий синк один раз.</summary>
+    /// <summary>How many rows still lack liked_at: after migration v7 the like time only
+    /// appears via sync — the page uses this count to run a catch-up sync once.</summary>
     public async Task<int> CountWithoutLikedAtAsync()
         => await _conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ym_tracks WHERE liked_at IS NULL");
 
@@ -88,8 +82,8 @@ public sealed class YmTracksRepository
         => await _conn.ExecuteAsync("DELETE FROM ym_tracks");
 
     /// <summary>
-    /// Удалить треки, которых нет среди текущих лайков: снятые с лайка записи
-    /// исчезают со страницы по синку, а не копятся вечно. Возвращает число удалённых.
+    /// Delete tracks no longer among the current likes: unliked entries disappear on
+    /// sync instead of accumulating forever. Returns the number deleted.
     /// </summary>
     public async Task<int> DeleteNotInAsync(IEnumerable<string> keepYmIds)
     {
@@ -107,8 +101,8 @@ public sealed class YmTracksRepository
     }
 
     /// <summary>
-    /// Путь локальной обложки для трека. Отдельно от UpsertBatch: пере-синк метаданных
-    /// не должен сбрасывать уже скачанные пути.
+    /// Local artwork path for a track. Separate from UpsertBatch: a metadata re-sync
+    /// must not reset already-downloaded paths.
     /// </summary>
     public async Task SetArtworkLocalPathAsync(string ymId, string? path)
         => await _conn.ExecuteAsync(

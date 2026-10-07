@@ -11,46 +11,46 @@ using BatPlayer.Services;
 namespace BatPlayer.Services.YandexMusic;
 
 /// <summary>
-/// Клиент Яндекс Музыки. Авторизация — ОФИЦИАЛЬНЫЙ OAuth-токен Яндекс ID (неявный поток
-/// с client_id приложения Яндекс Музыки), тот же принцип, что у SoundCloud/VK-интеграций:
-/// окно входа получает токен через WebView2, он лежит в ym_auth.json, а все запросы к
-/// API-хосту api.music.yandex.net идут с заголовком "Authorization: OAuth &lt;token&gt;"
-/// (cookies веб-сессии хост отвечает 401 — Session_id веб-сессии не подходят). Заголовки
-/// веб-клиента (X-Yandex-Music-Client: web) просят веб-раскладку JSON — по образцу
-/// мобильного клиента.
+/// Yandex Music client. Auth uses an OFFICIAL Yandex ID OAuth token (implicit flow with
+/// the Yandex Music app client_id), same principle as the SoundCloud/VK integrations:
+/// the login window obtains the token via WebView2, it is stored in ym_auth.json, and
+/// every request to the API host api.music.yandex.net carries the header
+/// "Authorization: OAuth &lt;token&gt;" (web session cookies get 401 — Session_id cookies
+/// do not work). Web client headers (X-Yandex-Music-Client: web) request the web JSON
+/// layout, modeled on the mobile client.
 ///
-/// Все эндпоинты требуют авторизацию: без токена хост отвечает 401. Каталог — лайки
-/// пользователя (users/{uid}/likes/tracks отдают ТОЛЬКО id, полные объекты добираются батчами
-/// через tracks?track-ids), стрим — tracks/{id}/download-info (раскладка вариантов менялась —
-/// ссылка собирается lenient-парсером YmJsonParser, см. его доксуммарку).
+/// All endpoints require auth: without a token the host answers 401. The catalog is the
+/// user's likes (users/{uid}/likes/tracks returns ONLY ids; full objects are fetched in
+/// batches via tracks?track-ids); streaming is tracks/{id}/download-info (the variant
+/// layout changed — the URL is assembled by the lenient YmJsonParser, see its docs).
 ///
-/// Скачивание файлов НЕ реализовано: только каталог (метаданные), стриминг через дисковый
-/// кэш (YmStreamCache) и матчинг с локальной библиотекой. Токен в логи не попадает —
-/// логируются только метод, коды ответов и число элементов.
+/// File downloads are NOT implemented: catalog only (metadata), streaming via the disk
+/// cache (YmStreamCache), and matching with the local library. The token never reaches
+/// the logs — only method, response codes and item counts are logged.
 /// </summary>
 public sealed class YmService
 {
     public const string AuthFileName = "ym_auth.json";
 
-    /// <summary>API-хост Яндекс Музыки (веб-клиент).</summary>
+    /// <summary>Yandex Music API host (web client).</summary>
     internal const string ApiBase = "https://api.music.yandex.net";
 
-    /// <summary>Значение X-Yandex-Music-Client/Yandex-Music-Client (веб-раскладка JSON).</summary>
+    /// <summary>Value of X-Yandex-Music-Client/Yandex-Music-Client (web JSON layout).</summary>
     internal const string MusicClientHeader = "web";
 
-    /// <summary>UA для API и CDN (обложки/стримы); internal — проставляется фабрикой YmHttp.</summary>
+    /// <summary>UA for the API and CDN (artworks/streams); internal — set by the YmHttp factory.</summary>
     internal const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-    /// <summary>Размер батча tracks?track-ids (лимит API — по образцу мобильного клиента).</summary>
+    /// <summary>Batch size of tracks?track-ids (API limit — modeled on the mobile client).</summary>
     public const int TrackIdBatchSize = 100;
 
-    /// <summary>Сколько живёт разрешённая mp3-ссылка в памяти до повторного download-info.</summary>
+    /// <summary>How long a resolved mp3 URL lives in memory before download-info is re-run.</summary>
     private static readonly TimeSpan StreamUrlTtl = TimeSpan.FromMinutes(60);
 
-    /// <summary>Варианты запроса download-info: transports + битрейты по убыванию. Раскладка
-    /// ответа и доступные битрейты зависят от тарифа — пробируем варианты, пока не придёт
-    /// хотя бы один вычислимый URL (см. YmJsonParser.ParseDownloadInfo).</summary>
+    /// <summary>download-info query variants: transports + bitrates in descending order. The
+    /// response layout and available bitrates depend on the plan — probe the variants until
+    /// at least one computable URL arrives (see YmJsonParser.ParseDownloadInfo).</summary>
     internal static readonly string[] DownloadInfoQueries =
     [
         "transports=encode_info_websonic,pure_d&bitrate=320",
@@ -58,41 +58,42 @@ public sealed class YmService
         "transports=encode_info_websonic,pure_d&bitrate=128"
     ];
 
-    /// <summary>Параллелизм батч-закачки обложек (см. SyncArtworksAsync).</summary>
+    /// <summary>Parallelism of the artwork batch download (see SyncArtworksAsync).</summary>
     private const int ArtworkDownloadParallelism = 4;
 
     private readonly YmAuthService _auth;
     private readonly YmArtworkCache _artworks = new();
 
-    /// <summary>ym_id → временная mp3-ссылка (из последнего download-info). URL в БД не пишется.</summary>
+    /// <summary>ym_id → temporary mp3 URL (from the last download-info). URLs are not written to the DB.</summary>
     private readonly Dictionary<string, (string Url, DateTime FetchedUtc)> _urlCache = new(StringComparer.Ordinal);
 
-    /// <summary>Замок кэша ссылок (заполняется из резолвера, читается из резолвера плеера).</summary>
+    /// <summary>URL cache lock (filled and read by the player resolver).</summary>
     private readonly object _urlLock = new();
 
-    /// <summary>Прогресс синхронизации: (обработано, всего-оценка).</summary>
+    /// <summary>Sync progress: (done, estimated total).</summary>
     public event EventHandler<(int done, int total)>? SyncProgress;
 
     public YmService(string authFilePath) => _auth = new YmAuthService(authFilePath);
 
     /// <summary>
-    /// Подключён ли аккаунт: файл сессии есть И в нём непустой OAuth-токен.
-    /// Сетевая проверка не выполняется — отозванный токен выяснится при первом запросе.
+    /// Whether the account is connected: the session file exists AND holds a non-empty
+    /// OAuth token. No network check is performed — a revoked token surfaces on the first
+    /// request.
     /// </summary>
     public bool HasToken => !string.IsNullOrWhiteSpace(_auth.Load().AccessToken);
 
-    /// <summary>uid аккаунта из файла сессии ("" — неизвестен); для статуса в настройках.</summary>
+    /// <summary>Account uid from the session file ("" — unknown); for the settings status.</summary>
     public string GetSavedUid() => _auth.Load().Uid ?? string.Empty;
 
-    /// <summary>Отображаемое имя аккаунта из файла сессии ("" — неизвестно); для статуса в настройках.</summary>
+    /// <summary>Account display name from the session file ("" — unknown); for the settings status.</summary>
     public string GetSavedDisplayName() => _auth.Load().DisplayName ?? string.Empty;
 
-    // ============================ Сессия ============================
+    // ============================ Session ============================
 
     /// <summary>
-    /// Сохранить OAuth-токен после успешного входа (вызывается окном входа).
-    /// Сам токен никуда не логируется. uid/displayName приходят из account/status
-    /// (могут быть пустыми — синк тогда сам дозаполнит их через EnsureAccountInfoAsync).
+    /// Saves the OAuth token after a successful sign-in (called by the login window).
+    /// The token itself is never logged. uid/displayName come from account/status
+    /// (may be empty — the sync then fills them in itself).
     /// </summary>
     public void SaveSessionOAuth(string accessToken, string? uid, string? displayName)
     {
@@ -106,9 +107,9 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Пометить сессию недействительной (API вернул 401/403): OAuth-токен очищается,
-    /// uid/displayName остаются (пригодятся при повторном входе). Файл не удаляется —
-    /// кнопка Connect открывает окно входа заново.
+    /// Marks the session invalid (API returned 401/403): the OAuth token is cleared,
+    /// uid/displayName are kept (useful on re-login). The file is not deleted — the
+    /// Connect button reopens the login window.
     /// </summary>
     public void InvalidateSession()
     {
@@ -118,14 +119,14 @@ public sealed class YmService
         Logger.Warn("Yandex Music OAuth token invalidated — sign in again");
     }
 
-    /// <summary>Отключение аккаунта: удалить ym_auth.json и кэш ссылок. Таблицу чистит вызывающий код.</summary>
+    /// <summary>Disconnect: delete ym_auth.json and the URL cache. The caller clears the table.</summary>
     public void Disconnect()
     {
         _auth.Delete();
         lock (_urlLock) _urlCache.Clear();
     }
 
-    /// <summary>Дата последней успешной синхронизации (из ym_auth.json), null — ещё не синхронизировали.</summary>
+    /// <summary>Date of the last successful sync (from ym_auth.json); null — never synced.</summary>
     public DateTime? GetLastSyncedUtc()
     {
         var raw = _auth.Load().LastSyncedAtUtc;
@@ -140,13 +141,13 @@ public sealed class YmService
         _auth.Save(file);
     }
 
-    // ======================== Сетевые примитивы =====================
+    // ======================== Network primitives =====================
 
-    /// <summary>GET относительно ApiBase с OAuth-заголовком (токен в лог не попадает).</summary>
+    /// <summary>GET relative to ApiBase with the OAuth header (token never logged).</summary>
     private async Task<(int Status, string Body)> GetAsync(string pathAndQuery, string accessToken, CancellationToken ct)
         => await SendAsync(HttpMethod.Get, pathAndQuery, accessToken, ct);
 
-    /// <summary>Произвольный метод (POST/DELETE — лайки) с OAuth-заголовком.</summary>
+    /// <summary>Arbitrary method (POST/DELETE — likes) with the OAuth header.</summary>
     private async Task<(int Status, string Body)> SendAsync(HttpMethod method, string pathAndQuery, string accessToken, CancellationToken ct)
         => await YmHttp.SendWithFailoverAsync(() =>
         {
@@ -156,19 +157,19 @@ public sealed class YmService
             return request;
         }, ct);
 
-    /// <summary>Тело JSON при успехе; не-2xx → YmApiException с кодом (401/403 — сессия).</summary>
+    /// <summary>JSON body on success; non-2xx → YmApiException with the code (401/403 — session).</summary>
     private static string EnsureSuccess(int status, string body, string what)
     {
         if (status == 200) return body;
         throw new YmApiException($"{what} failed with HTTP {status}", status);
     }
 
-    // ========================= Аккаунт ==============================
+    // ========================= Account ==============================
 
     /// <summary>
-    /// Аккаунт по сохранённому OAuth-токену (uid + отображаемое имя). null — токена нет
-    /// или ответ не сошёлся (401/прочее): статус настройки показывает сохранённое при
-    /// входе имя.
+    /// Account by the saved OAuth token (uid + display name). null — no token or the
+    /// response did not match (401/other): the settings status shows the name saved at
+    /// sign-in.
     /// </summary>
     public async Task<YmAccountInfo?> GetAccountStatusAsync(CancellationToken ct)
     {
@@ -181,15 +182,15 @@ public sealed class YmService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Сетевой сбой проверки аккаунта не должен ронять вызывающий код.
+            // A network failure of the account check must not crash the caller.
             Logger.Error(ex, "Yandex Music account status failed");
             return null;
         }
     }
 
     /// <summary>
-    /// Аккаунт по произвольному OAuth-токену (окно входа вызывает ДО сохранения сессии,
-    /// чтобы сразу записать uid/displayName в файл). null — ответ не сошёлся.
+    /// Account by an arbitrary OAuth token (the login window calls it BEFORE saving the
+    /// session, to write uid/displayName into the file right away). null — no match.
     /// </summary>
     internal static async Task<YmAccountInfo?> FetchAccountInfoAsync(string accessToken, CancellationToken ct)
     {
@@ -204,10 +205,10 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Гарантировать сохранённый uid: берём его из СТАТУСА ТОКЕНА, а не из файла — файл
-    /// мог остаться от другого аккаунта, и синк тогда честно читал лайки чужого/старого
-    /// аккаунта (жалоба: «лайки обновляются только после повторного входа»). DisplayName
-    /// обновляется заодно. При сетевом сбое статуса — сохранённый uid как фолбэк.
+    /// Ensures a saved uid: it is taken from the TOKEN STATUS, not from the file — the file
+    /// may belong to another account, and the sync would then read another/old account's
+    /// likes (reported as "likes update only after re-login"). DisplayName is updated too.
+    /// On a network failure of the status check, the saved uid is the fallback.
     /// </summary>
     private async Task<string> EnsureUidAsync(CancellationToken ct)
     {
@@ -233,13 +234,13 @@ public sealed class YmService
         return info.Uid;
     }
 
-    // ======================== Синхронизация =========================
+    // ======================== Synchronization =========================
 
     /// <summary>
-    /// Синхронизация лайков: likes/tracks (только id) → батчи tracks?track-ids (по
-    /// <see cref="TrackIdBatchSize"/>) → upsert в БД → докачка обложек. Возвращает число
-    /// сохранённых треков. Бросает <see cref="YmApiException"/> (401/403 — токен
-    /// отозван, сервис сам сбрасывает сессию) — VM показывает понятное сообщение.
+    /// Likes sync: likes/tracks (ids only) → batches of tracks?track-ids (by
+    /// <see cref="TrackIdBatchSize"/>) → DB upsert → artwork download. Returns the number
+    /// of saved tracks. Throws <see cref="YmApiException"/> (401/403 — token revoked; the
+    /// service resets the session itself) — the VM shows a clear message.
     /// </summary>
     public async Task<int> SyncLikedTracksAsync(YmTracksRepository repository, CancellationToken ct)
     {
@@ -249,7 +250,7 @@ public sealed class YmService
 
         var uid = await EnsureUidAsync(ct);
 
-        // 1) Лайки — id + время лайка (см. ParseLikeEntries).
+        // 1) Likes — id + like time (see ParseLikeEntries).
         var (likesStatus, likesBody) = await GetAsync($"/users/{uid}/likes/tracks", accessToken, ct);
         var likeEntries = YmJsonParser.ParseLikeEntries(EnsureSuccess(likesStatus, likesBody, "likes/tracks"));
         Logger.Info($"Yandex Music sync: uid={uid}, likes={likeEntries.Count}");
@@ -259,13 +260,13 @@ public sealed class YmService
         var saved = 0;
         SyncProgress?.Invoke(this, (0, total));
 
-        // Порядок каталога держит liked_at (время лайка из API): «свежие лайки сверху»
-        // и у повторных синков тоже — новые лайки не теряются в конце списка из 400+.
+        // Catalog order keeps liked_at (like time from the API): "recent likes on top",
+        // also across repeated syncs — new likes are not lost at the end of a 400+ list.
         var likedAtById = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var e in likeEntries)
             likedAtById.TryAdd(e.Id.Split(':')[0], e.LikedAt);
 
-        // 2) Полные объекты — батчами по 100 id (порядок лайков сохраняется).
+        // 2) Full objects — in batches of 100 ids (like order is preserved).
         foreach (var chunk in Chunk(likeEntries.Select(e => e.Id).ToList(), TrackIdBatchSize))
         {
             ct.ThrowIfCancellationRequested();
@@ -281,33 +282,33 @@ public sealed class YmService
                 await repository.UpsertBatchAsync(rows);
             saved += rows.Count;
 
-            // Прогресс считаем по обработанным id (API может не вернуть часть id).
+            // Progress counts processed ids (the API may not return some of them).
             SyncProgress?.Invoke(this, (Math.Min(total, saved + Math.Max(0, chunk.Count - tracks.Count)), total));
         }
 
-        // 2b) Снятые с лайка треки удаляются: страница отражает текущие лайки,
-        //     а не копит историю всех когда-либо синхронизированных.
+        // 2b) Un-liked tracks are removed: the page reflects current likes,
+        //     not a history of everything ever synced.
         var removed = await repository.DeleteNotInAsync(
             likeEntries.Select(e => e.Id.Split(':')[0]));
 
         SetLastSyncedUtc(DateTime.UtcNow);
         Logger.Info($"Yandex Music sync done: saved={saved}, removed={removed}");
 
-        // 3) Обложки — отдельный батч ПОСЛЕ основного апсерта: сами метаданные уже
-        //    сохранены, сбой обложек завершённый синк не роняет.
+        // 3) Artworks are a separate batch AFTER the main upsert: the metadata is already
+        //    saved, so an artwork failure does not fail the finished sync.
         await SyncArtworksAsync(repository, ct);
 
         return saved;
     }
 
     /// <summary>
-    /// Лайк/дизлайк трека в АККАУНТЕ Яндекс Музыки: POST users/{uid}/likes/tracks/add
-    /// (параметр trackId) и .../remove (параметр track-ids). Сердечко в плеере для
-    /// YM-треков дергает это — после синка трек появляется на странице ЯМ и в
-    /// «Фаворитах» (раньше сердечко молча писало в локальную БД по отрицательному
-    /// runtime-id, строки не было — лайк терялся). true — API подтвердил. Голые
-    /// POST/DELETE на /likes/tracks сервер отвечает 405 Method Not Allowed, а /add с
-    /// параметром track-ids — 400 «trackId: Parameter value is not set».
+    /// Like/unlike a track in the Yandex Music ACCOUNT: POST users/{uid}/likes/tracks/add
+    /// (trackId parameter) and .../remove (track-ids parameter). The player's heart button
+    /// for YM tracks calls this — after a sync the track appears on the YM page and in
+    /// "Favorites" (previously the heart silently wrote to the local DB under a negative
+    /// runtime id; no row existed and the like was lost). true — the API confirmed. Bare
+    /// POST/DELETE on /likes/tracks get 405 Method Not Allowed, and /add with a track-ids
+    /// parameter gets 400 "trackId: Parameter value is not set".
     /// </summary>
     public async Task<bool> SetTrackLikedAsync(string ymId, bool liked, CancellationToken ct = default)
     {
@@ -335,24 +336,10 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Каталог с лендинга (чарты/новые релизы, блоки types=track) — без записи в БД.
-    /// Резерв для блоков «Charts/Новые релизы»: персональный каталог страницы — лайки.
-    /// </summary>
-    public async Task<List<YmTrackDto>> GetLandingTracksAsync(CancellationToken ct)
-    {
-        var accessToken = _auth.Load().AccessToken;
-        if (string.IsNullOrWhiteSpace(accessToken))
-            throw new YmApiException("not connected", 401);
-
-        var (status, body) = await GetAsync("/landing?types=track&lang=ru", accessToken, ct);
-        return YmJsonParser.ParseLandingTracks(EnsureSuccess(status, body, "landing"));
-    }
-
-    /// <summary>
-    /// Похожие треки Яндекс Музыки (GET /tracks/{ymId}/similar) — граф сходства,
-    /// построенный рекомендательной системой Яндекса. Основа «Моей волны»: по сидам
-    /// из библиотеки пользователя собираются кандидаты, которых у него ещё нет.
-    /// Бросает <see cref="YmApiException"/> (401/403 — токен отозван).
+    /// Similar Yandex Music tracks (GET /tracks/{ymId}/similar) — the similarity graph
+    /// built by Yandex's recommender. The basis of "My Wave": candidates the user does
+    /// not have yet are gathered from library seeds.
+    /// Throws <see cref="YmApiException"/> (401/403 — token revoked).
     /// </summary>
     public async Task<List<YmTrackDto>> GetSimilarTracksAsync(string ymId, CancellationToken ct)
     {
@@ -365,10 +352,10 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Поиск треков по строке «исполнитель + название» (GET /search?type=track) —
-    /// сопоставление сидов из VK/локальной библиотеки/SC с ym_id, чтобы их можно
-    /// было подать в similar-эндпоинт. Возвращает до limit результатов (API сам
-    /// ограничивает выдачу, лишнее отсекается здесь). Бросает YmApiException.
+    /// Track search by "artist + title" (GET /search?type=track) — matches seeds from
+    /// VK/local library/SC to ym_id so they can be fed into the similar endpoint.
+    /// Returns up to limit results (the API caps the output itself; the rest is trimmed
+    /// here). Throws YmApiException.
     /// </summary>
     public async Task<List<YmTrackDto>> SearchTracksAsync(string text, int limit, CancellationToken ct)
     {
@@ -376,8 +363,8 @@ public sealed class YmService
         if (string.IsNullOrWhiteSpace(accessToken))
             throw new YmApiException("not connected", 401);
 
-        // Параметр page ОБЯЗАТЕЛЕН (без него API отвечает 400 "Parameters requirements
-        // are not met: [page: Parameter value is not set]") — проверено пробой 2026-09.
+        // The page parameter is REQUIRED (without it the API answers 400 "Parameters
+        // requirements are not met: [page: Parameter value is not set]") — verified 2026-09.
         var query = "/search?text=" + Uri.EscapeDataString(text)
                     + "&type=track&lang=ru&page=0";
         var (status, body) = await GetAsync(query, accessToken, ct);
@@ -386,9 +373,9 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Поиск исполнителя по имени (GET /search?type=artist) — разрешение имён из
-    /// play_log в ym-artist-id для /artists/{id}/… (кэш сопоставлений в wave_seed_map).
-    /// Бросает YmApiException.
+    /// Artist search by name (GET /search?type=artist) — resolves play_log names to
+    /// ym artist ids for /artists/{id}/… (mapping cache in wave_seed_map).
+    /// Throws YmApiException.
     /// </summary>
     public async Task<List<YmArtistDto>> SearchArtistsAsync(string text, int limit, CancellationToken ct)
     {
@@ -404,10 +391,10 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Треки исполнителя (GET /artists/{id}/tracks?page=…&amp;pageSize=limit) — каталог
-    /// артиста безотносительно библиотеки пользователя: «треки исполнителей, которых я
-    /// слушаю, но ещё не добавлены». Каталог берётся страницами: чем глубже, тем
-    /// больше материала для ротации между миксами. Бросает YmApiException.
+    /// Artist tracks (GET /artists/{id}/tracks?page=…&amp;pageSize=limit) — the artist's
+    /// catalog regardless of the user's library: "tracks by artists I listen to but have
+    /// not added yet". The catalog is paged: the deeper it goes, the more material for
+    /// rotation between mixes. Throws YmApiException.
     /// </summary>
     public async Task<List<YmTrackDto>> GetArtistTracksAsync(string artistId, int limit, int page, CancellationToken ct)
     {
@@ -421,8 +408,8 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Похожие исполнители (GET /artists/{id}/similar) — до 50 артистов той же сцены
-    /// по графу Яндекса. Бросает YmApiException.
+    /// Similar artists (GET /artists/{id}/similar) — up to 50 artists of the same scene
+    /// per Yandex's graph. Throws YmApiException.
     /// </summary>
     public async Task<List<YmArtistDto>> GetSimilarArtistsAsync(string artistId, CancellationToken ct)
     {
@@ -435,9 +422,9 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Аудитория исполнителя (GET /artists/{id}/brief-info → result.stats.listeners) —
-    /// фильтр ноунеймов и «нейро-треков» в доборе новизны волны. null — API не отдал
-    /// поле. Бросает YmApiException.
+    /// Artist audience (GET /artists/{id}/brief-info → result.stats.listeners) — a filter
+    /// for no-names and "AI tracks" when picking wave novelty. null — the API did not
+    /// provide the field. Throws YmApiException.
     /// </summary>
     public async Task<long?> GetArtistListenersAsync(string artistId, CancellationToken ct)
     {
@@ -450,8 +437,8 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Радио-лента по исполнителю (GET /rotor/station/artist:{id}/tracks) — батч
-    /// (~5 треков) «похожего звука» из ротора Яндекса. Бросает YmApiException.
+    /// Artist radio feed (GET /rotor/station/artist:{id}/tracks) — a batch (~5 tracks)
+    /// of "similar sound" from Yandex Rotor. Throws YmApiException.
     /// </summary>
     public async Task<List<YmTrackDto>> GetArtistRadioTracksAsync(string artistId, CancellationToken ct)
     {
@@ -465,15 +452,15 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Обложка трека в локальном кэше artworks_cache/ym_{ym_id}.jpg (уже скачана — путь
-    /// без сети; нет — скачивание по coverUri). null — нет URL или скачивание не удалось.
-    /// Волна и страница Яндекс Музыки кэшируют обложки в общий каталог.
+    /// Track artwork in the local cache artworks_cache/ym_{ym_id}.jpg (already downloaded —
+    /// path without network; otherwise downloads by coverUri). null — no URL or the
+    /// download failed. The Wave and the Yandex Music page share this artwork cache.
     /// </summary>
     public async Task<string?> EnsureArtworkAsync(string ymId, string? coverUri, CancellationToken ct)
         => await _artworks.EnsureDownloadedAsync(
             ArtworkIdPrefix + ymId, YmJsonParser.BuildArtworkUrl(coverUri), ct);
 
-    /// <summary>Разобранные треки API → строки БД (чистая функция — покрыта юнит-тестами).</summary>
+    /// <summary>Parsed API tracks → DB rows (pure function, unit-tested).</summary>
     internal static List<YmTrackRow> ExtractRows(IReadOnlyList<YmTrackDto> tracks, string syncedAt)
     {
         var rows = new List<YmTrackRow>(tracks.Count);
@@ -496,10 +483,10 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Пакетная закачка обложек всех YM-треков в artworks_cache/ym_{ym_id}.jpg (см.
-    /// <see cref="YmArtworkCache"/>): до <see cref="ArtworkDownloadParallelism"/> параллельных
-    /// скачиваний, пропуск уже скачанных и треков без artwork_url. Ошибки одного файла —
-    /// лог + пропуск. Результаты в БД пишутся последовательно (у репозитория одно соединение).
+    /// Batch download of all YM track artworks to artworks_cache/ym_{ym_id}.jpg (see
+    /// <see cref="YmArtworkCache"/>): up to <see cref="ArtworkDownloadParallelism"/> parallel
+    /// downloads, skipping already downloaded files and tracks without artwork_url. Per-file
+    /// errors are logged and skipped. DB results are written sequentially (one connection).
     /// </summary>
     private async Task SyncArtworksAsync(YmTracksRepository repository, CancellationToken ct)
     {
@@ -537,42 +524,42 @@ public sealed class YmService
         }
         catch (Exception ex)
         {
-            // Обложки — вспомогательная часть синка: сетевой сбой не должен бить по метаданным.
+            // Artworks are auxiliary to the sync: a network failure must not affect the metadata.
             Logger.Error(ex, "Yandex Music artwork batch download failed");
         }
     }
 
-    /// <summary>Префикс файлов обложек YM в общем каталоге artworks_cache (ym_id — цифры).</summary>
+    /// <summary>Prefix of YM artwork files in the shared artworks_cache directory.</summary>
     internal const string ArtworkIdPrefix = "ym_";
 
-    // ===================== OAuth Device Flow (вход) ==================
+    // ===================== OAuth Device Flow (sign-in) ==================
 
-    /// <summary>Официальные OAuth-креды приложения Яндекс Музыки (Android-клиент,
-    /// публичные, не секрет — как в неофициальном yandex-music-api). Именно эта пара
-    /// заведена на oauth.yandex.ru: implicit-редирект с другим публично гуляющим
-    /// client_id даёт 400 «Неизвестно приложение с таким client_id», поэтому вход
-    /// идёт через Device Flow — код подтверждения на oauth.yandex.ru/device.</summary>
+    /// <summary>Official OAuth credentials of the Yandex Music app (Android client,
+    /// public, not a secret — as in the unofficial yandex-music-api). This exact pair is
+    /// registered at oauth.yandex.ru: an implicit redirect with another circulating public
+    /// client_id returns 400 "Unknown application with this client_id", so sign-in goes
+    /// through Device Flow — a confirmation code at oauth.yandex.ru/device.</summary>
     internal const string OAuthClientId = "23cabbbdc6cd418abb4b39c32c41195d";
     internal const string OAuthClientSecret = "53bc75238f0c4d08a118e51fe9203300";
 
-    /// <summary>Эндпоинты Яндекс ID для Device Flow (отдельный хост, не ApiBase).</summary>
+    /// <summary>Yandex ID endpoints for Device Flow (separate host, not ApiBase).</summary>
     internal const string OAuthDeviceCodeUrl = "https://oauth.yandex.ru/device/code";
     internal const string OAuthTokenUrl = "https://oauth.yandex.ru/token";
 
-    /// <summary>Страница подтверждения кода, если Яндекс не прислал verification_url.</summary>
+    /// <summary>Code confirmation page if Yandex did not send verification_url.</summary>
     internal const string DefaultVerificationUrl = "https://oauth.yandex.ru/device";
 
-    /// <summary>Дефолты параметров Device Flow, если ответ не содержал expires_in/interval.</summary>
+    /// <summary>Device Flow parameter defaults if the response lacked expires_in/interval.</summary>
     internal const int DefaultExpiresInSeconds = 300;
     internal const int DefaultPollIntervalSeconds = 5;
 
-    /// <summary>device_name, под которым токен появится в списке устройств Яндекс ID.</summary>
+    /// <summary>device_name under which the token will appear in the Yandex ID device list.</summary>
     internal const string DeviceName = "BatPlayer";
 
     /// <summary>
-    /// Запрос кода устройства (шаг 1 Device Flow): пользователь вводит UserCode на
-    /// VerificationUrl, плеер опрашивает токен через <see cref="PollDeviceTokenAsync"/>.
-    /// Бросает <see cref="YmApiException"/> при сетевом сбое/не-200.
+    /// Requests a device code (Device Flow step 1): the user enters the UserCode at the
+    /// VerificationUrl while the player polls the token via <see cref="PollDeviceTokenAsync"/>.
+    /// Throws <see cref="YmApiException"/> on network failure/non-200.
     /// </summary>
     public async Task<YmDeviceCode> RequestDeviceCodeAsync(CancellationToken ct)
     {
@@ -595,9 +582,9 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Однократный опрос токена (шаг 2 Device Flow). Результаты разбирает вызывающий код:
-    /// AccessToken — успех; IsPending — ждать следующего тика; IsSlowDown — увеличить
-    /// интервал; IsExpired/IsDenied — прекратить опрос. Токен в лог не попадает.
+    /// Single token poll (Device Flow step 2). The caller interprets the result:
+    /// AccessToken — success; IsPending — wait for the next tick; IsSlowDown — increase
+    /// the interval; IsExpired/IsDenied — stop polling. The token is never logged.
     /// </summary>
     public async Task<YmTokenResult> PollDeviceTokenAsync(string deviceCode, CancellationToken ct)
     {
@@ -614,15 +601,15 @@ public sealed class YmService
         }, ct);
 
         var result = YmJsonParser.ParseTokenResponse(body);
-        // 200 без access_token и 400 без error — раскладка ответа изменилась; статус
-        // сохраняем для лога вызывающего кода.
+        // 200 without access_token and 400 without error — the response layout changed;
+        // the status is kept for the caller's log.
         if (status != 200 && result.ErrorCode == null)
             result = new YmTokenResult { ErrorCode = "invalid_response" };
         return result;
     }
 
-    /// <summary>Случайный device_id (10 символов латиница/цифры — как в yandex-music-api):
-    /// токен появится в списке устройств аккаунта под этим идентификатором.</summary>
+    /// <summary>Random device_id (10 latin letters/digits — as in yandex-music-api):
+    /// the token will appear in the account's device list under this id.</summary>
     internal static string GenerateDeviceId()
     {
         const string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -632,15 +619,15 @@ public sealed class YmService
         return new string(chars);
     }
 
-    // ============================ Стрим ==============================
+    // ============================ Streaming ==========================
 
     /// <summary>
-    /// Прямая mp3-ссылка трека для стриминга: кэш сессии (TTL) → GET tracks/{id}/download-info
-    /// (сначала без параметров — раскладка 2025+, затем варианты transports/bitrate по
-    /// убыванию). Современный ответ отдаёт downloadInfoUrl — XML-дескриптор, из которого
-    /// собирается финальная ссылка https://{host}/get-mp3/{s}/{ts}{path}. Ссылки временные
-    /// и в БД не сохраняются. null — ссылку получить не удалось (нет токена, трек
-    /// недоступен); 401/403 сбрасывают сессию и бросают <see cref="YmApiException"/>.
+    /// Direct mp3 URL of a track for streaming: session cache (TTL) → GET tracks/{id}/download-info
+    /// (first without parameters — the 2025+ layout, then transports/bitrate variants in
+    /// descending order). The modern response returns downloadInfoUrl — an XML descriptor
+    /// from which the final URL https://{host}/get-mp3/{s}/{ts}{path} is built. URLs are
+    /// temporary and not saved to the DB. null — the URL could not be obtained (no token,
+    /// track unavailable); 401/403 reset the session and throw <see cref="YmApiException"/>.
     /// </summary>
     public async Task<string?> GetStreamUrlAsync(string ymId, CancellationToken ct)
     {
@@ -651,7 +638,7 @@ public sealed class YmService
         var accessToken = _auth.Load().AccessToken;
         if (string.IsNullOrWhiteSpace(accessToken)) return null;
 
-        // Раскладки запроса: сначала современный (без параметров), затем легаси-варианты.
+        // Query layouts: the modern one first (no parameters), then legacy variants.
         var queries = new List<string> { string.Empty };
         queries.AddRange(DownloadInfoQueries.Select(q => $"?{q}"));
 
@@ -671,7 +658,7 @@ public sealed class YmService
             }
             catch (Exception ex)
             {
-                // Сеть недоступна — остальные битрейты не помогут.
+                // Network unavailable — the other bitrates will not help.
                 Logger.Error(ex, $"Yandex Music download-info failed ({ymId})");
                 return null;
             }
@@ -683,7 +670,7 @@ public sealed class YmService
             }
             if (status != 200)
             {
-                // Раньше не-200 проглатывался молча — теперь видно, что резолв не прошёл.
+                // Previously a non-200 was swallowed silently — now the failed resolve is visible.
                 Logger.Warn($"Yandex Music download-info HTTP {status} ({ymId}, query=\"{query}\")");
                 continue;
             }
@@ -706,8 +693,8 @@ public sealed class YmService
     }
 
     /// <summary>
-    /// Фетч XML-дескриптора по downloadInfoUrl и сборка финальной mp3-ссылки.
-    /// null — дескриптор не получен/не распарсен (лог + пробуем следующий вариант).
+    /// Fetches the XML descriptor at downloadInfoUrl and builds the final mp3 URL.
+    /// null — the descriptor was not obtained/parsed (logged; the next variant is tried).
     /// </summary>
     private async Task<string?> ResolveDescriptorUrlAsync(string descriptorUrl, CancellationToken ct)
     {
@@ -737,9 +724,10 @@ public sealed class YmService
         }
     }
 
-    /// <summary>Лучший вариант ссылки: mp3 с максимальным битрейтом; иначе любой непустой.
-    /// Вариант годится и с готовым Url, и с DownloadInfoUrl (дескриптор резолвится сервисом) —
-    /// в современной раскладке download-info поле Url пустое, есть только дескриптор.</summary>
+    /// <summary>Best URL variant: mp3 with the highest bitrate; otherwise any non-empty one.
+    /// A variant may carry either a ready Url or DownloadInfoUrl (the descriptor is resolved
+    /// by the service) — in the modern download-info layout Url is empty and only the
+    /// descriptor is present.</summary>
     internal static YmDownloadOption? PickBestOption(IReadOnlyList<YmDownloadOption> options)
     {
         YmDownloadOption? best = null;
@@ -773,13 +761,13 @@ public sealed class YmService
         return false;
     }
 
-    /// <summary>Запомнить временную ссылку трека (TTL в <see cref="StreamUrlTtl"/>).</summary>
+    /// <summary>Caches a track's temporary URL (TTL in <see cref="StreamUrlTtl"/>).</summary>
     private void CacheStreamUrl(string ymId, string url)
     {
         lock (_urlLock) _urlCache[ymId] = (url, DateTime.UtcNow);
     }
 
-    // ========================== Утилиты ==============================
+    // ========================== Utilities ==============================
 
     internal static List<List<string>> Chunk(IReadOnlyList<string> ids, int size)
     {

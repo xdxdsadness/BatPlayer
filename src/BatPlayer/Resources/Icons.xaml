@@ -9,8 +9,8 @@
     <Geometry x:Key="IconNext">M6 6l8.5 6L6 18V6zm10 0h2v12h-2V6z</Geometry>
     <Geometry x:Key="IconPrev">M18 6l-8.5 6L18 18V6zM6 6h2v12H6V6z</Geometry>
     <Geometry x:Key="IconShuffle">M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z</Geometry>
-    <!-- Repeat/RepeatOne 24x24: по вертикали ужаты до оптической полосы shuffle
-         (y≈4.5..19.5), иначе в одной строке плеера repeat выглядел крупнее shuffle -->
+    <!-- Repeat/RepeatOne 24x24: vertically compressed to shuffle's optical band
+         (y≈4.5..19.5), otherwise repeat looked larger than shuffle in the player row -->
     <Geometry x:Key="IconRepeat">M7 8.25h10v2.25l4-3-4-3v2.25H5v4.5h2V8.25zm10 7.5H7v-2.25l-4 3 4 3v-2.25h12v-4.5h-2v3z</Geometry>
     <Geometry x:Key="IconRepeatOne">M7 8.25h10v2.25l4-3-4-3v2.25H5v4.5h2V8.25zm10 7.5H7v-2.25l-4 3 4 3v-2.25h12v-4.5h-2v3zm-4-0.75v-4.5h-1l-2 0.75v0.75h1v3H13z</Geometry>
     <Geometry x:Key="IconVolumeHigh">M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z</Geometry>
@@ -29,48 +29,47 @@
     <Geometry x:Key="IconHistory">M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z</Geometry>
     <Geometry x:Key="IconAlbum">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-12.5A4.5 4.5 0 1016.5 12 4.5 4.5 0 0012 7.5z</Geometry>
     <Geometry x:Key="IconArtist">M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z</Geometry>
-    <!-- Облако 24x24 (Material "filter_drama") — иконка страницы SoundCloud -->
-    <!-- Упрощённый логотип VK: буквы "VK" (24x24) — иконка страницы VK Music -->
-    <!-- Стилизованная волна (отсылка к логотипу Яндекс Музыки, 24x24) — иконка страницы Яндекс Музыки -->
-    <!-- Стрелка загрузки вниз (Material "download") — иконка страницы «Загрузки» -->
+    <!-- Cloud 24x24 (Material "filter_drama") — SoundCloud page icon -->
+    <!-- Simplified VK logo: "VK" letters (24x24) — VK Music page icon -->
+    <!-- Stylized wave (nod to the Yandex Music logo, 24x24) — Yandex Music page icon -->
+    <!-- Downward download arrow (Material "download") — Downloads page icon -->
     <Geometry x:Key="IconDownload">M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z</Geometry>
     <Geometry x:Key="IconHome">M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z</Geometry>
-    <!-- Эквалайзер 24x24: три вертикальных ползунка с круглыми ручками на разной высоте.
-         F1 (Nonzero) обязателен: ручки лежат НА линиях, при EvenOdd перекрытие выжигало дырки -->
+    <!-- Equalizer 24x24: three vertical sliders with round knobs at different heights.
+         F1 (Nonzero) required: knobs sit ON the lines, EvenOdd burned holes at overlaps -->
     <Geometry x:Key="IconEqualizer">F1 M5,3 h2 v18 h-2 z M11,3 h2 v18 h-2 z M17,3 h2 v18 h-2 z M6,12.2 a2.3,2.3 0 1,0 0.002,0 z M12,7.2 a2.3,2.3 0 1,0 0.002,0 z M18,14.2 a2.3,2.3 0 1,0 0.002,0 z</Geometry>
     <Geometry x:Key="IconChevronRight">M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z</Geometry>
     <Geometry x:Key="IconChevronDown">M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z</Geometry>
     <Geometry x:Key="IconChevronLeft">M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z</Geometry>
-    <!-- Sync (Material "sync") — кнопка синхронизации лайков платформ -->
+    <!-- Sync (Material "sync") — platform likes sync button -->
     <Geometry x:Key="IconSync">M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4A4.42,4.42 0 0,1 15,5.18L12.65,7.53H19.41V0.76L16.94,3.23A6.93,6.93 0 0,0 12,2M18.5,12A6,6 0 0,1 12,18C10.6,18 9.31,17.47 8.32,16.6L10.68,14.24H3.92V21L6.4,18.5A8,8 0 0,0 20,12H18.5Z</Geometry>
-    <!-- Refresh (Material "refresh") — обновление микса -->
+    <!-- Refresh (Material "refresh") — mix refresh -->
     <Geometry x:Key="IconRefresh">M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z</Geometry>
     <Geometry x:Key="IconStats">M5 21V9h4v12H5zM10 21V3h4v18h-4zM15 21v-8h4v8h-4z</Geometry>
     <Geometry x:Key="IconPlaylist">M3,6 L15,6 L15,8 L3,8 Z M3,10 L15,10 L15,12 L3,12 Z M3,14 L11,14 L11,16 L3,16 Z M17,6.5 L17,14.6 A3.2,3.2 0 1 0 19,17.5 L19,6.5 Z</Geometry>
     <Geometry x:Key="IconEdit">M3,17.25 L3,21 L6.75,21 L17.81,9.94 L14.06,6.19 L3,17.25 Z M20.71,7.04 C21.1,6.65 21.1,6.02 20.71,5.63 L18.37,3.29 C17.98,2.9 17.35,2.9 16.96,3.29 L15.13,5.12 L18.88,8.87 L20.71,7.04 Z</Geometry>
-    <!-- Волна 24x24 (Material "waves") — иконка пустого состояния страницы «Мой микс» -->
-    <!-- Искры 24x24 — «персональный микс, собранный для вас»; иконка «Мой микс» в сайдбаре.
-         Летучая мышь и волна в 14px сливались в пятно — искры читаются чётко -->
+    <!-- Wave 24x24 (Material "waves") — empty-state icon of the "My Mix" page -->
+    <!-- Sparks 24x24 — "a personal mix made for you"; sidebar "My Mix" icon.
+         The bat and wave blurred into a blob at 14px — sparks stay crisp -->
     <Geometry x:Key="IconSparkle">F1 M11,4 C11.8,8.6 13.4,10.2 18,11 C13.4,11.8 11.8,13.4 11,18 C10.2,13.4 8.6,11.8 4,11 C8.6,10.2 10.2,8.6 11,4 Z M18.5,13 C18.9,15.1 19.9,16.1 22,16.5 C19.9,16.9 18.9,17.9 18.5,20 C18.1,17.9 17.1,16.9 15,16.5 C17.1,16.1 18.1,15.1 18.5,13 Z</Geometry>
-    <!-- Полный логотип SoundCloud (облако + 8 полосок), вектор из build/soundcloud_path.txt
-         (viewBox ~143x64). DrawingImage с фирменным цветом: вектор при 16-22px не мылится,
-         в отличие от растра (полоски логотипа тоньше пикселя при таких размерах). -->
-    <!-- Полный логотип SoundCloud (облако + 8 полосок), вектор из build/soundcloud_path.txt
-         (viewBox ~143x64). Используется внутри DrawingImage SoundCloudLogoSmall ниже. -->
+    <!-- Full SoundCloud logo (cloud + 8 bars), vector from build/soundcloud_path.txt
+         (viewBox ~143x64). DrawingImage with the brand color: the vector stays crisp at
+         16-22px, unlike a raster (logo bars are thinner than a pixel at those sizes). -->
+    <!-- Same logo geometry, reused inside the SoundCloudLogoSmall DrawingImage below. -->
     <Geometry x:Key="IconSoundCloudLogo">M142.98 44.99C142.38 55.7 133.44 64.04 122.72 63.89L74.01 63.89C71.78 63.86 69.98 62.06 69.97 59.82L69.97 7.38C69.89 5.54 70.96 3.84 72.65 3.11C72.65 3.11 77.14 -0.0 86.57 -0.0C92.34 -0.01 98.0 1.55 102.95 4.5C110.76 9.1 116.29 16.76 118.2 25.62C119.88 25.15 121.62 24.91 123.37 24.92C128.66 24.88 133.74 27.0 137.44 30.79C141.14 34.57 143.14 39.7 142.98 44.99M63.89 10.7C65.35 28.48 66.42 44.71 63.89 62.44C63.8 63.24 63.12 63.85 62.31 63.85C61.51 63.85 60.83 63.24 60.74 62.44C58.38 44.86 59.4 28.33 60.74 10.7C60.67 10.09 60.96 9.5 61.47 9.18C61.99 8.86 62.64 8.86 63.15 9.18C63.67 9.5 63.95 10.09 63.89 10.7M54.03 62.46C53.9 63.27 53.21 63.86 52.39 63.86C51.57 63.86 50.87 63.27 50.75 62.46C48.99 47.29 48.99 31.96 50.75 16.8C50.84 15.95 51.55 15.31 52.4 15.31C53.25 15.31 53.96 15.95 54.05 16.8C56.01 31.95 56.0 47.3 54.03 62.46M44.15 15.25C45.75 31.55 46.48 46.16 44.13 62.42C44.13 63.29 43.43 64.0 42.55 64.0C41.68 64.0 40.97 63.29 40.97 62.42C38.7 46.37 39.46 31.34 40.97 15.25C41.06 14.44 41.74 13.82 42.56 13.82C43.38 13.82 44.06 14.44 44.15 15.25M34.26 62.47C34.17 63.3 33.47 63.92 32.65 63.92C31.82 63.92 31.13 63.3 31.04 62.47C29.22 48.32 29.22 34.0 31.04 19.85C31.04 18.94 31.77 18.21 32.68 18.21C33.58 18.21 34.32 18.94 34.32 19.85C36.25 33.99 36.23 48.34 34.26 62.47M24.38 30.5C26.88 41.56 25.76 51.32 24.29 62.59C24.17 63.34 23.52 63.89 22.76 63.89C22.0 63.89 21.36 63.34 21.24 62.59C19.9 51.47 18.8 41.48 21.14 30.5C21.14 29.61 21.87 28.88 22.76 28.88C23.66 28.88 24.38 29.61 24.38 30.5M14.53 28.83C16.81 40.15 16.07 49.74 14.47 61.1C14.28 62.78 11.4 62.8 11.25 61.1C9.8 49.91 9.11 40.04 11.19 28.83C11.28 27.97 12.0 27.33 12.86 27.33C13.72 27.33 14.44 27.97 14.53 28.83M4.58 34.32C6.98 41.83 6.16 47.93 4.48 55.63C4.39 56.42 3.72 57.02 2.93 57.02C2.13 57.02 1.46 56.42 1.37 55.63C-0.08 48.08 -0.67 41.85 1.24 34.32C1.33 33.46 2.05 32.82 2.91 32.82C3.76 32.82 4.48 33.46 4.58 34.32</Geometry>
     <DrawingImage x:Key="SoundCloudLogoSmall">
         <DrawingImage.Drawing>
             <GeometryDrawing Geometry="{StaticResource IconSoundCloudLogo}" Brush="#FA7636"/>
         </DrawingImage.Drawing>
     </DrawingImage>
-    <!-- Spotify: монохромный глиф (Simple Icons, 24x24) — круг с вырезами-дугами,
-         без зелёной заливки: тонируется темой в NavButton -->
+    <!-- Spotify: monochrome glyph (Simple Icons, 24x24) — circle with arc cutouts,
+         no green fill: tinted by the theme in NavButton -->
     <Geometry x:Key="IconSpotifyGlyph">M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.018.419 1.56-.299.421-1.02.599-1.559.3z</Geometry>
-    <!-- Яндекс Музыка: жёлтая звезда-вспышка БЕЗ чёрного круга-подложки (он и был
-         «задним фоном» иконки). Вектор из build/render_ym.ps1, бокс 48x48, монохромный. -->
+    <!-- Yandex Music: yellow star-flash WITHOUT the black circle backing (that circle was
+         the icon's background). Vector from build/render_ym.ps1, 48x48 box, monochrome. -->
     <Geometry x:Key="IconYandexMusicGlyph">M46.815 18.292 L46.689 17.359 L39.048 15.575 L42.995 9.718 L42.528 9.083 L36.373 12.095 L37.053 3.903 L36.373 3.566 L32.553 10.142 L28.055 0.254 H27.207 L28.308 9.931 L17.06 0.975 L16.085 1.231 L24.743 12.095 L7.553 6.366 L6.747 7.257 L22.111 15.957 L0.974 17.741 L0.76 19.014 L22.748 21.391 L4.37 36.417 L5.219 37.563 L26.993 25.677 L22.706 46.519 H24.021 L32.426 26.911 L37.519 42.232 L38.41 41.553 L36.5 26.189 L44.267 34.973 L44.737 34.083 L38.963 23.217 L47.155 26.104 L47.24 25.211 L40.407 19.736 L46.815 18.292 Z</Geometry>
-    <!-- Яндекс Музыка: звезда-вспышка для бейджей карточек (без чёрного круга):
-         фирменный жёлтый и серый для состояния «не подключено» -->
+    <!-- Yandex Music: star-flash for card badges (no black circle):
+         brand yellow, and gray for the "not connected" state -->
     <DrawingImage x:Key="YandexMusicGlyphYellow">
         <DrawingImage.Drawing>
             <GeometryDrawing Geometry="{StaticResource IconYandexMusicGlyph}" Brush="#FFDB4D"/>
@@ -81,8 +80,8 @@
             <GeometryDrawing Geometry="{StaticResource IconYandexMusicGlyph}" Brush="#969BA3"/>
         </DrawingImage.Drawing>
     </DrawingImage>
-    <!-- Spotify: глиф для бейджей карточек/плеер-бара (фирменный зелёный) и
-         серый для пустого состояния — без тёмного диска из spotify.png -->
+    <!-- Spotify: glyph for card badges/player bar (brand green) and gray for the
+         empty state — without the dark disc from spotify.png -->
     <DrawingImage x:Key="SpotifyGlyphGreen">
         <DrawingImage.Drawing>
             <GeometryDrawing Geometry="{StaticResource IconSpotifyGlyph}" Brush="#1ED760"/>

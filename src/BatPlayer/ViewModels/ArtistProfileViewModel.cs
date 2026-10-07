@@ -15,10 +15,10 @@ using BatPlayer.Services;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Профиль исполнителя: шапка с именем и сетка его треков (та же карточка, что в библиотеке).
-/// Показываются локальные треки артиста + его лайки SoundCloud (SC-карточки идут после
-/// локальных; файл резолвится при воспроизведении через AudioService.FilePathResolver).
-/// Контекстная очередь воспроизведения — треки профиля.
+/// Artist profile: header with the name and a grid of the artist's tracks (same card as in the library).
+/// Shows the artist's local tracks plus their SoundCloud likes (SC cards come after local ones;
+/// the file is resolved at playback via AudioService.FilePathResolver).
+/// The playback context queue is the profile's tracks.
 /// </summary>
 public partial class ArtistProfileViewModel : PageViewModel
 {
@@ -29,7 +29,7 @@ public partial class ArtistProfileViewModel : PageViewModel
     private readonly YmTracksRepository _ymTracks;
     private readonly SpotifyTracksRepository _spotifyTracks;
 
-    // Колбэк в MainViewModel: кнопка «Назад» ведёт на страницу «Исполнители».
+    // Callback into MainViewModel: the Back button leads to the Artists page.
     private readonly Action _back;
 
     private string _artistKey = string.Empty;
@@ -39,8 +39,8 @@ public partial class ArtistProfileViewModel : PageViewModel
 
     [ObservableProperty] private string _trackCountText = string.Empty;
 
-    /// <summary>Скелетон загрузки: ставится в момент клика (PrepareArtist), снимается,
-    /// когда список треков перестроен. При обновлении на месте (LibraryChanged) не трогается.</summary>
+    /// <summary>Loading skeleton: set on click (PrepareArtist), cleared when the track list
+    /// is rebuilt. Left untouched on in-place refresh (LibraryChanged).</summary>
     [ObservableProperty] private bool _isLoading;
 
     public ArtistProfileViewModel(LibraryService library, AudioService audio,
@@ -56,10 +56,10 @@ public partial class ArtistProfileViewModel : PageViewModel
         _spotifyTracks = spotifyTracks;
         _back = back;
 
-        // VM живёт столько же, сколько приложение, поэтому отписка не нужна.
+        // VM lives as long as the app, so no unsubscribe is needed.
         Loc.LanguageChanged += (_, _) => RefreshTexts();
 
-        // Пока профиль ни разу не открывали, реагировать на изменения библиотеки не нужно.
+        // No need to react to library changes until the profile has been opened at least once.
         _library.LibraryChanged += (_, _) =>
         {
             if (!_hasArtist) return;
@@ -67,34 +67,27 @@ public partial class ArtistProfileViewModel : PageViewModel
         };
     }
 
-    /// <summary>Синхронная часть открытия профиля — вызывается в момент клика, до анимации
-    /// перехода: заголовок и скелетон появляются вместе со страницей. Сама загрузка треков
-    /// (ReloadTracksAsync) откладывается до конца fade/slide (MainViewModel.LoadAfterTransitionAsync),
-    /// иначе Clear/Add карточек посреди анимации ронял её кадры.</summary>
+    /// <summary>Synchronous part of opening the profile — runs at click time, before the
+    /// transition animation, so the header and skeleton appear with the page. Actual track
+    /// loading (ReloadTracksAsync) is deferred until the fade/slide ends
+    /// (MainViewModel.LoadAfterTransitionAsync); Clear/Add mid-animation would drop frames.</summary>
     public void PrepareArtist(string artistKey)
     {
         _artistKey = ArtistHelper.Key(artistKey);
         _hasArtist = true;
         IsLoading = true;
-        // Треки прежнего артиста гасим сразу: профиль открывается на живой VM, и без
-        // очистки до конца загрузки был виден список предыдущего артиста.
+        // Hide the previous artist's tracks immediately: the profile reuses a live VM, and
+        // without clearing, the previous artist's list stays visible until loading finishes.
         Tracks.Clear();
         RefreshTexts();
     }
 
-    /// <summary>Открывает профиль: нормализует ключ исполнителя, строит заголовок и список треков.</summary>
-    public async Task SetArtistAsync(string artistKey)
-    {
-        PrepareArtist(artistKey);
-        await ReloadTracksAsync();
-    }
-
-    /// <summary>Перестраивает список треков артиста. Публично: вызывается из MainViewModel
-    /// как отложенная загрузка (после анимации перехода) и по LibraryChanged.</summary>
+    /// <summary>Rebuilds the artist's track list. Public: called from MainViewModel as a
+    /// deferred load (after the transition animation) and on LibraryChanged.</summary>
     public async Task ReloadTracksAsync()
     {
-        // Фит-матчинг: трек принадлежит артисту, если ХОТЯ БЫ ОДИН из его соавторов
-        // (разделители: запятая, амперсанд) даёт искомый ключ.
+        // Fit matching: a track belongs to the artist if AT LEAST ONE of its co-authors
+        // (separators: comma, ampersand) yields the searched key.
         bool Matches(string? artist) => ArtistHelper.Split(artist).Any(a => ArtistHelper.Key(a) == _artistKey);
 
         var tracks = (await _library.GetAllTracksAsync())
@@ -102,8 +95,8 @@ public partial class ArtistProfileViewModel : PageViewModel
             .OrderBy(t => t.DisplayTitle, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
-        // Лайки SoundCloud этого артиста — после локальных. FilePath пуст: плеер
-        // резолвит файл на переходе (локальный матч / mp3 из кэша / стрим).
+        // This artist's SoundCloud likes come after local tracks. FilePath is empty: the
+        // player resolves the file on play (local match / cached mp3 / stream).
         try
         {
             var scTracks = (await _scLikes.GetAllAsync())
@@ -117,7 +110,7 @@ public partial class ArtistProfileViewModel : PageViewModel
             Logger.Error(ex, "SoundCloud likes for artist profile failed");
         }
 
-        // VK, Яндекс Музыка и Spotify: runtime-карточки по снимку, файл резолвит FilePathResolver.
+        // VK, Yandex Music and Spotify: runtime cards built from a snapshot; the file is resolved by FilePathResolver.
         try
         {
             var vk = (await _vkTracks.GetAllAsync())
@@ -151,10 +144,10 @@ public partial class ArtistProfileViewModel : PageViewModel
             Logger.Error(ex, "VK/Yandex/Spotify tracks for artist profile failed");
         }
 
-        // Единый порядок «новые сверху» независимо от источника (как на Home):
-        // свежедобавленный трек любой платформы не прячется в конце своего блока.
-        // Сортировка стабильна — при равных датах сохраняется прежний порядок
-        // (локальные — по алфавиту, платформенные — в порядке каталога).
+        // Unified "newest first" order regardless of source (like Home): a freshly added
+        // track from any platform is not hidden at the end of its block. Sorting is
+        // stable — equal dates keep the previous order (local: alphabetical,
+        // platform: catalog order).
         tracks = tracks.OrderByDescending(t => t.DateAdded).ToList();
 
         Tracks.Clear();
@@ -163,8 +156,8 @@ public partial class ArtistProfileViewModel : PageViewModel
         IsLoading = false;
     }
 
-    /// <summary>Перемешать треки профиля; если играет трек из этого списка —
-    /// очередь плеера перестраивается по новому порядку.</summary>
+    /// <summary>Shuffle the profile's tracks; if a track from this list is playing,
+    /// the player queue is rebuilt in the new order.</summary>
     [RelayCommand]
     private void ShuffleTracks() =>
         Helpers.CardsShuffler.Shuffle(Tracks, _audio,
@@ -182,24 +175,24 @@ public partial class ArtistProfileViewModel : PageViewModel
     private void PlayTrack(Track track)
     {
         if (track == null) return;
-        // Явный клик по карточке: SC-трек, проваливший резолв ранее в этой сессии
-        // (IsAvailable=false), пробуем снова — сеть/VPN могли вернуться. Объект тот же,
-        // что лежит в Tracks/очереди, поэтому сброс флага виден и авто-переходам.
-        // (PlayPauseTrack переигрывает сюда же.)
+        // Explicit card click: retry an SC track whose resolve failed earlier in this
+        // session (IsAvailable=false) — network/VPN may be back. It is the same object
+        // stored in Tracks/queue, so the flag reset is visible to auto-transitions too.
+        // (PlayPauseTrack re-enters here.)
         if (track.Source == Track.SourceSoundCloud && !track.IsAvailable)
             track.IsAvailable = true;
         _audio.PlayTrack(track, Tracks);
     }
 
-    /// <summary>Текущий ли это трек. Для SC-карточек сравниваем ещё и ScId: Id у runtime-треков
-    /// отрицательные и могут совпасть между разными списками.</summary>
+    /// <summary>Is this the current track. For SC cards we also compare ScId: runtime track
+    /// Ids are negative and can collide between different lists.</summary>
     private bool IsCurrentTrack(Track track)
         => _audio.CurrentTrack is Track current
            && track.IsSameTrackAs(current);
 
     /// <summary>
-    /// Клик по кнопке Play на обложке: если этот трек сейчас играет — пауза/возобновление,
-    /// иначе — обычный запуск трека.
+    /// Play button on the artwork: if this track is playing — pause/resume,
+    /// otherwise start it normally.
     /// </summary>
     [RelayCommand]
     private void PlayPauseTrack(Track track)

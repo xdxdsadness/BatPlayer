@@ -8,7 +8,7 @@ public partial class YmMusicView : UserControl
 {
     public YmMusicView() => InitializeComponent();
 
-    // Клик по карточке: локальный матч -> файл, иначе разрешение стрима.
+    // Card click: local match -> file, otherwise resolve the stream.
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is not ListViewItem item) return;
@@ -19,7 +19,7 @@ public partial class YmMusicView : UserControl
         e.Handled = true;
     }
 
-    // Кнопка «+ в плейлист» на YM-карточке: строим runtime-трек по карточке.
+    // "+ add to playlist" on a YM card: build a runtime track from the card.
     private void AddToPlaylist_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { DataContext: YmCard card })

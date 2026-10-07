@@ -14,87 +14,87 @@ using System.Windows.Threading;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Ленивая загрузка обложек карточек списков (Library/SoundCloud/VK/Яндекс Музыка/Downloads/
-/// Artists/ArtistProfile/Playlist). Вешается attached-свойством <see cref="Path"/> на элемент,
-/// показывающий обложку (Border с ImageBrush в Background или Image), а сам файл декодируется
-/// НЕ на UI-потоке и не всеми карточками разом:
+/// Lazy loading of list card covers (Library/SoundCloud/VK/Yandex Music/Downloads/
+/// Artists/ArtistProfile/Playlist). Attached via the <see cref="Path"/> property to the
+/// element showing the cover (a Border with an ImageBrush background or an Image); the
+/// file is decoded NOT on the UI thread and not by all cards at once:
 ///
-/// - карточка реализуется виртуализирующей панелью (в видимое окно ± буфер) → Loaded →
-///   запрос ставится в глобальную очередь; контейнер уехал из окна → Unloaded → запрос
-///   отменяется, картинка освобождается — при скролле грузятся только видимые обложки;
-/// - декод выполняют 8 воркеров глобальной ПРИОРИТЕТНОЙ очереди: первым берётся самый
-///   свежий запрос — то, что пользователь видит сейчас (в т.ч. после скролла), уходит
-///   вперёд хвостов ушедших карточек;
-/// - одновременно декодируется не более <see cref="DecodeParallelism"/> картинок;
-/// - готовые BitmapImage кэшируются по пути (лимит <see cref="MaxCacheEntries"/>, LRU) и
-///   шарятся между всеми списками — обратная прокрутка мгновенна;
-/// - файла нет на диске → зовётся зарегистрированный <see cref="SetFileLoader"/> (сетевые
-///   обложки качаются по требованию, видимые — первыми), не скачалось — плейсхолдер;
-/// - состояние элемента для шаблонов: <see cref="IsLoading"/> (спиннер загрузки) и
-///   <see cref="HasImage"/> (скрыть иконку-плейсхолдер, когда картинка применена).
+/// - a card is realized by the virtualizing panel (visible window ± buffer) → Loaded →
+///   the request enters the global queue; the container leaves the window → Unloaded →
+///   the request is canceled and the image freed — scrolling loads only visible covers;
+/// - decoding is done by the workers of a global PRIORITY queue: the freshest request
+///   goes first — what the user sees now (including after scrolling) beats the tails
+///   of departed cards;
+/// - at most <see cref="DecodeParallelism"/> images decode simultaneously;
+/// - ready BitmapImages are cached by path (limit <see cref="MaxCacheEntries"/>, LRU) and
+///   shared across all lists — scrolling back is instant;
+/// - no file on disk → the registered <see cref="SetFileLoader"/> is called (network
+///   covers are downloaded on demand, visible ones first); on failure — placeholder;
+/// - element state for templates: <see cref="IsLoading"/> (loading spinner) and
+///   <see cref="HasImage"/> (hide the placeholder icon once the image is applied).
 ///
-/// DecodePixelWidth/CacheOption.OnLoad/Freeze — как в PathToImageConverter: файл не держится
-/// открытым, замороженный BitmapImage потокобезопасен (создаётся на пуле, применяется на UI).
+/// DecodePixelWidth/CacheOption.OnLoad/Freeze — as in PathToImageConverter: the file is
+/// not kept open and a frozen BitmapImage is thread-safe (created on a pool, applied on UI).
 /// </summary>
 public static class LazyCover
 {
-    /// <summary>Сколько обложек декодируется одновременно. 8 параллельных декодов
-    /// давали всплески аллокаций (GC-паузы = микро-фризы скролла), 6 — незаметно
-    /// медленнее по throughput, но ровнее по кадрам. 4 — при массовой загрузке сеток
-    /// (стартовые 400+ карточек, прогрузка прокруткой) GC давит UI-поток заметно;
-    /// visual-разницы в скорости прогрузки нет, кадры ровнее.</summary>
+    /// <summary>How many covers decode at once. 8 parallel decodes caused allocation spikes
+    /// (GC pauses = scroll micro-freezes); 6 was imperceptibly slower in throughput but
+    /// smoother frame-wise. 4 keeps GC pressure off the UI thread during mass grid loads
+    /// (400+ initial cards, scroll-driven loading): no visible difference in loading speed,
+    /// smoother frames.</summary>
     private const int DecodeParallelism = 4;
 
-    /// <summary>Ширина декодирования: карточки сетки ≤ ~450px (как PathToImageConverter).</summary>
+    /// <summary>Decode width: grid cards are ≤ ~450px (as in PathToImageConverter).</summary>
     private const int DecodePixelWidth = 400;
 
-    /// <summary>Лимит кэша готовых картинок; при переполнении выкидываются самые старые
-    /// записи. Кэш меньше числа карточек в паре экранов = обратный скролл постоянно
-    /// перекодировал те же обложки (лишние аллокации → GC-паузы → рывки). 150 записей
-    /// покрывает 4-5 экранов сетки (≈90 МБ пиково на квадратных 400px-декодах):
-    /// прокрученное остаётся в памяти, повторный скролл мгновенен и без декода.</summary>
+    /// <summary>Cache limit for ready images; on overflow the oldest entries are evicted.
+    /// A cache smaller than the cards of a couple of screens meant reverse scrolling kept
+    /// re-decoding the same covers (extra allocations → GC pauses → jank). 150 entries
+    /// cover 4-5 screens of the grid (≈90 MB peak for square 400px decodes): scrolled
+    /// content stays in memory and re-scrolling is instant, with no decoding.</summary>
     private const int MaxCacheEntries = 150;
 
-    /// <summary>Сколько живёт невостребованная картинка в кэше: разгрузка памяти — долго
-    /// не показываемые обложки выгружаются, обратная прокрутка просто перекодирует.
-    /// 5 минут сбрасывали кэш между соседними страницами — поднято до 20.</summary>
+    /// <summary>How long an unused image lives in the cache: a memory unload — covers not
+    /// shown for a long time are evicted and reverse scrolling simply re-decodes.
+    /// 5 minutes dropped the cache between neighboring pages — raised to 20.</summary>
     private static readonly TimeSpan CacheEntryTtl = TimeSpan.FromMinutes(20);
 
-    /// <summary>Как часто метла обходит кэш.</summary>
+    /// <summary>How often the sweeper walks the cache.</summary>
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
-    /// <summary>Готовые картинки + тик последнего использования (Environment.TickCount64).</summary>
+    /// <summary>Ready images + last-use tick (Environment.TickCount64).</summary>
     private static readonly ConcurrentDictionary<string, (BitmapImage Bmp, long LastUse)> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>UI-диспетчер для применения результата (строго UI-поток).</summary>
+    /// <summary>UI dispatcher to apply the result (strictly the UI thread).</summary>
     private static readonly Dispatcher Ui =
         Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
-    // ===== Приоритетная очередь декода =====
-    // FIFO на SemaphoreSlim декодировал сначала ранние запросы — в том числе карточек,
-    // уже уехавших из окна при быстром скролле. Воркеры берут самый свежий запрос:
-    // видимые сейчас обложки обслуживаются первыми, хвосты — по остаточному принципу.
+    // ===== Decode priority queue =====
+    // FIFO on a SemaphoreSlim served the earliest requests first — including cards that
+    // had already left the window after fast scrolling. Workers take the freshest request:
+    // currently visible covers are served first, the tails get the leftovers.
     private static readonly object Pulse = new();
-    private static readonly List<string> Pending = new();   // [0] — следующий на декод
+    private static readonly List<string> Pending = new();   // [0] is next to decode
     private static readonly Dictionary<string, TaskCompletionSource<BitmapImage?>> Waiting = new();
 
-    /// <summary>Фабрика «гарантировать файл по пути» для обложек, которых ещё нет на диске
-    /// (сетевые кэши: SoundCloud artworks и т.п.). true — файл появился, можно декодировать.
-    /// Повторный вызов для отсутствующего файла дешёв (сам загрузчик дедуплицирует).</summary>
+    /// <summary>"Ensure the file exists at path" factory for covers not yet on disk
+    /// (network caches: SoundCloud artworks etc.). true — the file appeared and can be
+    /// decoded. A repeated call for a missing file is cheap (the loader deduplicates itself).</summary>
     private static Func<string, Task<bool>>? _fileLoader;
     public static void SetFileLoader(Func<string, Task<bool>>? loader) => _fileLoader = loader;
 
     static LazyCover()
     {
-        // Метла кэша: раз в минуту выгружаем картинки, к которым >5 минут никто
-        // не обращался. Приложение живёт долго — кэш не должен расти бесконечно.
+        // Cache sweeper: once a minute evict images nobody touched for over 5 minutes.
+        // The app lives long — the cache must not grow unbounded.
         var timer = new System.Threading.Timer(
             _ => Sweep(), null, SweepInterval, SweepInterval);
-        // Таймер намеренно не Dispose: статический класс живёт столько же, сколько процесс.
+        // The timer is deliberately not disposed: a static class lives as long as the process.
         GC.SuppressFinalize(timer);
 
-        // Воркеры живут столько же, сколько процесс; их не больше DecodeParallelism.
+        // Workers live as long as the process; there are at most DecodeParallelism of them.
         for (var i = 0; i < DecodeParallelism; i++)
             _ = Task.Run(WorkerLoopAsync);
     }
@@ -110,14 +110,14 @@ public static class LazyCover
         }
     }
 
-    /// <summary>Отметка использования записи кэша (тик берём снаружи — на UI-потоке или в декоде).</summary>
+    /// <summary>Mark cache entry use (the tick is taken outside — on the UI thread or in decoding).</summary>
     private static void Touch(string path)
     {
         if (Cache.TryGetValue(path, out var entry))
             Cache[path] = (entry.Bmp, Environment.TickCount64);
     }
 
-    /// <summary>Путь файла обложки; null/пусто — плейсхолдер (ImageSource сбрасывается).</summary>
+    /// <summary>Cover file path; null/empty — placeholder (ImageSource is reset).</summary>
     public static readonly DependencyProperty PathProperty = DependencyProperty.RegisterAttached(
         "Path", typeof(string), typeof(LazyCover),
         new FrameworkPropertyMetadata(string.Empty, OnPathChanged));
@@ -125,23 +125,24 @@ public static class LazyCover
     public static string GetPath(DependencyObject obj) => (string)obj.GetValue(PathProperty);
     public static void SetPath(DependencyObject obj, string value) => obj.SetValue(PathProperty, value);
 
-    /// <summary>true, пока элемент ждёт свою обложку (очередь/декод/скачивание) —
-    /// на него вешается спиннер в шаблоне карточки.</summary>
+    /// <summary>true while the element waits for its cover (queue/decode/download) —
+    /// the card template attaches a spinner to it.</summary>
     public static readonly DependencyProperty IsLoadingProperty = DependencyProperty.RegisterAttached(
         "IsLoading", typeof(bool), typeof(LazyCover), new PropertyMetadata(false));
 
     public static bool GetIsLoading(DependencyObject obj) => (bool)obj.GetValue(IsLoadingProperty);
     public static void SetIsLoading(DependencyObject obj, bool value) => obj.SetValue(IsLoadingProperty, value);
 
-    /// <summary>true, когда обложка УЖЕ применена к элементу — шаблон прячет иконку-плейсхолдер
-    /// (карточка могла получить картинку и без заполненного пути в данных).</summary>
+    /// <summary>true once a cover is ALREADY applied to the element — the template hides
+    /// the placeholder icon (a card may have gotten an image even with an empty path
+    /// in its data).</summary>
     public static readonly DependencyProperty HasImageProperty = DependencyProperty.RegisterAttached(
         "HasImage", typeof(bool), typeof(LazyCover), new PropertyMetadata(false));
 
     public static bool GetHasImage(DependencyObject obj) => (bool)obj.GetValue(HasImageProperty);
     public static void SetHasImage(DependencyObject obj, bool value) => obj.SetValue(HasImageProperty, value);
 
-    /// <summary>CTS загрузки, привязанной к элементу (отмена при Unloaded/смене Path).</summary>
+    /// <summary>CTS of the load bound to the element (canceled on Unloaded/Path change).</summary>
     private static readonly DependencyProperty ActiveCtsProperty = DependencyProperty.RegisterAttached(
         "ActiveCts", typeof(CancellationTokenSource), typeof(LazyCover), new PropertyMetadata(null));
 
@@ -149,16 +150,16 @@ public static class LazyCover
     {
         if (d is not FrameworkElement el) return;
 
-        // Одна подписка на элемент независимо от числа смен Path (ре-реализация контейнера
-        // при скролле меняет DataContext → Binding обновляет Path).
+        // One subscription per element regardless of Path changes (re-realization of the
+        // container while scrolling changes DataContext → the binding updates Path).
         el.Loaded -= OnLoaded;
         el.Loaded += OnLoaded;
         el.Unloaded -= OnUnloaded;
         el.Unloaded += OnUnloaded;
 
-        // ВАЖНО: до Loaded ничего не мутируем (в т.ч. плейсхолдер) — первое срабатывание
-        // биндинга случается ВО ВРЕМЯ инстанциации шаблона, подмена Background в этот
-        // момент валит загрузку шаблона (XamlParseException, read-only ImageBrush).
+        // IMPORTANT: mutate nothing (including the placeholder) before Loaded — the first
+        // binding fire happens DURING template instantiation; replacing the Background then
+        // breaks template loading (XamlParseException, read-only ImageBrush).
         if (el.IsLoaded) Start(el);
     }
 
@@ -169,12 +170,12 @@ public static class LazyCover
 
     private static void OnUnloaded(object? sender, RoutedEventArgs e)
     {
-        // Только отменяем загрузку: картинку не сбрасываем — контейнер всё равно
-        // де-реализуется, а оставшийся bitmap соберёт GC.
+        // Only cancel the load: don't reset the image — the container is de-realized
+        // anyway and the leftover bitmap is collected by the GC.
         if (sender is FrameworkElement el) CancelActive(el);
     }
 
-    /// <summary>Запрос обложки элемента: кэш → отмена прежней загрузки → приоритетная очередь.</summary>
+    /// <summary>Request an element's cover: cache → cancel the previous load → priority queue.</summary>
     private static void Start(FrameworkElement el)
     {
         CancelActive(el);
@@ -212,27 +213,26 @@ public static class LazyCover
         }
         catch
         {
-            bmp = null; // битый файл/диск — карточка остаётся с плейсхолдером
+            bmp = null; // corrupt file/disk — the card keeps its placeholder
         }
 
-        // Background, а не Render: при открытии страницы приходят сотни обложек
-        // подряд, и Render-приоритет стоял ВЫШЕ ввода — интерфейс «залипал»,
-        // пока карточки прогружались. Background ниже Input: ввод всегда
-        // обрабатывается первым, обложки подтягиваются в простое.
+        // Background, not Render: when a page opens, hundreds of covers arrive in a row and
+        // Render priority ranked ABOVE input — the UI "froze" while cards loaded. Background
+        // is below Input: input is always processed first, covers arrive in idle time.
         await Ui.InvokeAsync(() =>
         {
-            // Гасим спиннер/применяем картинку только если это по-прежнему АКТИВНЫЙ
-            // запрос элемента: более свежий Start уже мог поставить свой.
+            // Apply the spinner-off/image only if this is still the element's ACTIVE
+            // request: a newer Start may have posted its own.
             if (!ReferenceEquals(el.GetValue(ActiveCtsProperty), cts)) return;
             el.SetValue(IsLoadingProperty, false);
             Apply(el, bmp);
         }, DispatcherPriority.Background);
     }
 
-    // ===== Очередь и воркеры =====
+    // ===== Queue and workers =====
 
-    /// <summary>Поставить путь в очередь (дедупликация) и поднять его приоритет:
-    /// свежий запрос — это видимая сейчас карточка, ей приоритет над хвостом.</summary>
+    /// <summary>Enqueue the path (deduplicated) and raise its priority: a fresh request is
+    /// a currently visible card, prioritized over the tail.</summary>
     private static Task<BitmapImage?> Enqueue(string path)
     {
         lock (Pulse)
@@ -276,9 +276,9 @@ public static class LazyCover
         }
     }
 
-    /// <summary>Декод файла (фоновый поток воркера): файла нет → загрузчик; иначе BitmapImage
-    /// (OnLoad, 400px, Freeze) → кэш. Отсутствующий файл НЕ кэшируем: он может появиться позже
-    /// (батч-синк), и карточка должна получить его при следующем запросе.</summary>
+    /// <summary>Decode the file (worker background thread): no file → the loader; otherwise
+    /// a BitmapImage (OnLoad, 400px, Freeze) → cache. A missing file is NOT cached: it may
+    /// appear later (batch sync), and the card must get it on the next request.</summary>
     private static async Task<BitmapImage?> DecodeAsync(string path)
     {
         try
@@ -307,9 +307,9 @@ public static class LazyCover
 
             if (Cache.Count >= MaxCacheEntries)
             {
-                // LRU: выкидываем пятую часть самых старых. Полный Clear() был хуже
-                // и по памяти (каждый новый декод после лимита сбрасывал ВСЕ обложки,
-                // обратный скролл заново декодировал всё — всплески CPU и лаги).
+                // LRU: evict the oldest fifth. A full Clear() was worse in memory too
+                // (every decode after hitting the limit dropped ALL covers, and reverse
+                // scrolling re-decoded everything — CPU spikes and lag).
                 var victims = Cache.OrderBy(p => p.Value.LastUse)
                     .Take(MaxCacheEntries / 5)
                     .Select(p => p.Key)
@@ -335,9 +335,10 @@ public static class LazyCover
         }
     }
 
-    /// <summary>Куда ставится картинка: ImageBrush фона Border (скруглённые углы) или Image.
-    /// Кисть, объявленная в XAML-шаблоне, приходит замороженной (read-only) — присваивать ей
-    /// ImageSource нельзя: подменяем фон новой живой кистью с тем же Stretch.</summary>
+    /// <summary>Where the image is set: the Border background's ImageBrush (rounded corners)
+    /// or an Image. A brush declared in the XAML template arrives frozen (read-only) — you
+    /// can't assign it an ImageSource: replace the background with a new live brush with
+    /// the same Stretch.</summary>
     private static void Apply(FrameworkElement el, BitmapImage? bmp)
     {
         el.SetValue(HasImageProperty, bmp != null);

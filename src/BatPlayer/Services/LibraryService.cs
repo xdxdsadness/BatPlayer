@@ -11,23 +11,23 @@ using BatPlayer.Models;
 
 namespace BatPlayer.Services;
 
-/// <summary>Строка play_log по платформенному треку (SoundCloud/VK/Яндекс/Spotify):
-/// самого трека в tracks нет, метаданные — снимок на момент прослушивания.</summary>
+/// <summary>A play_log row for a platform track (SoundCloud/VK/Yandex/Spotify):
+/// the track itself is not in tracks; metadata is a snapshot taken at listen time.</summary>
 public sealed class LibraryServicePlatformPlay
 {
     public string Title { get; set; } = string.Empty;
     public string Artist { get; set; } = string.Empty;
     public long DurationMs { get; set; }
     public string Source { get; set; } = string.Empty;
-    /// <summary>platform_id из play_log (ym_id/vk_id/sc_id): прослушки вне справочников
-    /// (рекомендации волны) восстанавливаются в карточку по снимку + id.</summary>
+    /// <summary>platform_id from play_log (ym_id/vk_id/sc_id): listens outside the
+    /// catalog (wave recommendations) are restored into a card from the snapshot + id.</summary>
     public string PlatformId { get; set; } = string.Empty;
     public string? ArtworkPath { get; set; }
     public string PlayedAt { get; set; } = string.Empty;
 }
 
-/// <summary>Локальный трек + момент прослушивания (played_at из history): для честного
-/// слияния «Недавно прослушанных» с платформенными прослушками play_log по общему времени.</summary>
+/// <summary>A local track + listen moment (played_at from history): for a fair merge
+/// of "Recently played" with platform play_log listens by common timestamp.</summary>
 public sealed class LibraryServiceLocalPlay
 {
     public Track Track { get; set; } = null!;
@@ -35,8 +35,8 @@ public sealed class LibraryServiceLocalPlay
 }
 
 /// <summary>
-/// Скан библиотеки + CRUD для tracks/playlists/history/playback_state.
-/// Все запросы идут через один SqliteConnection с Cache=Shared;Dapper.ConcurrencyMode=AllowUnsafe.
+/// Library scanning + CRUD for tracks/playlists/history/playback_state.
+/// All queries go through a single SqliteConnection with Cache=Shared;Dapper.ConcurrencyMode=AllowUnsafe.
 /// </summary>
 public sealed class LibraryService
 {
@@ -51,7 +51,7 @@ public sealed class LibraryService
         _coverCacheDir = coverCacheDir;
     }
 
-    /// <summary>cover_cache_path в БД может быть NULL — путь восстанавливается из хэша.</summary>
+    /// <summary>cover_cache_path in the DB may be NULL — the path is rebuilt from the hash.</summary>
     private List<Track> AttachCovers(IEnumerable<Track> tracks)
     {
         foreach (var t in tracks)
@@ -105,9 +105,9 @@ public sealed class LibraryService
               WHERE h.last_position_ticks >= 0 OR h.play_count > 0
               ORDER BY h.played_at DESC LIMIT @limit", new { limit })).ToList());
 
-    /// <summary>Тот же запрос, что GetRecentlyPlayedAsync, но вместе с played_at (ISO 8601
-    /// UTC): «Недавно прослушанные» смешивает локальные треки с платформенными прослушками
-    /// play_log — сортировать их нужно по общему моменту времени.</summary>
+    /// <summary>Same query as GetRecentlyPlayedAsync, but with played_at (ISO 8601
+    /// UTC) included: "Recently played" mixes local tracks with platform play_log
+    /// listens — they must be sorted by a common timestamp.</summary>
     public async Task<List<LibraryServiceLocalPlay>> GetRecentlyPlayedDatedAsync(int limit = 50)
     {
         var rows = (await _conn.QueryAsync<(long track_id, string played_at)>(
@@ -125,10 +125,11 @@ public sealed class LibraryService
         return result;
     }
 
-    /// <summary>Прослушки платформенных треков из play_log (source != 'local'): у
-    /// SoundCloud/VK/Яндекс/Spotify-карточек Id отрицательный и в tracks их нет,
-    /// поэтому обычный JOIN по history их не находит. Группировка по (source, title,
-    /// artist) — runtime-Id в БД не сохраняется, совпадение делается по снимку метаданных.</summary>
+    /// <summary>Platform-track listens from play_log (source != 'local'): SoundCloud/
+    /// VK/Yandex/Spotify cards have negative Ids and are absent from tracks, so a
+    /// regular JOIN over history does not find them. Grouping by (source, title,
+    /// artist) — the runtime Id is not persisted in the DB, matching is done on the
+    /// metadata snapshot.</summary>
     public async Task<List<LibraryServicePlatformPlay>> GetRecentlyPlayedPlatformAsync(int limit = 100)
     {
         var sql = """
@@ -229,7 +230,7 @@ public sealed class LibraryService
         LibraryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Извлечь обложку в кэш сразу при сканировании, чтобы она была видна в списке.</summary>
+    /// <summary>Extracts the cover into the cache right during the scan so it is visible in the list.</summary>
     private async Task CacheCoverAsync(Track track, string filePath)
     {
         try
@@ -306,7 +307,7 @@ public sealed class LibraryService
             """;
         var tracks = AttachCovers((await _conn.QueryAsync<Track>(sql, new { pid = playlistId })).ToList());
 
-        // Платформенные треки: runtime-карточки по снимку (файл резолвит FilePathResolver).
+        // Platform tracks: runtime cards built from the snapshot (file resolved by FilePathResolver).
         var platform = (await _conn.QueryAsync<(string Source, string PlatformId, string Title, string Artist, long DurationMs)>(
             """
             SELECT source, platform_id, title, artist, duration_ms
@@ -321,15 +322,15 @@ public sealed class LibraryService
             var r = platform[i];
             var t = YmRuntimeTracks.BuildRuntimeTrack(r.PlatformId, r.Title, r.Artist, r.DurationMs, null, true, i);
             t.Source = r.Source;
-            // Обложка платформенного трека: SC/YM кэшируют арти в artworks_cache
-            // по id платформы — привязываем, иначе в плейлисте пустые квадраты.
+            // Platform track cover: SC/YM cache artwork in artworks_cache by platform
+            // id — attach it, otherwise the playlist shows empty squares.
             t.CoverCachePath = ResolvePlatformArtwork(r.Source, r.PlatformId);
             tracks.Add(t);
         }
         return tracks;
     }
 
-    /// <summary>Путь к кэшированной обложке платформенного трека (null — не скачана).</summary>
+    /// <summary>Path to a platform track's cached cover (null — not downloaded).</summary>
     private string? ResolvePlatformArtwork(string source, string platformId)
     {
         var fileName = source switch
@@ -343,7 +344,7 @@ public sealed class LibraryService
         return File.Exists(path) ? path : null;
     }
 
-    /// <summary>Добавить трек в плейлист: локальный — по Id, платформенный — снимком.</summary>
+    /// <summary>Adds a track to a playlist: local — by Id, platform — as a snapshot.</summary>
     public async Task AddTrackToPlaylistAsync(long playlistId, Track track)
     {
         if (track.Id > 0)
@@ -373,7 +374,7 @@ public sealed class LibraryService
         LibraryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Обложка плейлиста: копия файла в playlist_covers, путь — в БД.</summary>
+    /// <summary>Playlist cover: a copy of the file into playlist_covers, path stored in the DB.</summary>
     public async Task SetPlaylistCoverAsync(long playlistId, string imagePath)
     {
         var dir = Path.Combine(App.AppDataDir, "playlist_covers");
@@ -442,12 +443,6 @@ public sealed class LibraryService
         var tracks = await GetTracksByIdsAsync(entries.Select(e => e.TrackId));
         foreach (var e in entries) e.Track = tracks.FirstOrDefault(t => t.Id == e.TrackId);
         return entries;
-    }
-
-    public async Task ClearHistoryAsync()
-    {
-        await _conn.ExecuteAsync("DELETE FROM history");
-        LibraryChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task<PlaybackState?> LoadPlaybackStateAsync()

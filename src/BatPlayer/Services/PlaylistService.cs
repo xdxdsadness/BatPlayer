@@ -10,7 +10,7 @@ using BatPlayer.Models;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Сервис плейлистов с поддержкой импорта/экспорта M3U/M3U8.
+/// Playlist service with M3U/M3U8 import/export support.
 /// </summary>
 public sealed class PlaylistService
 {

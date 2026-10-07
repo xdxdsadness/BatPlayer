@@ -86,7 +86,7 @@ public partial class SettingsViewModel : PageViewModel
     [ObservableProperty] private bool _isSpotifyConnected;
     [ObservableProperty] private bool _isSpotifyBusy;
 
-    /// <summary>Ошибки SoundCloud-действий из настроек — тост главного окна.</summary>
+    /// <summary>Errors from SoundCloud actions in settings — main window toast.</summary>
     public event EventHandler<string>? ErrorOccurred;
 
     public SettingsViewModel(SettingsService settings, LibraryService library, AudioService audio,
@@ -116,8 +116,8 @@ public partial class SettingsViewModel : PageViewModel
         ScApiConnected = _scApiAuth.IsConnected;
         ScApiStatusText = ScApiConnected ? "SoundCloud API: OK" : Loc.Get("NotConnected");
 
-        // VM живёт столько же, сколько приложение; на смене языка обновляем
-        // заголовок и подпись "(Системное по умолчанию)" в списке устройств.
+        // VM lives as long as the app; on language change we refresh
+        // the title and the "(System default)" label in the device list.
         Loc.LanguageChanged += (_, _) =>
         {
             Title = Loc.Get("Settings");
@@ -207,7 +207,7 @@ public partial class SettingsViewModel : PageViewModel
     partial void OnNormalizeVolumeChanged(bool value)
     {
         _settings.Update(s => s.NormalizeVolume = value);
-        // Живое применение: усиление текущего трека пересчитывается (или гасится в 1).
+        // Live apply: the current track's gain is recomputed (or reset to 1).
         _audio.SetNormalizationEnabled(value);
     }
 
@@ -268,7 +268,7 @@ public partial class SettingsViewModel : PageViewModel
 
     partial void OnSelectedLanguageChanged(string value)
     {
-        // Сохраняем в settings.json и применяем язык на лету (все биндинги Loc.T перечитаются).
+        // Save to settings.json and apply the language on the fly (all Loc.T bindings re-read).
         _settings.Update(s => s.Language = value);
         Loc.SetLanguage(value);
     }
@@ -280,7 +280,7 @@ public partial class SettingsViewModel : PageViewModel
         => _settings.Update(s => s.UseGlobalHotkeys = value);
 
     partial void OnSoundCloudProxyChanged(string value)
-        // Сетевой слой SoundCloud подхватит новое значение через SettingsService.SettingsChanged.
+        // The SoundCloud network layer picks up the new value via SettingsService.SettingsChanged.
         => _settings.Update(s => s.SoundCloudProxy = value?.Trim() ?? string.Empty);
 
     [RelayCommand]
@@ -290,9 +290,9 @@ public partial class SettingsViewModel : PageViewModel
         if (dlg.ShowDialog() != true) return;
         await _library.AddLibraryFolderAsync(dlg.FolderName);
         await LoadFoldersAsync();
-        // Новый каталог сразу сканируем: без этого треки появляются только после
-        // «Scan now» или перезапуска, и «Add folder» выглядит нерабочим.
-        // (Кнопка Add folder на главной панели сканирует сразу — здесь то же самое.)
+        // Scan the new folder right away: otherwise tracks appear only after
+        // "Scan now" or a restart, and "Add folder" looks broken.
+        // (The Add folder button on the main panel scans immediately — same here.)
         await _library.ScanFolderAsync(dlg.FolderName);
     }
 
@@ -319,7 +319,7 @@ public partial class SettingsViewModel : PageViewModel
 
     // ============================ SoundCloud ============================
 
-    /// <summary>Статус подключения: NotConnected / ConnectedAs &lt;username&gt; (сетевая проверка /me).</summary>
+    /// <summary>Connection status: NotConnected / ConnectedAs &lt;username&gt; (network check via /me).</summary>
     private async Task RefreshSoundCloudStatusAsync()
     {
         try
@@ -331,7 +331,7 @@ public partial class SettingsViewModel : PageViewModel
                 return;
             }
 
-            // Cookies есть — проверяем их валидность у /me (15с таймаут внутри сервиса).
+            // Cookies present — validate them against /me (15s timeout inside the service).
             var me = await _soundCloud.GetMeAsync(CancellationToken.None);
             IsSoundCloudConnected = me != null;
             SoundCloudStatusText = me != null
@@ -344,7 +344,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    // ===================== Официальный SoundCloud API (PKCE + локальный callback) =====================
+    // ===================== Official SoundCloud API (PKCE + local callback) =====================
 
     private bool _scApiConnected;
     public bool ScApiConnected
@@ -372,8 +372,8 @@ public partial class SettingsViewModel : PageViewModel
 
     public bool ScApiManualVisible => _scApiManualMode;
 
-    /// <summary>Подключение официального API: браузер (PKCE) → локальный callback
-    /// на 127.0.0.1:8765 → токен → авто-регистрация приложения. Статусы в тексте.</summary>
+    /// <summary>Connect the official API: browser (PKCE) → local callback
+    /// on 127.0.0.1:8765 → token → app auto-registration. Statuses go to the text.</summary>
     [RelayCommand]
     private async Task ConnectScApiAsync()
     {
@@ -382,7 +382,7 @@ public partial class SettingsViewModel : PageViewModel
         ((System.Windows.Input.ICommand)ConnectScApiCommand).CanExecuteChanged += (_, _) => { };
         try
         {
-            ScApiStatusText = "Открываю браузер для входа SoundCloud...";
+            ScApiStatusText = Loc.Get("ScApiOpeningBrowser");
             var file = await _scApiAuth.ConnectLocallyAsync(
                 status => ScApiStatusText = status,
                 CancellationToken.None);
@@ -390,13 +390,13 @@ public partial class SettingsViewModel : PageViewModel
             ScApiConnected = !string.IsNullOrEmpty(file.AccessToken);
             if (ScApiConnected && string.IsNullOrEmpty(file.ClientSecret))
             {
-                // Токен получен бандлед-клиентом, а СВОЁ приложение зарегистрировать не
-                // удалось (например, нужна подписка Artist Pro — причина уже в статусе).
-                // Бандлед-клиент SoundCloud мог заблокировать (403 disallowed на стримы),
-                // поэтому сразу даём ручной ввод client_id своего приложения.
+                // The token came from the bundled client, but registering the USER'S OWN app
+                // failed (e.g. Artist Pro subscription needed — the reason is already in the
+                // status). The bundled SoundCloud client may be blocked (403 disallowed on
+                // streams), so we immediately offer manual entry of the app's client_id.
                 _scApiManualMode = true;
                 OnPropertyChanged(nameof(ScApiManualVisible));
-                ScApiStatusText += "  Если у вас есть приложение на soundcloud.com/you/apps — введите его client_id ниже и нажмите Сохранить.";
+                ScApiStatusText += Loc.Get("ScApiManualHint");
             }
             else
             {
@@ -408,8 +408,8 @@ public partial class SettingsViewModel : PageViewModel
             Logger.Error(ex, "SC API local pairing failed");
             var isReg = ex.Message.Contains("App registration failed");
             ScApiStatusText = isReg
-                ? "Авто-регистрация недоступна: создайте приложение на soundcloud.com/you/apps (redirect: http://127.0.0.1:8765/callback), введите client_id и нажмите Сохранить"
-                : "Ошибка: " + ex.Message;
+                ? Loc.Get("ScApiAutoRegUnavailable")
+                : Loc.Get("ErrorPrefix") + ex.Message;
             _scApiManualMode = isReg;
         }
         finally
@@ -419,17 +419,17 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Ручной режим: PKCE с пользовательским client_id (приложение создано
-    /// на сайте soundcloud.com/you/apps; redirect: http://127.0.0.1:8765/callback).</summary>
+    /// <summary>Manual mode: PKCE with a user-provided client_id (the app was created
+    /// on soundcloud.com/you/apps; redirect: http://127.0.0.1:8765/callback).</summary>
     [RelayCommand]
     private async Task SaveScApiClientIdAsync()
     {
         var clientId = ScApiManualClientId.Trim();
-        if (clientId.Length < 8) { ScApiStatusText = "client_id слишком короткий"; return; }
+        if (clientId.Length < 8) { ScApiStatusText = Loc.Get("ClientIdTooShort"); return; }
         _scApiConnecting = true;
         try
         {
-            ScApiStatusText = "Открываю браузер для входа SoundCloud...";
+            ScApiStatusText = Loc.Get("ScApiOpeningBrowser");
             var file = await _scApiAuth.ConnectWithClientIdAsync(clientId, null,
                 status => ScApiStatusText = status, CancellationToken.None);
             ScApiConnected = !string.IsNullOrEmpty(file.AccessToken);
@@ -438,7 +438,7 @@ public partial class SettingsViewModel : PageViewModel
         catch (Exception ex)
         {
             Logger.Error(ex, "SC API manual connect failed");
-            ScApiStatusText = "Ошибка: " + ex.Message;
+            ScApiStatusText = Loc.Get("ErrorPrefix") + ex.Message;
         }
         finally
         {
@@ -455,9 +455,9 @@ public partial class SettingsViewModel : PageViewModel
         ScApiStatusText = Loc.Get("NotConnected");
     }
 
-    /// <summary>Подключить аккаунт: окно входа WebView2; после успеха — обновить статус.
-    /// Профиль WebView2 НЕ чистится: cookies остаются — автологин возвращает в тот же
-    /// аккаунт без ввода пароля (чистый вход — через «Сменить аккаунт»).</summary>
+    /// <summary>Connect an account: WebView2 login window; on success — refresh the status.
+    /// The WebView2 profile is NOT cleared: cookies persist — autologin returns to the
+    /// same account without a password (a clean login is via "Switch account").</summary>
     [RelayCommand]
     private async Task ConnectSoundCloudAsync()
     {
@@ -476,11 +476,11 @@ public partial class SettingsViewModel : PageViewModel
     }
 
     /// <summary>
-    /// Сменить аккаунт: открывает ОРИГИНАЛЬНОЕ веб-окно SoundCloud, где пользователь сам
-    /// выходит из текущей сессии и входит каким хочет аккаунтом (сайт помнит почту,
-    /// предлагает сохранённые варианты — как аккаунт-чузер у Google, но средствами SC).
-    /// Как только на сайте появляется новая сессия (oauth_token), окно закрывается,
-    /// приложение подхватывает её, лайки прошлого аккаунта чистятся под пересинк.
+    /// Switch account: opens the ORIGINAL SoundCloud web window, where the user signs out
+    /// of the current session and logs in with any account they want (the site remembers
+    /// the email and offers saved options — like a Google account chooser, via SC itself).
+    /// As soon as a new session (oauth_token) appears on the site, the window closes,
+    /// the app picks it up, and the previous account's likes are cleared for a re-sync.
     /// </summary>
     [RelayCommand]
     private async Task SwitchSoundCloudAccountAsync()
@@ -492,8 +492,8 @@ public partial class SettingsViewModel : PageViewModel
         {
             if (await _soundCloudLogin.LoginAsync(owner!, signOutFirst: true))
             {
-                // Сессия сменилась (или переподтвердилась) — лайки прошлого аккаунта
-                // больше не соответствуют, чистим под синк нового.
+                // The session changed (or was re-confirmed) — the previous account's
+                // likes no longer match; clear them for the new account's sync.
                 await _soundCloudLikes.ClearAllAsync();
                 await RefreshSoundCloudStatusAsync();
             }
@@ -540,7 +540,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Отключение: удалить sc_auth.json и очистить таблицу лайков.</summary>
+    /// <summary>Disconnect: delete sc_auth.json and clear the likes table.</summary>
     [RelayCommand]
     private async Task DisconnectSoundCloudAsync()
     {
@@ -563,9 +563,9 @@ public partial class SettingsViewModel : PageViewModel
 
     // =============================== VK ==================================
 
-    /// <summary>Статус подключения VK: не подключено / ConnectedAs id&lt;uid&gt; (по наличию
-    /// cookies веб-сессии в vk_auth.json, без сетевой проверки — протухшая сессия
-    /// выяснится при первом запросе каталога и будет сброшена).</summary>
+    /// <summary>VK connection status: not connected / ConnectedAs id&lt;uid&gt; (based on the
+    /// presence of web-session cookies in vk_auth.json, no network check — an expired
+    /// session will surface on the first catalog request and be reset).</summary>
     private async Task RefreshVkStatusAsync()
     {
         try
@@ -577,8 +577,8 @@ public partial class SettingsViewModel : PageViewModel
                 return;
             }
 
-            // Cookies сессии есть. Имя пользователя по cookies недоступно (users.get
-            // требовал мёртвый токен) — показываем id, если он был извлечён при входе.
+            // Session cookies present. The username is not available from cookies (users.get
+            // required a dead token) — show the id, if it was extracted at login.
             var userId = _vk.GetUserId();
             IsVkConnected = true;
             VkStatusText = userId.Length > 0
@@ -591,8 +591,8 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Подключить аккаунт VK: окно входа WebView2 (cookies веб-сессии); после успеха —
-    /// обновить статус.</summary>
+    /// <summary>Connect a VK account: WebView2 login window (web-session cookies); on success —
+    /// refresh the status.</summary>
     [RelayCommand]
     private async Task ConnectVkAsync()
     {
@@ -632,15 +632,15 @@ public partial class SettingsViewModel : PageViewModel
             Logger.Error($"VK sync failed (error code {ex.ErrorCode})");
             if (ex.ErrorCode == 5)
             {
-                // Cookies инвалидированы (VK вернул страницу логина): сервис уже очистил
-                // cookie-строку — статус «не подключено», кнопка Connect даёт войти заново.
+                // Cookies invalidated (VK returned the login page): the service has already
+                // cleared the cookie string — status "not connected", the Connect button lets the user log in again.
                 ErrorOccurred?.Invoke(this, Loc.Get("VkSessionExpired"));
             }
             else if (VkService.IsAudioPermissionError(ex.ErrorCode))
                 ErrorOccurred?.Invoke(this, Loc.Get("VkAudioPermissionDenied"));
             else
                 ErrorOccurred?.Invoke(this, $"{Loc.Get("VkSyncFailed")}: {ex.Message}");
-            await RefreshVkStatusAsync(); // код 5 сбросил сессию — статус «не подключено»
+            await RefreshVkStatusAsync(); // code 5 reset the session — status "not connected"
         }
         catch (Exception ex)
         {
@@ -653,7 +653,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Отключение: удалить vk_auth.json и очистить таблицу vk_tracks.</summary>
+    /// <summary>Disconnect: delete vk_auth.json and clear the vk_tracks table.</summary>
     [RelayCommand]
     private async Task DisconnectVkAsync()
     {
@@ -676,10 +676,10 @@ public partial class SettingsViewModel : PageViewModel
 
     // ========================== Yandex Music =============================
 
-    /// <summary>Статус подключения Яндекс Музыки: не подключено / ConnectedAs &lt;имя&gt;
-    /// (по наличию OAuth-токена в ym_auth.json; сетевая проверка account/status подтягивает
-    /// актуальные имя/uid — если она не сошлась (сеть/отозванный токен), показываются
-    /// значения, сохранённые при входе; отзовётся токен на первом же запросе каталога).</summary>
+    /// <summary>Yandex Music connection status: not connected / ConnectedAs &lt;name&gt;
+    /// (based on the OAuth token in ym_auth.json; a network check via account/status pulls
+    /// fresh name/uid — if it fails (network/revoked token), the values saved at login
+    /// are shown; the token will be rejected on the first catalog request).</summary>
     private async Task RefreshYmStatusAsync()
     {
         try
@@ -691,8 +691,8 @@ public partial class SettingsViewModel : PageViewModel
                 return;
             }
 
-            // Токен есть: актуальные имя/uid — из account/status, fallback — сохранённые
-            // при входе (GetAccountStatusAsync ошибок не бросает — возвращает null).
+            // Token present: fresh name/uid come from account/status; fallback — the values
+            // saved at login (GetAccountStatusAsync does not throw — returns null).
             IsYmConnected = true;
             var name = _ym.GetSavedDisplayName();
             var uid = _ym.GetSavedUid();
@@ -712,8 +712,8 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Подключить аккаунт Яндекс Музыки: окно входа WebView2 (OAuth Яндекс ID);
-    /// после успеха — обновить статус.</summary>
+    /// <summary>Connect a Yandex Music account: WebView2 login window (Yandex ID OAuth);
+    /// on success — refresh the status.</summary>
     [RelayCommand]
     private async Task ConnectYmAsync()
     {
@@ -753,13 +753,13 @@ public partial class SettingsViewModel : PageViewModel
             Logger.Error($"Yandex Music sync failed (HTTP {ex.HttpCode})");
             if (YmApiException.IsSessionError(ex.HttpCode))
             {
-                // Токен отозван (API вернул 401/403): сервис уже очистил AccessToken —
-                // статус «не подключено», кнопка Connect даёт войти заново.
+                // Token revoked (API returned 401/403): the service has already cleared
+                // AccessToken — status "not connected", the Connect button lets the user log in again.
                 ErrorOccurred?.Invoke(this, Loc.Get("YmSessionExpired"));
             }
             else
                 ErrorOccurred?.Invoke(this, $"{Loc.Get("YmSyncFailed")}: {ex.Message}");
-            await RefreshYmStatusAsync(); // 401/403 сбросили сессию — статус «не подключено»
+            await RefreshYmStatusAsync(); // 401/403 reset the session — status "not connected"
         }
         catch (Exception ex)
         {
@@ -772,7 +772,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Отключение: удалить ym_auth.json и очистить таблицу ym_tracks.</summary>
+    /// <summary>Disconnect: delete ym_auth.json and clear the ym_tracks table.</summary>
     [RelayCommand]
     private async Task DisconnectYmAsync()
     {
@@ -795,8 +795,8 @@ public partial class SettingsViewModel : PageViewModel
 
     // ============================= Spotify ===============================
 
-    /// <summary>Статус подключения Spotify: не подключено / ConnectedAs (по наличию
-    /// OAuth-токена в spotify_auth.json).</summary>
+    /// <summary>Spotify connection status: not connected / ConnectedAs (based on the
+    /// OAuth token in spotify_auth.json).</summary>
     private async Task RefreshSpotifyStatusAsync()
     {
         try
@@ -824,7 +824,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Подключить аккаунт Spotify: окно OAuth авторизации; после успеха — обновить статус.</summary>
+    /// <summary>Connect a Spotify account: OAuth authorization window; on success — refresh the status.</summary>
     [RelayCommand]
     private async Task ConnectSpotifyAsync()
     {
@@ -868,7 +868,7 @@ public partial class SettingsViewModel : PageViewModel
             Logger.Error($"Spotify sync failed (HTTP {ex.StatusCode})");
             if (ex.StatusCode == 401 || ex.StatusCode == 403)
             {
-                // Токен отозван: очистить сессию
+                // Token revoked: clear the session
                 ErrorOccurred?.Invoke(this, "Spotify session expired");
             }
             else
@@ -886,7 +886,7 @@ public partial class SettingsViewModel : PageViewModel
         }
     }
 
-    /// <summary>Отключение: удалить spotify_auth.json и очистить таблицу spotify_tracks.</summary>
+    /// <summary>Disconnect: delete spotify_auth.json and clear the spotify_tracks table.</summary>
     [RelayCommand]
     private async Task DisconnectSpotifyAsync()
     {

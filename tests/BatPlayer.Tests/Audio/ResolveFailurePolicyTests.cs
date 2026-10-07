@@ -4,10 +4,9 @@ using Xunit;
 namespace BatPlayer.Tests.Audio;
 
 /// <summary>
-/// Политика обработки неудачного резолва файла SC-трека: клик пользователя —
-/// StopWithError (играет ИЛИ чистая ошибка, без перескоков), авто-переход —
-/// SkipNext с лимитом MaxConsecutiveUnresolvable подряд (защита от зацикливания
-/// Next на мёртвой очереди).
+/// Policy for failed SC file resolves: a user click → StopWithError (play or clean error,
+/// no skips); auto-transition → SkipNext capped at MaxConsecutiveUnresolvable in a row
+/// (guards against Next looping on a dead queue).
 /// </summary>
 public class ResolveFailurePolicyTests
 {
@@ -19,8 +18,8 @@ public class ResolveFailurePolicyTests
     [InlineData(10)]
     public void Decide_UserInitiated_AlwaysStopsWithError(int streak)
     {
-        // Явное намерение пользователя: кликнул → играет ИЛИ чистая ошибка,
-        // никаких перескоков — независимо от счётчика подряд идущих неудач.
+        // Explicit user intent: click → play or clean error, never a skip,
+        // regardless of the failure streak.
         var action = ResolveFailurePolicy.Decide(userInitiated: true, streak);
 
         Assert.Equal(ResolveFailureAction.StopWithError, action);
@@ -31,7 +30,7 @@ public class ResolveFailurePolicyTests
     [InlineData(1)]
     public void Decide_AutoTransition_BelowLimit_SkipsNext(int streak)
     {
-        // Счётчик ДО текущей неудачи: streak+1 < Max — мёртвый трек скипается быстро.
+        // Counter BEFORE the current failure: streak+1 < Max — dead track skipped fast.
         Assert.True(streak + 1 < ResolveFailurePolicy.MaxConsecutiveUnresolvable);
         var action = ResolveFailurePolicy.Decide(userInitiated: false, streak);
 
@@ -41,8 +40,8 @@ public class ResolveFailurePolicyTests
     [Fact]
     public void Decide_AutoTransition_LimitReached_StopsWithError()
     {
-        // Последний разрешённый подряд пропуск (streak+1 == Max) — останавливаемся
-        // с ошибкой вместо бесконечного цикла Next по мёртвой очереди.
+        // Last allowed consecutive skip (streak+1 == Max) — stop with an error
+        // instead of looping Next over a dead queue.
         var action = ResolveFailurePolicy.Decide(userInitiated: false, ResolveFailurePolicy.MaxConsecutiveUnresolvable - 1);
 
         Assert.Equal(ResolveFailureAction.StopWithError, action);
@@ -51,8 +50,8 @@ public class ResolveFailurePolicyTests
     [Fact]
     public void Decide_AutoTransition_OverLimit_StopsWithError()
     {
-        // Защитный случай: streak уже не сброшен (не должен встречаться — счётчик
-        // сбрасывается вместе с Stop), но политика обязана держать Stop.
+        // Defensive case: streak not reset (should not happen — the counter resets
+        // with Stop), but the policy must still Stop.
         var action = ResolveFailurePolicy.Decide(userInitiated: false, ResolveFailurePolicy.MaxConsecutiveUnresolvable);
 
         Assert.Equal(ResolveFailureAction.StopWithError, action);

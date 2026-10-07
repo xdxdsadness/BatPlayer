@@ -12,10 +12,10 @@ using BatPlayer.Services;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Эквалайзер с динамическим набором полос (в духе FabFilter Pro-Q):
-/// при старте полос нет — прямая линия; пользователь добавляет точки двойным
-/// кликом по графику, удаляет двойным кликом по точке, перетаскиванием задаёт
-/// частоту и усиление. Каждый факт изменения сразу уходит в аудиосервис.
+/// Equalizer with a dynamic set of bands (in the spirit of FabFilter Pro-Q):
+/// there are no bands at start — a flat line; the user adds points by double-clicking
+/// the chart, removes them by double-clicking a point, and sets frequency/gain by dragging.
+/// Every change is pushed to the audio service immediately.
 /// </summary>
 public partial class EqualizerViewModel : PageViewModel
 {
@@ -39,7 +39,7 @@ public partial class EqualizerViewModel : PageViewModel
         _settings = settings;
         Title = Loc.Get("Equalizer");
 
-        // VM живёт столько же, сколько приложение — отписка не нужна.
+        // VM lives as long as the app — no unsubscribe needed.
         Loc.LanguageChanged += (_, _) => Title = Loc.Get("Equalizer");
 
         RefreshPresets();
@@ -55,9 +55,9 @@ public partial class EqualizerViewModel : PageViewModel
 
     private void LoadFromSettings()
     {
-        // Полосы при старте НЕ восстанавливаем: по механике Pro-Q пользователь
-        // начинает с прямой линии и расставляет точки сам; пресет применяется
-        // только когда выбран в списке.
+        // Bands are NOT restored at startup: per the Pro-Q mechanic the user starts
+        // from a flat line and places points themselves; a preset applies only
+        // when selected in the list.
         IsEnabled = _settings.Current.EqualizerEnabled;
         PreGain = 0;
     }
@@ -78,7 +78,7 @@ public partial class EqualizerViewModel : PageViewModel
         }
     }
 
-    /// <summary>Удалять можно только пользовательские пресеты; встроенные — навсегда.</summary>
+    /// <summary>Only user presets can be deleted; built-ins are forever.</summary>
     public bool CanDeleteSelectedPreset => SelectedPreset is { IsBuiltIn: false };
 
     [RelayCommand]
@@ -96,7 +96,7 @@ public partial class EqualizerViewModel : PageViewModel
         _audio.SetEqualizerPreGain(value);
     }
 
-    // ===== Динамический набор полос =====
+    // ===== Dynamic band set =====
 
     private void HookBand(EqualizerBand band) => band.PropertyChanged += OnBandChanged;
     private void UnhookBand(EqualizerBand band) => band.PropertyChanged -= OnBandChanged;
@@ -107,7 +107,7 @@ public partial class EqualizerViewModel : PageViewModel
         var index = Bands.IndexOf(band);
         if (index < 0) return;
 
-        // Соло «слушать гармонику»: одна полоса за раз, звук идёт только через неё.
+        // "Listen to harmonic" solo: one band at a time, audio goes only through it.
         if (e.PropertyName == nameof(EqualizerBand.IsSolo))
         {
             if (band.IsSolo)
@@ -118,13 +118,13 @@ public partial class EqualizerViewModel : PageViewModel
             return;
         }
 
-        // Полоса целиком (частота, усиление, тип, крутизна, Q).
+        // Whole band (frequency, gain, type, slope, Q).
         _audio.UpdateEqualizerBand(index, band);
         if (band.IsSolo)
-            _audio.SetEqualizerSolo(band.Frequency, band.Q); // соло следует за точкой
+            _audio.SetEqualizerSolo(band.Frequency, band.Q); // solo follows the point
     }
 
-    /// <summary>Полная замена набора полос (пресет). Пустой набор = прямая линия.</summary>
+    /// <summary>Full replacement of the band set (preset). Empty set = flat line.</summary>
     private void ReplaceBands(System.Collections.Generic.IEnumerable<EqualizerBand> newBands)
     {
         foreach (var b in Bands) UnhookBand(b);
@@ -137,10 +137,10 @@ public partial class EqualizerViewModel : PageViewModel
             Bands.Add(b);
         }
         _audio.ApplyEqualizerBands(Bands);
-        _audio.SetEqualizerSolo(null, null); // соло сбрасывается вместе с набором
+        _audio.SetEqualizerSolo(null, null); // solo is reset with the set
     }
 
-    /// <summary>Двойной клик по графику: добавить узел в точке клика.</summary>
+    /// <summary>Double-click on the chart: add a node at the clicked point.</summary>
     [RelayCommand]
     private void AddBand((double freq, double gain) args)
     {
@@ -155,7 +155,7 @@ public partial class EqualizerViewModel : PageViewModel
         _audio.ApplyEqualizerBands(Bands);
     }
 
-    /// <summary>Двойной клик по узлу: удалить полосу.</summary>
+    /// <summary>Double-click on a node: remove the band.</summary>
     [RelayCommand]
     private void RemoveBand(int index)
     {
@@ -169,14 +169,14 @@ public partial class EqualizerViewModel : PageViewModel
     [RelayCommand]
     private void ResetBands()
     {
-        // «Сбросить» = пустой набор: ровная линия без точек.
+        // "Reset" = an empty set: a flat line with no points.
         ReplaceBands(Array.Empty<EqualizerBand>());
         PreGain = 0;
     }
 
     private void ApplyPreset(EqualizerPreset preset)
     {
-        // Выбор пресета означает намерение слышать его: эквалайзер включается сам.
+        // Selecting a preset means the user intends to hear it: enable the equalizer automatically.
         if (!IsEnabled) IsEnabled = true;
         PreGain = preset.PreGain;
         ReplaceBands(preset.Bands.Select(b => new EqualizerBand { Frequency = b.Frequency, Gain = b.Gain }));

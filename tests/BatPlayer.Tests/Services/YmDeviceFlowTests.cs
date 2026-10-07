@@ -4,9 +4,9 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты OAuth Device Flow Яндекс ID (вход в Яндекс Музыку): разбор ответов
-/// device-code/token (чистые функции YmJsonParser), классификация ошибок опроса
-/// (YmTokenResult) и формат device_id. Сеть и живой логин в юнит-тесты не входят.
+/// Tests for the Yandex ID OAuth Device Flow (Yandex Music sign-in): device-code/token
+/// response parsing (pure YmJsonParser functions), poll error classification (YmTokenResult)
+/// and the device_id format. No network or live login.
 /// </summary>
 public class YmDeviceFlowTests
 {
@@ -36,8 +36,8 @@ public class YmDeviceFlowTests
     [InlineData("")]
     [InlineData("<html>gateway error</html>")]
     [InlineData("{\"unexpected\":true}")]
-    [InlineData("{\"device_code\":\"abc\"}")] // нет user_code
-    [InlineData("{\"user_code\":\"123\"}")]   // нет device_code
+    [InlineData("{\"device_code\":\"abc\"}")] // no user_code
+    [InlineData("{\"user_code\":\"123\"}")]   // no device_code
     public void ParseDeviceCode_GarbageOrIncomplete_ReturnsNull(string? json)
     {
         Assert.Null(YmJsonParser.ParseDeviceCode(json));
@@ -72,8 +72,8 @@ public class YmDeviceFlowTests
     [InlineData("""{"error":"slow_down"}""", "slow_down")]
     [InlineData("""{"error":"expired_token"}""", "expired_token")]
     [InlineData("""{"error":"access_denied"}""", "access_denied")]
-    [InlineData("""{}""", "invalid_response")]          // ни токена, ни ошибки
-    [InlineData("""<html>502</html>""", "invalid_response")] // не JSON
+    [InlineData("""{}""", "invalid_response")]          // neither token nor error
+    [InlineData("""<html>502</html>""", "invalid_response")] // not JSON
     [InlineData(null, "invalid_response")]
     [InlineData("", "invalid_response")]
     public void ParseTokenResponse_ErrorBody_ReturnsErrorCode(string? json, string expected)
@@ -84,7 +84,7 @@ public class YmDeviceFlowTests
         Assert.Equal(expected, result.ErrorCode);
     }
 
-    // ===================== YmTokenResult классификация =====================
+    // ===================== YmTokenResult classification =====================
 
     [Fact]
     public void YmTokenResult_PendingAndSlowDown_Classified()
@@ -117,7 +117,7 @@ public class YmDeviceFlowTests
         Assert.False(result.IsDenied);
     }
 
-    // ===================== Константы и утилиты =====================
+    // ===================== Constants and utilities =====================
 
     [Fact]
     public void GenerateDeviceId_ReturnsTenAlphanumericChars()
@@ -131,8 +131,8 @@ public class YmDeviceFlowTests
     [Fact]
     public void OAuthClientCredentials_AreOfficialYandexMusicClient()
     {
-        // Пара Android-клиента Яндекс Музыки (как в неофициальном yandex-music-api):
-        // заведена на oauth.yandex.ru, работает в Device Flow.
+        // Yandex Music Android client pair (as in the unofficial yandex-music-api);
+        // registered on oauth.yandex.ru, works with Device Flow.
         Assert.Equal("23cabbbdc6cd418abb4b39c32c41195d", YmService.OAuthClientId);
         Assert.Equal("53bc75238f0c4d08a118e51fe9203300", YmService.OAuthClientSecret);
     }

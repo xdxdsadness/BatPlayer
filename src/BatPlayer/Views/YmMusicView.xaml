@@ -6,15 +6,15 @@
              xmlns:controls="clr-namespace:BatPlayer.Controls"
             >
     <UserControl.Resources>
-        <!-- Обложки биндим на локальный кэш (Path2Img): avatars.mds.yandex.net может быть
-             недоступен напрямую, поэтому BitmapImage по http-ссылке обложку не получает. -->
+        <!-- Covers bind to the local cache (Path2Img): avatars.mds.yandex.net may be
+             unreachable directly, so a BitmapImage over an http URL gets nothing. -->
         <cv:PathToImageConverter x:Key="Path2Img"/>
         <cv:EmptyToVisibilityConverter x:Key="Empty2Vis"/>
         <cv:TimeSpanToStringConverter x:Key="TimeStr"/>
         <cv:InverseIntToVisibilityConverter x:Key="InverseInt2Vis"/>
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
         <cv:PlatformCardPlayingConverter x:Key="PlatformCardPlaying"/>
-        <!-- Плавное появление hover-оверлея и play-кнопки карточки (fade вместо мгновенного переключения) -->
+        <!-- Smooth fade-in of the card hover overlay and play button (fade instead of an instant switch) -->
         <Style x:Key="CardHoverFade" TargetType="FrameworkElement">
             <Setter Property="Opacity" Value="0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
@@ -53,8 +53,8 @@
                             </Storyboard>
                         </BeginStoryboard>
                     </DataTrigger.EnterActions>
-                    <!-- ExitActions обязателен: без него Enter-анимация «залипала» на
-                         opacity=1 при смене трека / пересборке списка (несколько заставок). -->
+                    <!-- ExitActions is required: without it the Enter animation stuck at
+                         opacity=1 on track change / list rebuild (multiple overlays). -->
                     <DataTrigger.ExitActions>
                         <BeginStoryboard>
                             <Storyboard>
@@ -68,9 +68,9 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Контейнер карточки: по образцу ScCardStyle/TrackCardStyle, без подсветки выделения -->
+        <!-- Card container: modeled after ScCardStyle/TrackCardStyle, no selection highlight -->
         <Style x:Key="YmCardStyle" TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
-            <!-- Шаблон НЕ переопределяется: hover-scale и пружина нажатия наследуются из TrackCardStyle (раньше голый ContentPresenter отключал их — анимации наведения работали только на Home) -->
+            <!-- Template is NOT overridden: hover-scale and press spring are inherited from TrackCardStyle (a bare ContentPresenter used to disable them — hover animations only worked on Home) -->
             <EventSetter Event="MouseLeftButtonUp" Handler="Card_Click"/>
         </Style>
     </UserControl.Resources>
@@ -88,8 +88,8 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <!-- Заголовок как в Home: крупный текст, под ним мелкий с отступом 3 —
-                 зазор не зависит от высоты кнопок справа -->
+            <!-- Header as in Home: large text with a small line 3px below —
+                 the gap does not depend on the buttons' height on the right -->
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Medium"
                            Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -101,15 +101,15 @@
                         <Run Text="{Binding [LastSynced], Source={x:Static loc:Loc.T}, Mode=OneWay}"/>
                         <Run Text="{Binding LastSyncedText, Mode=OneWay}"/>
                     </TextBlock>
-                    <!-- Какой аккаунт синхронизируется: лайки читаются по его uid —
-                         если треки добавляются в другом аккаунте, они не приедут синком -->
+                    <!-- Which account is synced: likes are read by its uid —
+                         tracks liked in another account will not arrive in the sync -->
                     <TextBlock FontSize="12" Margin="10,0,0,0"
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                Visibility="{Binding IsConnected, Converter={StaticResource Bool2Vis}}">
                         <Run Text="{Binding [YmAccount], Source={x:Static loc:Loc.T}, Mode=OneWay}"/>
                         <Run Text="{Binding AccountDisplay, Mode=OneWay}"/>
                     </TextBlock>
-                    <!-- Статус загрузки трека в кэш (показывается только пока IsLoadingTrack) -->
+                    <!-- Track cache download status (shown only while IsLoadingTrack) -->
                     <TextBlock FontSize="12" Margin="10,0,0,0"
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                Visibility="{Binding IsLoadingTrack, Converter={StaticResource Bool2Vis}}">
@@ -117,7 +117,7 @@
                     </TextBlock>
                 </StackPanel>
             </StackPanel>
-            <!-- Кнопки правее, по центру блока заголовка -->
+            <!-- Buttons to the right, centered on the header block -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 
                 
@@ -137,7 +137,7 @@
 </Button></StackPanel>
         </Grid>
 
-        <!-- Sync progress: как панель сканирования в LibraryView -->
+        <!-- Sync progress: like the scan panel in LibraryView -->
         <Border Grid.Row="1" Background="{DynamicResource PanelBrush}"
                 Margin="24,0,24,12" Padding="14,10" CornerRadius="8"
                 Visibility="{Binding IsSyncing, Converter={StaticResource Bool2Vis}}">
@@ -151,14 +151,14 @@
                         <TextBlock FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}">
                             <Run Text="{Binding [YmSyncing], Source={x:Static loc:Loc.T}, Mode=OneWay}"/>
                         </TextBlock>
-                        <!-- Счётчик фиксированной ширины: растущие цифры не сдвигают бейдж -->
+                        <!-- Fixed-width counter: growing digits do not shift the badge -->
                         <TextBlock FontSize="13" Width="72" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}">
                             <Run Text="{Binding SyncProgress, Mode=OneWay}"/>
                             <Run Text="/"/>
                             <Run Text="{Binding SyncTotal, Mode=OneWay}"/>
                         </TextBlock>
-                        <!-- Вращающийся логотип во время синка -->
-                        <!-- Тёмный бейдж: белый силуэт виден и в тёмной, и в светлой теме -->
+                        <!-- Spinning logo during sync -->
+                        <!-- Dark badge: the white silhouette is visible in both dark and light themes -->
                         <Border Width="26" Height="26" CornerRadius="13" Margin="8,0,0,0"
                                 VerticalAlignment="Center" Background="#FF232428"
                                 BorderBrush="#40FFFFFF" BorderThickness="1">
@@ -190,16 +190,16 @@
             </Grid>
         </Border>
 
-        <!-- Карточки: копия SoundCloudLikesView (обложка 1:1, hover-оверлей, сердечко, название, исполнитель, лого Яндекса) -->
+        <!-- Cards: copy of SoundCloudLikesView (1:1 cover, hover overlay, heart, title, artist, Yandex logo) -->
         <Grid Grid.Row="2" Margin="24,0,16,4">
             <ListView controls:ScrollHeaderCollapse.Header="{Binding ElementName=PageHeader}" ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
                       ItemsSource="{Binding Cards}"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       VerticalContentAlignment="Stretch">
-                <!-- На время загрузки список свёрнут: виртуализация не генерирует
-                     контейнеры для старых карточек, при клике по бару нет тройной
-                     работы (создать старые → очистить → создать новые) — переход
-                     без лагов. Без скелетона и fade: чистое появление по готовности. -->
+                <!-- The list is collapsed while loading: virtualization does not generate
+                     containers for old cards, and clicking a bar avoids triple work
+                     (create old → clear → create new) — a lag-free transition.
+                     No skeleton or fade: a clean appearance once ready. -->
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
@@ -217,16 +217,16 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Opacity="{Binding CardOpacity}">
-                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
-                                 SquareBorder: квадрат уже в measure — без двойного
-                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <!-- Square cover (1:1) across the full card width.
+                                 SquareBorder: square already at measure — no double
+                                 layout pass from a self-binding Height=ActualWidth. -->
                             <controls:SquareBorder x:Name="CoverRoot" CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
-                                    <!-- Обложка из локального кэша (artwork_local_path); файла нет — плейсхолдер IconYm.
-                                         LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые. -->
-                                    <!-- Логотип-плейсхолдер: серый силуэт (CardBatPlaceholder —
-                                         общий стиль всех баров, см. DarkTheme; статичный) -->
+                                    <!-- Cover from the local cache (artwork_local_path); missing file — IconYm placeholder.
+                                         LazyCover: background decode in batches of 8; while scrolling only visible items load. -->
+                                    <!-- Logo placeholder: gray silhouette (CardBatPlaceholder —
+                                         the shared style of all bars, see DarkTheme; static) -->
                                     <Image Style="{StaticResource CardBatPlaceholder}"/>
 <Border CornerRadius="8" controls:LazyCover.Path="{Binding ArtworkLocalPath}">
                                         <Border.Style>
@@ -251,12 +251,12 @@
                                         </Border.Background>
                                     </Border>
 
-                                    <!-- Полупрозрачный белый оверлей: при наведении ИЛИ когда играет этот трек -->
+                                    <!-- Translucent white overlay: on hover OR while this track plays -->
                                     <Border x:Name="CoverHoverOverlay" CornerRadius="8"
                                             Background="#40FFFFFF" IsHitTestVisible="False"
                                             Style="{StaticResource CardHoverFade}"/>
 
-                                    <!-- Центральная кнопка Play -->
+                                    <!-- Central Play button -->
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="0.34*"/>
@@ -318,7 +318,7 @@
                                         </Button>
                                     </Grid>
 
-                                    <!-- Бейдж «есть локально» (IconFile) в правом верхнем углу обложки -->
+                                    <!-- "Available locally" badge (IconFile) in the cover's top-right corner -->
                                     <Border CornerRadius="6" Background="#CC101010" Width="22" Height="22"
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
                                             ToolTip="{Binding [YmLocalMatch], Source={x:Static loc:Loc.T}}">
@@ -339,7 +339,7 @@
                                 </Grid>
                             </controls:SquareBorder>
 
-                            <!-- Строка 1: сердечко (трек из библиотеки Яндекс Музыки) + название + лого справа -->
+                            <!-- Row 1: heart (Yandex Music library track) + title + logo on the right -->
                             <Grid Margin="2,8,2,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -355,12 +355,12 @@
                                            Foreground="{DynamicResource TextPrimaryBrush}"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
-                                <!-- Логотип Яндекс Музыки напротив названия -->
+                                <!-- Yandex Music logo opposite the title -->
                                 <Image Grid.Column="2" Width="18" Height="18" Stretch="Uniform"
                                         VerticalAlignment="Center" HorizontalAlignment="Right" Margin="6,0,0,0" Source="{StaticResource YandexMusicGlyphYellow}" RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
 
-                            <!-- Строка 2: исполнитель — клик по имени открывает профиль -->
+                            <!-- Row 2: artist — clicking the name opens the profile -->
                             <Button HorizontalAlignment="Left" Cursor="Hand" Margin="2,3,2,0"
                                     Opacity="0"
                                     Template="{StaticResource ArtistHoverTemplate}"
@@ -386,9 +386,9 @@
             </ListView>
         </Grid>
 
-<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
-             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
-             при переключении задний фон не «прыгает» -->
+<!-- Empty state: icon is pinned to the CENTER of the page (bottom edge 16px above
+             center), text grows downward from center — the icon's anchor point is the same
+             in all bars, so the background does not "jump" when switching -->
         <Border Grid.Row="2" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource Bool2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

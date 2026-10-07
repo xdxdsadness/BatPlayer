@@ -21,7 +21,7 @@ public class ArtistHelperTests
     [Fact]
     public void Key_RealName_TrimmedAndLowercased()
     {
-        // Ключ регистронезависимый: "Kai Angel" и "kai angel" — один артист.
+        // Key is case-insensitive: "Kai Angel" and "kai angel" are one artist.
         Assert.Equal("radiohead", ArtistHelper.Key(" Radiohead "));
         Assert.Equal(ArtistHelper.Key("Kai Angel"), ArtistHelper.Key("kai angel"));
     }
@@ -29,7 +29,7 @@ public class ArtistHelperTests
     [Fact]
     public void Key_LegacyValueAsSubstring_KeptAsRegularArtist()
     {
-        // Сходство с legacy-строкой не должно склеивать реальных артистов
+        // Mere similarity to the legacy string must not merge real artists.
         Assert.Equal("unknown artist band", ArtistHelper.Key("Unknown Artist Band"));
     }
 

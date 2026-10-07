@@ -5,8 +5,8 @@ using System.Windows.Media;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Круглая кнопка-иконка. Используется в title bar и transport controls.
-/// По умолчанию прозрачная, на hover — лёгкий фон.
+/// Round icon button. Used in the title bar and transport controls.
+/// Transparent by default, with a subtle background on hover.
 /// </summary>
 public sealed class CircleButton : Button
 {

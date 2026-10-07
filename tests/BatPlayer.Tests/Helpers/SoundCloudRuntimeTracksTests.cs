@@ -7,8 +7,8 @@ using Xunit;
 namespace BatPlayer.Tests.Helpers;
 
 /// <summary>
-/// Построение runtime-треков из лайков SoundCloud (карточки Home/«Загрузок»)
-/// и их матчинг с локальной библиотекой.
+/// Building runtime tracks from SoundCloud likes (Home/Favorites cards) and
+/// matching them against the local library.
 /// </summary>
 public class SoundCloudRuntimeTracksTests
 {
@@ -34,16 +34,16 @@ public class SoundCloudRuntimeTracksTests
         var track = SoundCloudRuntimeTracks.BuildRuntimeTrack(
             Like(artwork: @"C:\cache\artworks_cache\42.jpg"), artworkLocalPath: @"C:\cache\artworks_cache\42.jpg", index: 3);
 
-        Assert.Equal(-4, track.Id); // Id = -1 - index: не пересекается с локальными
+        Assert.Equal(-4, track.Id); // Id = -1 - index: no clash with local tracks
         Assert.Equal("42", track.ScId);
         Assert.Equal("Midnight Drive", track.Title);
         Assert.Equal("Neon Fox", track.Artist);
         Assert.Equal(150_000 * System.TimeSpan.TicksPerMillisecond, track.DurationTicks);
         Assert.Equal(@"C:\cache\artworks_cache\42.jpg", track.CoverCachePath);
-        Assert.True(track.IsFavorite);      // лайки
+        Assert.True(track.IsFavorite);      // likes
         Assert.True(track.IsAvailable);
         Assert.Equal(Track.SourceSoundCloud, track.Source);
-        Assert.Equal(string.Empty, track.FilePath); // файл резолвится при клике
+        Assert.Equal(string.Empty, track.FilePath); // file resolved on click
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void BuildRuntimeTrack_NullArtwork_KeepsCoverPathNull()
     {
-        // Пустой путь → карточка показывает плейсхолдер (fallback уже существует).
+        // Empty path → the card shows a placeholder (existing fallback).
         var track = SoundCloudRuntimeTracks.BuildRuntimeTrack(Like(), artworkLocalPath: null, index: 0);
         Assert.Null(track.CoverCachePath);
     }
@@ -69,8 +69,8 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void BuildRuntimeTrack_CarriesLikedAtAsDateAdded()
     {
-        // Единая сортировка «новые сверху»: дата лайка становится DateAdded карточки,
-        // поэтому свежелайкнутый SC-трек встаёт над старыми треками других источников.
+        // Like date becomes the card's DateAdded for unified "newest first" sorting,
+        // so a fresh SC like sits above older tracks from other sources.
         var track = SoundCloudRuntimeTracks.BuildRuntimeTrack(Like(), null, index: 0);
         Assert.Equal(new System.DateTime(2026, 9, 1, 0, 0, 0, System.DateTimeKind.Utc), track.DateAdded);
     }
@@ -81,20 +81,20 @@ public class SoundCloudRuntimeTracksTests
         var runtime = SoundCloudRuntimeTracks.BuildRuntimeTrack(Like(), null, index: 7);
         var cached = SoundCloudRuntimeTracks.WithCachedFile(runtime, @"C:\cache\sc_cache\42.mp3");
 
-        Assert.Equal(runtime.Id, cached.Id);       // повторный клик по карточке: пауза/возобновление
+        Assert.Equal(runtime.Id, cached.Id);       // repeat card click: pause/resume
         Assert.Equal(runtime.ScId, cached.ScId);
         Assert.Equal(runtime.Title, cached.Title);
         Assert.Equal(runtime.Artist, cached.Artist);
         Assert.Equal(runtime.DurationTicks, cached.DurationTicks);
         Assert.Equal(runtime.Source, cached.Source);
-        Assert.Equal(runtime.DateAdded, cached.DateAdded); // дата лайка не теряется
+        Assert.Equal(runtime.DateAdded, cached.DateAdded); // like date preserved
         Assert.Equal(@"C:\cache\sc_cache\42.mp3", cached.FilePath);
     }
 
     [Fact]
     public void Like_MatchesLocalLibrary_ByArtistAndTitle()
     {
-        // Тот же путь, что использует LibraryViewModel при клике: строка лайка → FindLocalMatch.
+        // Same path LibraryViewModel uses on click: like row → FindLocalMatch.
         var local = new List<Track>
         {
             new() { Artist = "Other Artist", Title = "Midnight Drive" },
@@ -102,7 +102,7 @@ public class SoundCloudRuntimeTracksTests
             new() { Artist = "Neon Fox", Title = "Midnight Drive" },
         };
 
-        var like = Like(); // «Neon Fox — Midnight Drive»
+        var like = Like(); // "Neon Fox — Midnight Drive"
         var match = MatchHelper.FindLocalMatch(local, like.Artist, like.Title);
 
         Assert.NotNull(match);
@@ -119,7 +119,7 @@ public class SoundCloudRuntimeTracksTests
         Assert.Null(MatchHelper.FindLocalMatch(local, like.Artist, like.Title));
     }
 
-    // ===== NeedsFilePathResolve: решает AudioService — открывать файл как есть или звать резолвер =====
+    // ===== NeedsFilePathResolve: decides whether AudioService opens the file as-is or calls the resolver =====
 
     [Fact]
     public void NeedsFilePathResolve_ScRuntimeCard_ReturnsTrue()
@@ -138,7 +138,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void NeedsFilePathResolve_LocalTrackWithoutFile_ReturnsFalse()
     {
-        // Локальный трек без файла резолверу не нужен: Open() сообщит об ошибке как раньше.
+        // Local track without a file needs no resolver: Open() reports the error as before.
         var track = new Track { FilePath = string.Empty, Source = Track.SourceLocal };
         Assert.False(SoundCloudRuntimeTracks.NeedsFilePathResolve(track));
     }
@@ -146,7 +146,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void NeedsFilePathResolve_ScCardWithResolvedFile_ReturnsFalse()
     {
-        // Уже резолвнутая карточка (повторный клик/переход) открывается как есть.
+        // Already-resolved card (repeat click/transition) opens as-is.
         var track = SoundCloudRuntimeTracks.WithCachedFile(
             SoundCloudRuntimeTracks.BuildRuntimeTrack(Like(), null, 0), @"C:\cache\sc_cache\42.mp3");
         Assert.False(SoundCloudRuntimeTracks.NeedsFilePathResolve(track));
@@ -170,7 +170,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void BuildRuntimeTrack_FromFields_MatchesLikeOverload()
     {
-        // Перегрузка для карточек страницы SoundCloud (без SoundCloudLikeRow) — те же Id/поля.
+        // Overload for SoundCloud page cards (no SoundCloudLikeRow) — same Id/fields.
         var fromLike = SoundCloudRuntimeTracks.BuildRuntimeTrack(Like(artwork: @"C:\art\42.jpg"), @"C:\art\42.jpg", 2);
         var fromFields = SoundCloudRuntimeTracks.BuildRuntimeTrack(
             "42", "Midnight Drive", "Neon Fox", 150_000, @"C:\art\42.jpg", 2);
@@ -184,7 +184,7 @@ public class SoundCloudRuntimeTracksTests
         Assert.Equal(fromLike.Source, fromFields.Source);
     }
 
-    // ===== FilterWithSoundCloud: поиск по локальным трекам + лайкам SoundCloud =====
+    // ===== FilterWithSoundCloud: search over local tracks + SoundCloud likes =====
 
     [Fact]
     public void Filter_MatchesLikeByTitle_RuntimeCardAppendedAfterLocals()
@@ -194,16 +194,16 @@ public class SoundCloudRuntimeTracksTests
             new() { Title = "Midnight Drive", Artist = "Neon Fox", FilePath = @"C:\m\a.mp3" },
             new() { Title = "Unrelated", Artist = "Someone" },
         };
-        var likes = new List<SoundCloudLikeRow> { Like() }; // «Neon Fox — Midnight Drive»
+        var likes = new List<SoundCloudLikeRow> { Like() }; // "Neon Fox — Midnight Drive"
 
         var result = SoundCloudRuntimeTracks.FilterWithSoundCloud(local, likes, "Midnight", startIndex: 0);
 
         Assert.Equal(2, result.Count);
-        Assert.Equal(Track.SourceLocal, result[0].Source);      // локальные совпадения впереди
-        Assert.Equal(Track.SourceSoundCloud, result[1].Source); // SC-совпадение в конце
+        Assert.Equal(Track.SourceLocal, result[0].Source);      // local matches first
+        Assert.Equal(Track.SourceSoundCloud, result[1].Source); // SC match appended last
         Assert.Equal("42", result[1].ScId);
         Assert.Equal("Midnight Drive", result[1].Title);
-        Assert.Equal(string.Empty, result[1].FilePath);         // файл резолвится на клике
+        Assert.Equal(string.Empty, result[1].FilePath);         // file resolved on click
         Assert.Equal(-1, result[1].Id);                         // Id = -1 - index
     }
 
@@ -234,7 +234,7 @@ public class SoundCloudRuntimeTracksTests
     [InlineData("   ")]
     public void Filter_EmptyQuery_ReturnsAllLocals_WithoutSoundCloudCards(string? query)
     {
-        // Пустой поиск = обычный список страницы: SC-лайки на Home добавляет LoadAsync.
+        // Empty query = plain page list: SC likes on Home are added by LoadAsync.
         var local = new List<Track> { new() { Title = "Alpha" }, new() { Title = "Beta" } };
         var result = SoundCloudRuntimeTracks.FilterWithSoundCloud(
             local, new List<SoundCloudLikeRow> { Like() }, query, startIndex: 0);
@@ -248,16 +248,16 @@ public class SoundCloudRuntimeTracksTests
     {
         var likes = new List<SoundCloudLikeRow>
         {
-            Like(scId: "7"),                          // «Neon Fox — Midnight Drive»
-            Like(scId: "9", title: "Second Tune"),    // «Neon Fox — Second Tune»
+            Like(scId: "7"),                          // "Neon Fox — Midnight Drive"
+            Like(scId: "9", title: "Second Tune"),    // "Neon Fox — Second Tune"
         };
 
-        // «e» есть и в «Midnight Drive»/«Neon Fox», и в «Second Tune» — совпадают оба лайка.
+        // "e" appears in both "Midnight Drive"/"Neon Fox" and "Second Tune" — both likes match.
         var result = SoundCloudRuntimeTracks.FilterWithSoundCloud(
             new List<Track>(), likes, "e", startIndex: 5);
 
         Assert.Equal(2, result.Count);
-        Assert.Equal(-6, result[0].Id); // Id = -1 - (startIndex + номер совпадения)
+        Assert.Equal(-6, result[0].Id); // Id = -1 - (startIndex + match number)
         Assert.Equal("7", result[0].ScId);
         Assert.Equal(-7, result[1].Id);
         Assert.Equal("9", result[1].ScId);
@@ -286,7 +286,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void Filter_SoundCloudCard_DoesNotMatchAlbumOrGenre()
     {
-        // У лайков нет album/genre: совпадение только по title/artist.
+        // Likes have no album/genre: match by title/artist only.
         var local = new List<Track> { new() { Title = "Neon Fox", Artist = "X", Album = "Midnight Drive" } };
         var likes = new List<SoundCloudLikeRow> { Like(artist: "Unrelated", title: "Unrelated") };
 
@@ -297,16 +297,16 @@ public class SoundCloudRuntimeTracksTests
         Assert.Equal(Track.SourceLocal, result[0].Source);
     }
 
-    // ===== BuildScAppend: SC-часть списка библиотеки по фильтру страницы =====
-    // Репозиторий выдаёт лайки в порядке liked_at DESC (новые сверху) — тестовые
-    // списки собраны в том же порядке.
+    // ===== BuildScAppend: SC part of the library list by page filter =====
+    // The repository returns likes ordered by liked_at DESC (newest first) — test
+    // lists follow the same order.
 
     private static List<SoundCloudLikeRow> Likes(int count)
     {
         var likes = new List<SoundCloudLikeRow>();
         for (int i = 0; i < count; i++)
             likes.Add(Like(scId: (100 + i).ToString(), title: $"Track {i}"));
-        return likes; // [0] — самый свежий (liked_at DESC)
+        return likes; // [0] is the newest (liked_at DESC)
     }
 
     [Fact]
@@ -315,12 +315,12 @@ public class SoundCloudRuntimeTracksTests
         var result = SoundCloudRuntimeTracks.BuildScAppend("Played", Likes(61));
 
         Assert.Equal(SoundCloudRuntimeTracks.RecentlyPlayedScLimit, result.Count);
-        Assert.Equal("100", result[0].ScId); // первый — самый свежий лайк
+        Assert.Equal("100", result[0].ScId); // first is the newest like
         Assert.Equal("149", result[49].ScId);
         Assert.All(result, t =>
         {
             Assert.Equal(Track.SourceSoundCloud, t.Source);
-            Assert.Equal(string.Empty, t.FilePath); // файл резолвится на клике
+            Assert.Equal(string.Empty, t.FilePath); // file resolved on click
         });
     }
 
@@ -347,7 +347,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void BuildScAppend_All_ReturnsAllLikes()
     {
-        // Home: как раньше — все лайки в конец локального списка (добавляет LoadAsync).
+        // Home: as before — all likes appended to the local list (by LoadAsync).
         var result = SoundCloudRuntimeTracks.BuildScAppend("All", Likes(2));
 
         Assert.Equal(2, result.Count);
@@ -358,7 +358,7 @@ public class SoundCloudRuntimeTracksTests
     [InlineData("Recent")]
     public void BuildScAppend_Recent_ReturnsEmpty(string filterMode)
     {
-        // «Недавно добавленные» — страница только про локальные файлы.
+        // "Recently added" is a local-files-only page.
         Assert.Empty(SoundCloudRuntimeTracks.BuildScAppend(filterMode, Likes(5)));
     }
 
@@ -369,7 +369,7 @@ public class SoundCloudRuntimeTracksTests
         Assert.Empty(SoundCloudRuntimeTracks.BuildScAppend("Played", new List<SoundCloudLikeRow>()));
     }
 
-    // ===== GetNextSoundCloudCandidate: кандидат префетча следующего трека очереди =====
+    // ===== GetNextSoundCloudCandidate: prefetch candidate for the next queue track =====
 
     private static Track LocalTrack(string title) => new() { Title = title, FilePath = @"C:\m\" + title + ".mp3" };
 
@@ -385,7 +385,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void GetNext_UnresolvedScAfterLocal_ReturnsIt()
     {
-        // Mix local/sc: после локального трека идёт нересолвнутая SC-карточка.
+        // Mixed local/sc: an unresolved SC card follows a local track.
         var queue = new List<Track> { LocalTrack("a"), ScCard("42"), LocalTrack("b") };
 
         var next = SoundCloudRuntimeTracks.GetNextSoundCloudCandidate(queue, currentIndex: 0);
@@ -405,7 +405,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void GetNext_NextIsResolvedSc_ReturnsNull()
     {
-        // Файл уже резолвнут (повторное включение) — качать нечего.
+        // File already resolved (replay) — nothing to download.
         var queue = new List<Track> { LocalTrack("a"), ScCard("42", resolved: true) };
 
         Assert.Null(SoundCloudRuntimeTracks.GetNextSoundCloudCandidate(queue, currentIndex: 0));
@@ -414,7 +414,7 @@ public class SoundCloudRuntimeTracksTests
     [Fact]
     public void GetNext_NextIsKnownUnavailable_ReturnsNull()
     {
-        // Проваливший резолв в этой сессии трек авто-переход скипает — не префетчим.
+        // Auto-transition skips tracks that failed resolve this session — don't prefetch.
         var queue = new List<Track> { LocalTrack("a"), ScCard("42", available: false) };
 
         Assert.Null(SoundCloudRuntimeTracks.GetNextSoundCloudCandidate(queue, currentIndex: 0));
@@ -433,7 +433,7 @@ public class SoundCloudRuntimeTracksTests
     [InlineData(-5)]
     public void GetNext_CurrentIndexNegative_ReturnsNull(int currentIndex)
     {
-        // Нечего играть — префетч не определяется относительно очереди.
+        // Nothing to play — prefetch is not defined relative to the queue.
         var queue = new List<Track> { ScCard("42") };
         Assert.Null(SoundCloudRuntimeTracks.GetNextSoundCloudCandidate(queue, currentIndex));
     }

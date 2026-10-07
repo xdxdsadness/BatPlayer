@@ -4,13 +4,12 @@ using System.Globalization;
 namespace BatPlayer.Helpers;
 
 /// <summary>
-/// Единая «дата добавления в библиотеку» для треков всех источников: локальные файлы
-/// берут её из tracks.date_added, платформенные карточки — из своих полей времени
-/// (SoundCloud/Яндекс — время лайка, VK — момент первой синхронизации, Spotify —
-/// added_at). LoadAsync сортирует объединённый список по ней, поэтому свежедобавленный
-/// трек ЛЮБОЙ платформы встаёт над старыми треками остальных источников.
-/// Все даты хранятся в БД текстом в разных форматах (ISO-8601 у ЯМ/Spotify/play_log,
-/// «2017/05/25 10:23:45 +0000» у SoundCloud) — приводим к UTC DateTime.
+/// Unified "added to library" date for tracks of all sources: local files take it from
+/// tracks.date_added, platform cards from their own time fields (SoundCloud/Yandex —
+/// like time, VK — first sync moment, Spotify — added_at). LoadAsync sorts the merged
+/// list by it, so a newly added track of ANY platform lands above older tracks of the
+/// other sources. Dates are stored in the DB as text in different formats (ISO-8601 for
+/// YM/Spotify/play_log, "2017/05/25 10:23:45 +0000" for SoundCloud) — parsed to UTC DateTime.
 /// </summary>
 public static class TrackTimestamps
 {
@@ -19,8 +18,8 @@ public static class TrackTimestamps
         if (string.IsNullOrWhiteSpace(value)) return DateTime.MinValue;
         if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
             return Normalize(dt);
-        // SoundCloud пишет офсет без двоеточия («… +0000») — инвариантный TryParse его
-        // берёт не всегда; отрезаем хвост и парсим время как есть (офсет 00:00 = UTC).
+        // SoundCloud writes the offset without a colon ("... +0000") — the invariant
+        // TryParse does not always take it; strip the tail and parse the time as-is (offset 00:00 = UTC).
         if (value.Length > 6 && value[^5] is '+' or '-'
             && DateTime.TryParse(value[..^5].TrimEnd(), CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
             return Normalize(dt);

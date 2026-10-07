@@ -22,14 +22,13 @@ public sealed class AppSettings
     public bool UpdateMetadataOnScan { get; set; } = false;
 
     // SoundCloud
-    // "" = авто (direct, при сетевом фейле — системный прокси WinINET);
-    // "off" = только direct; "socks5://host:port" / "http://host:port" = явный прокси.
+    // "" = auto (direct, falling back to the WinINET system proxy on network failure);
+    // "off" = direct only; "socks5://host:port" / "http://host:port" = explicit proxy.
     public string SoundCloudProxy { get; set; } = string.Empty;
 
-    /// <summary>Антиблокировка SoundCloud: при недоступности всех транспортов запустить
-    /// встроенный zapret (winws, только домены SoundCloud). Требует UAC-подтверждения
-    /// один раз за сессию; выключение полностью отключает механизм.</summary>
-    public bool SoundCloudZapretEnabled { get; set; } = true;
+    /// <summary>Built-in DPI bypass: when SoundCloud is unreachable, start the packet-level
+    /// engine (Tools/bypass). One UAC prompt per session; false disables the mechanism.</summary>
+    public bool DpiBypassEnabled { get; set; } = true;
 
     // Playback
     public string AudioOutputDevice { get; set; } = string.Empty; // empty = default
@@ -42,7 +41,7 @@ public sealed class AppSettings
     public bool SmoothVolumeChanges { get; set; } = true;
     public bool EqualizerEnabled { get; set; } = false;
     public string CurrentEqualizerPreset { get; set; } = "Flat";
-    // Пользовательские пресеты эквалайзера (хранит и наполняет EqualizerService)
+    // User equalizer presets (owned and populated by EqualizerService)
     public List<EqualizerPreset> EqualizerUserPresets { get; set; } = new();
 
     // UI
@@ -58,18 +57,16 @@ public sealed class AppSettings
     // Theme & background customization
     public string ThemeMode { get; set; } = "standard";        // standard / darker / light
     public string AccentColor { get; set; } = "default";       // default / blue / green / purple / red / orange
-    public int GridColumns { get; set; } = 4;                  // колонок карточек в ряду: 4 / 6 / 8
-    public bool CoverShadows { get; set; } = false;            // мягкие тени под обложками
+    public int GridColumns { get; set; } = 4;                  // card columns per row: 4 / 6 / 8
+    public bool CoverShadows { get; set; } = false;            // soft shadows under covers
 
-    // YouTube fallback: SC/VK/YM трек недоступен (DRM/policy/404) — ищем «исполнитель +
-    public bool YouTubeFallbackEnabled { get; set; } = true;
 
     // Animated GIF background (heavy: decoded off UI thread, frame-by-frame)
     public bool BackgroundGifEnabled { get; set; } = false;
-    public bool BackgroundBlurEnabled { get; set; } = false;   // блюр GIF/видео-фона
-    public int BackgroundBlurRadius { get; set; } = 24;        // радиус размытия, px
+    public bool BackgroundBlurEnabled { get; set; } = false;   // blur the GIF/video background
+    public int BackgroundBlurRadius { get; set; } = 24;        // blur radius, px
     public string BackgroundGifPath { get; set; } = string.Empty;
-    public int BackgroundGifOpacity { get; set; } = 30;        // % видимости фона поверх темы
+    public int BackgroundGifOpacity { get; set; } = 30;        // % background visibility over the theme
 
     // Hotkeys (key codes as int, modifiers as flags)
     public HotkeyBinding PlayPause { get; set; } = new() { Key = 32, Modifiers = 0 };        // Space

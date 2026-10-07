@@ -15,40 +15,40 @@ using BatPlayer.Services.Vk;
 namespace BatPlayer.Views;
 
 /// <summary>
-/// Окно входа в VK — авторизация COOKIES ВЕБ-СЕССИИ, единый принцип с SoundCloud-окном.
-/// OAuth-фаза (oauth.vk.com/authorize + Kate Mobile) удалена: токены audio.get у VK
-/// мертвы, каталог отдаётся веб-эндпоинтом al_audio.php по cookies сессии сайта.
+/// VK login window — web-session COOKIE authorization, same principle as the SoundCloud window.
+/// The OAuth phase (oauth.vk.com/authorize + Kate Mobile) was removed: VK's audio.get tokens
+/// are dead; the catalog is served by the web endpoint al_audio.php using site session cookies.
 ///
-/// Поток: открывается обычная мобильная страница входа https://m.vk.com/login (без экрана
-/// стороннего приложения). Успех детектится опросом раз в 500 мс — навигация на feed/al_im
-/// (домены vk.com И vk.ru) ИЛИ появление cookie веб-сессии remixsid (сайт мог сам
-/// восстановить сессию без редиректа на feed). После детекта:
-///   1) cookies собираются с обоих доменов (vk.ru + vk.com → "name=value; …");
-///   2) userId берётся из cookie remixuid, иначе regex'ом по HTML текущей страницы
-///      (ExecuteScriptAsync), иначе GET m.vk.ru/feed с cookies через HttpClient;
-///   3) VkService.SaveSessionCookies(cookieHeader, userId), окно закрывается DialogResult=true.
-/// Cookies в лог не пишутся (логируется только id пользователя и факт сохранения сессии).
-/// WebView2 ходит НАПРЯМУЮ (--no-proxy-server): VK лимитирует попытки входа через VPN-выход.
-/// Если WebView2 Runtime не установлен — локализованная ошибка, приложение не падает.
+/// Flow: the regular mobile login page https://m.vk.com/login opens (no third-party app screen).
+/// Success is detected by polling every 500ms — navigation to feed/al_im (vk.com AND vk.ru)
+/// OR the appearance of the remixsid web-session cookie (the site may restore the session
+/// without a redirect to feed). After detection:
+///   1) cookies are collected from both domains (vk.ru + vk.com → "name=value; …");
+///   2) userId is taken from the remixuid cookie, else by regex over the current page HTML
+///      (ExecuteScriptAsync), else GET m.vk.ru/feed with cookies via HttpClient;
+///   3) VkService.SaveSessionCookies(cookieHeader, userId), the window closes with DialogResult=true.
+/// Cookies are never logged (only the user id and the fact the session was saved).
+/// WebView2 goes DIRECT (--no-proxy-server): VK throttles login attempts from VPN exits.
+/// If the WebView2 Runtime is missing — a localized error is shown, the app doesn't crash.
 /// </summary>
     public partial class VkLoginWindow : Window
 {
     private static readonly string[] CookieDomains = new[] { "https://vk.ru", "https://vk.com", "https://m.vk.com", "https://login.vk.ru" };
 
-    /// <summary>Обычный вход на сайте VK (мобильная версия — надёжный редирект на feed).</summary>
+    /// <summary>Regular sign-in on the VK site (mobile version — reliable redirect to feed).</summary>
     private const string LoginUrl = "https://vk.ru/login";
 
-    /// <summary>Домены, cookies которых собираем (vk.ru — актуальный, vk.com — исторический).</summary>
+    /// <summary>Domains whose cookies are collected (vk.ru — current, vk.com — legacy).</summary>
     private const string CookieDomainRu = "https://vk.ru";
     private const string CookieDomainCom = "https://vk.com";
 
-    /// <summary>Cookie авторизованной веб-сессии VK.</summary>
+    /// <summary>Cookie of an authorized VK web session.</summary>
     private const string SessionCookieName = "remixsid";
 
-    /// <summary>Cookie с id пользователя (значение — uid); приходит не всегда.</summary>
+    /// <summary>Cookie holding the user id (value is the uid); not always present.</summary>
     private const string UserIdCookieName = "remixuid";
 
-    /// <summary>Страница, с которой берём HTML для извлечения uid (и Referer запроса).</summary>
+    /// <summary>Page whose HTML is used to extract the uid (and the request Referer).</summary>
     private const string FeedUrl = "https://m.vk.ru/feed";
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
@@ -57,7 +57,6 @@ namespace BatPlayer.Views;
     private DispatcherTimer? _pollTimer;
     private bool _checking;
     private bool _finished;
-    private bool _ruWarmupDone;
     private bool _audioWarmupDone;
 
     public VkLoginWindow(VkService vk)
@@ -72,10 +71,10 @@ namespace BatPlayer.Views;
     {
         try
         {
-            // Папка данных WebView2 — в %LOCALAPPDATA%/BatPlayer: exe-папка может быть read-only.
+            // WebView2 data folder lives in %LOCALAPPDATA%/BatPlayer: the exe folder may be read-only.
             var userDataFolder = System.IO.Path.Combine(App.AppDataDir, "webview2", "vk");
-            // VK доступен в регионе пользователя напрямую, а через VPN-выход VK лимитирует
-            // попытки входа ("Too many attempts" сразу после телефона) — ходим НАПРЯМУЮ.
+            // VK is reachable directly from the user's region; via VPN exits VK throttles login
+            // attempts ("Too many attempts" right after the phone step) — go DIRECT.
             var envOptions = new CoreWebView2EnvironmentOptions
             {
                 AdditionalBrowserArguments = "--no-proxy-server --proxy-bypass-list=<-loopback>"
@@ -88,8 +87,8 @@ namespace BatPlayer.Views;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Папка профиля занята другим экземпляром/повреждена («ошибка кеша») —
-                // повторяем с уникальной папкой, вход всё равно будет выполнен заново.
+                // Profile folder locked by another instance or corrupted ("cache error") —
+                // retry with a unique folder; the login runs fresh anyway.
                 Logger.Warn($"WebView2 profile folder unavailable, using a fresh one: {ex.Message}");
                 userDataFolder += "_" + Guid.NewGuid().ToString("N")[..8];
                 env = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder,
@@ -101,23 +100,23 @@ namespace BatPlayer.Views;
 
             Web.Source = new Uri(LoginUrl);
 
-            // Опрос cookies/навигации: вход может завершиться без нужного нам события
-            // (SPA-редиректы, восстановленная сессия) — таймер работает, пока окно открыто.
+            // Poll cookies/navigation: login can complete without the event we need
+            // (SPA redirects, restored session) — the timer runs while the window is open.
             _pollTimer = new DispatcherTimer { Interval = PollInterval };
             _pollTimer.Tick += PollSessionTick;
             _pollTimer.Start();
         }
         catch (Exception ex)
         {
-            // Самый частый случай — WebView2 Runtime не установлен; текст ошибки локализован.
+            // Most common case: WebView2 Runtime not installed; the error text is localized.
             Logger.Error(ex, "VK login: WebView2 init failed");
             ShowWebviewMissing();
         }
     }
 
     /// <summary>
-    /// Опрос: вход выполнен, если WebView ушёл на feed/al_im ИЛИ появилась cookie веб-сессии.
-    /// Идемпотентно (флаг _finished), повторные тики после закрытия ничего не делают.
+    /// Poll: login succeeded when the WebView reached feed/al_im OR the web-session cookie appeared.
+    /// Idempotent (_finished flag); ticks after closing do nothing.
     /// </summary>
     private async void PollSessionTick(object? sender, EventArgs e)
     {
@@ -131,19 +130,19 @@ namespace BatPlayer.Views;
             var pairsRu = cookiesRu.Select(c => (c.Name, c.Value));
             var pairsCom = cookiesCom.Select(c => (c.Name, c.Value));
 
-            // Прогрев аудио-раздела: после входа VK требует посещения vk.ru/audio —
-            // без него al_audio.php отвечает кодом 3 (челлендж) вместо каталога.
+            // Audio-section warmup: after login VK requires a visit to vk.ru/audio —
+            // without it al_audio.php answers with code 3 (challenge) instead of the catalog.
             if (!_audioWarmupDone)
             {
                 if (!IsLoggedIn(source, pairsRu, pairsCom)) return;
                 _audioWarmupDone = true;
                 Web.Source = new Uri("https://vk.ru/audio");
-                return; // cookies соберутся после загрузки аудио-раздела
+                return; // cookies are collected after the audio section loads
             }
 
-            // Сохранение — когда прогрев завершён: любая страница vk.ru/vk.com,
-            // КРОМЕ самой процедуры входа (login.*). После /audio VK может оставить
-            // адрес как есть (SPA) — это тоже «доехали».
+            // Saving — once the warmup is done: any vk.ru/vk.com page EXCEPT the login
+            // procedure itself (login.*). After /audio VK may keep the address as-is (SPA) —
+            // that also counts as settled.
             var settled = source != null
                           && (source.Contains("vk.ru/", StringComparison.OrdinalIgnoreCase)
                               || source.Contains("vk.com/", StringComparison.OrdinalIgnoreCase))
@@ -152,10 +151,10 @@ namespace BatPlayer.Views;
 
             var cookieHeader = BuildCookieHeader(pairsRu, pairsCom);
             if (string.IsNullOrWhiteSpace(cookieHeader))
-                return; // cookies ещё не устоялись — попробуем на следующем тике
+                return; // cookies not settled yet — retry on the next tick
 
-            // Приоритетный источник id — адрес аудио-раздела vk.ru/audios{uid};
-            // фолбэк — HTML текущей страницы (uid/viewer_id) и лента.
+            // Preferred id source is the audio page address vk.ru/audios{uid};
+            // fallbacks are the current page HTML (uid/viewer_id) and the feed.
             string? userId = null;
             if (source != null)
             {
@@ -167,7 +166,7 @@ namespace BatPlayer.Views;
         }
         catch (Exception ex)
         {
-            // Ошибка одного опроса не закрывает окно — попробуем на следующем тике.
+            // A single poll failure doesn't close the window — retry on the next tick.
             Logger.Error(ex, "VK login: session poll failed");
         }
         finally
@@ -176,13 +175,13 @@ namespace BatPlayer.Views;
         }
     }
 
-    /// <summary>Вход выполнен: feed/al_im на любом домене VK либо cookie веб-сессии.
-    /// Чистая функция (пары name/value вместо CoreWebView2Cookie) — покрыта юнит-тестами.</summary>
+    /// <summary>Login succeeded: feed/al_im on any VK domain, or the web-session cookie.
+    /// Pure function (name/value pairs instead of CoreWebView2Cookie) — covered by unit tests.</summary>
     internal static bool IsLoggedIn(string? uri,
         IEnumerable<(string Name, string Value)> cookiesRu,
         IEnumerable<(string Name, string Value)> cookiesCom)
     {
-        // VK использует домены vk.ru И vk.com (в т.ч. m.vk.*) — распознаём оба.
+        // VK uses both vk.ru and vk.com domains (including m.vk.*) — recognize both.
         var onVk = uri != null &&
                    (uri.Contains("vk.ru", StringComparison.OrdinalIgnoreCase) ||
                     uri.Contains("vk.com", StringComparison.OrdinalIgnoreCase));
@@ -200,9 +199,9 @@ namespace BatPlayer.Views;
                             && !string.IsNullOrEmpty(c.Value));
 
     /// <summary>
-    /// Cookie-строка для vk.com/vk.ru: сначала все cookies vk.ru (актуальный домен),
-    /// затем отсутствующие по имени cookies vk.com. Пустые имена/значения пропускаются.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Cookie string for vk.com/vk.ru: all vk.ru cookies first (current domain), then vk.com
+    /// cookies missing by name. Empty names/values are skipped.
+    /// Pure function — covered by unit tests.
     /// </summary>
     internal static string BuildCookieHeader(IEnumerable<(string Name, string Value)> cookiesRu,
                                              IEnumerable<(string Name, string Value)> cookiesCom)
@@ -220,9 +219,9 @@ namespace BatPlayer.Views;
     }
 
     /// <summary>
-    /// id пользователя: cookie remixuid → HTML текущей страницы (ExecuteScriptAsync) →
-    /// GET m.vk.ru/feed с cookies. null — не нашли (сессия сохранится без id, синк
-    /// каталога потребует повторного входа); найденное значение логируется.
+    /// User id: remixuid cookie → current page HTML (ExecuteScriptAsync) → GET m.vk.ru/feed
+    /// with cookies. null — not found (the session is saved without an id; catalog sync will
+    /// require re-login); the found value is logged.
     /// </summary>
     private async Task<string?> ResolveUserIdAsync(IEnumerable<(string Name, string Value)> cookiesRu,
                                                    IEnumerable<(string Name, string Value)> cookiesCom,
@@ -256,25 +255,25 @@ namespace BatPlayer.Views;
         return null;
     }
 
-    /// <summary>HTML текущего документа WebView (ExecuteScriptAsync возвращает JSON-строку).</summary>
+    /// <summary>HTML of the current WebView document (ExecuteScriptAsync returns a JSON string).</summary>
     private async Task<string?> ReadPageHtmlAsync()
     {
         try
         {
             var json = await Web.CoreWebView2.ExecuteScriptAsync("document.documentElement.outerHTML");
             if (string.IsNullOrEmpty(json) || json == "null") return null;
-            // ExecuteScriptAsync отдаёт результат как JSON — разворачиваем в строку.
+            // ExecuteScriptAsync returns the result as JSON — unwrap it into a string.
             return JsonSerializer.Deserialize<string>(json);
         }
         catch (Exception ex)
         {
-            // Страница могла ещё грузиться/упасть — это лишь один из источников id.
+            // The page may still be loading or failed — this is only one of the id sources.
             Logger.Error(ex, "VK login: page html read failed");
             return null;
         }
     }
 
-    /// <summary>GET m.vk.ru/feed с cookies сессии (тот же прямой слой, что у каталога).</summary>
+    /// <summary>GET m.vk.ru/feed with the session cookies (same direct network layer as the catalog).</summary>
     private static async Task<string?> FetchFeedHtmlAsync(string cookieHeader)
     {
         try
@@ -296,7 +295,7 @@ namespace BatPlayer.Views;
         }
     }
 
-    /// <summary>Сохранение сессии и закрытие окна (идемпотентно).</summary>
+    /// <summary>Save the session and close the window (idempotent).</summary>
     private async Task FinishAsync(string cookieHeader, string? userId)
     {
         if (_finished) return;
@@ -320,13 +319,13 @@ namespace BatPlayer.Views;
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
-            try { DragMove(); } catch { /* окно могло закрыться */ }
+            try { DragMove(); } catch { /* window may already be closed */ }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
     /// <summary>
-    /// Очистка cookies платформы перед входом: после Disconnect постоянный профиль
-    /// WebView2 держит старую сессию и автологин возвращал в тот же аккаунт.
+    /// Clear platform cookies before login: after Disconnect the persistent WebView2
+    /// profile kept the old session and auto-login returned to the same account.
     /// </summary>
     private static async Task ClearPlatformCookiesAsync(Microsoft.Web.WebView2.Core.CoreWebView2 core)
     {

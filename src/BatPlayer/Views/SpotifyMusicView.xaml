@@ -13,13 +13,13 @@
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
         <cv:PlatformCardPlayingConverter x:Key="PlatformCardPlaying"/>
         <Style x:Key="SpotifyCardStyle" TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
-            <!-- Шаблон НЕ переопределяется: hover-scale и пружина нажатия наследуются из TrackCardStyle (раньше голый ContentPresenter отключал их — анимации наведения работали только на Home) -->
+            <!-- Template is NOT overridden: hover-scale and press spring are inherited from TrackCardStyle (a bare ContentPresenter used to disable them — hover animations only worked on Home) -->
             <EventSetter Event="MouseLeftButtonUp" Handler="Card_Click"/>
         </Style>
 
-        <!-- Плавное появление hover-оверлея и play-кнопки карточки:
-             Storyboard сглаживает резкое переключение Opacity 0↔1;
-             скрытая кнопка не перехватывает клики (IsHitTestVisible) -->
+        <!-- Smooth fade-in of the card hover overlay and play button:
+             the Storyboard smooths the abrupt Opacity 0↔1 switch;
+             the hidden button does not intercept clicks (IsHitTestVisible) -->
         <Style x:Key="CardHoverFade" TargetType="FrameworkElement">
             <Setter Property="Opacity" Value="0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
@@ -61,8 +61,8 @@
                             </Storyboard>
                         </BeginStoryboard>
                     </DataTrigger.EnterActions>
-                    <!-- ExitActions обязателен: без него Enter-анимация «залипала» на
-                         opacity=1 при смене трека / пересборке списка (несколько заставок). -->
+                    <!-- ExitActions is required: without it the Enter animation stuck at
+                         opacity=1 on track change / list rebuild (multiple overlays). -->
                     <DataTrigger.ExitActions>
                         <BeginStoryboard>
                             <Storyboard>
@@ -91,8 +91,8 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <!-- Заголовок как в Home: зазор между крупным и мелким текстом = 3px,
-                 не зависит от высоты кнопок справа -->
+            <!-- Header as in Home: 3px gap between the large and small text,
+                 independent of the buttons' height on the right -->
             <StackPanel Grid.Column="0">
                 <TextBlock Text="Spotify" FontSize="20" FontWeight="Medium"
                            Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -106,7 +106,7 @@
                     </TextBlock>
                 </StackPanel>
             </StackPanel>
-            <!-- Кнопки правее, по центру блока заголовка -->
+            <!-- Buttons to the right, centered on the header block -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 
                 <Button Style="{StaticResource PrimaryButton}" Padding="12,5" Margin="12,0,0,0"
@@ -119,8 +119,8 @@
                         Visibility="{Binding IsConnected, Converter={StaticResource Bool2Vis}}">
                     <TextBlock Text="Disconnect" FontSize="12"/>
                 </Button>
-                <!-- Бесплатный импорт без Web API: экспорт «Download your data» / CSV.
-                     Виден всегда — работает и без подключённого аккаунта. -->
+                <!-- Free import without Web API: "Download your data" export / CSV.
+                     Always visible — works without a connected account. -->
                 
             <Button Style="{StaticResource IconButton}" Margin="12,0,0,0" VerticalAlignment="Center"
         Command="{Binding ShuffleCardsCommand}"
@@ -144,7 +144,7 @@
 </Button></StackPanel>
         </Grid>
 
-        <!-- Import progress: бейдж с вращающимся логотипом — как в панели синка SoundCloud -->
+        <!-- Import progress: badge with a spinning logo — like in the SoundCloud sync panel -->
         <Border Grid.Row="1" Background="{DynamicResource PanelBrush}"
                 Margin="24,0,24,12" Padding="14,10" CornerRadius="8"
                 Visibility="{Binding IsImporting, Converter={StaticResource Bool2Vis}}">
@@ -192,14 +192,14 @@
                         <TextBlock FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}">
                             <Run Text="{Binding [SpotifySyncing], Source={x:Static loc:Loc.T}, Mode=OneWay}"/>
                         </TextBlock>
-                        <!-- Счётчик фиксированной ширины: растущие цифры не сдвигают бейдж -->
+                        <!-- Fixed-width counter: growing digits do not shift the badge -->
                         <TextBlock FontSize="13" Width="72" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}">
                             <Run Text="{Binding SyncProgress, Mode=OneWay}"/>
                             <Run Text="/"/>
                             <Run Text="{Binding SyncTotal, Mode=OneWay}"/>
                         </TextBlock>
-                        <!-- Вращающийся логотип во время синка -->
-                        <!-- Тёмный бейдж: белый силуэт виден и в тёмной, и в светлой теме -->
+                        <!-- Spinning logo during sync -->
+                        <!-- Dark badge: the white silhouette is visible in both dark and light themes -->
                         <Border Width="26" Height="26" CornerRadius="13" Margin="8,0,0,0"
                                 VerticalAlignment="Center" Background="#FF232428"
                                 BorderBrush="#40FFFFFF" BorderThickness="1">
@@ -237,10 +237,10 @@
                       ItemsSource="{Binding Cards}"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       VerticalContentAlignment="Stretch">
-                <!-- На время загрузки список свёрнут: виртуализация не генерирует
-                     контейнеры для старых карточек, при клике по бару нет тройной
-                     работы (создать старые → очистить → создать новые) — переход
-                     без лагов. Без скелетона и fade: чистое появление по готовности. -->
+                <!-- The list is collapsed while loading: virtualization does not generate
+                     containers for old cards, and clicking a bar avoids triple work
+                     (create old → clear → create new) — a lag-free transition.
+                     No skeleton or fade: a clean appearance once ready. -->
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
@@ -258,13 +258,13 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Opacity="{Binding CardOpacity}">
-                            <!-- Квадратная обложка (1:1): SquareBorder — квадрат уже в
-                                 measure, без двойного прохода компоновки self-биндинга. -->
+                            <!-- Square cover (1:1): SquareBorder — square already at
+                                 measure, no double layout pass from a self-binding. -->
                             <controls:SquareBorder x:Name="CoverRoot" CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
-                                    <!-- Логотип-плейсхолдер: серый силуэт (CardBatPlaceholder —
-                                         общий стиль всех баров, см. DarkTheme; статичный) -->
+                                    <!-- Logo placeholder: gray silhouette (CardBatPlaceholder —
+                                         the shared style of all bars, see DarkTheme; static) -->
                                     <Image Style="{StaticResource CardBatPlaceholder}"/>
                                     <Border CornerRadius="8" controls:LazyCover.Path="{Binding ArtworkLocalPath}">
                                         <Border.Style>
@@ -398,7 +398,7 @@
                                        Source="{StaticResource SpotifyGlyphGreen}" RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
 
-                            <!-- Artist row: клик открывает профиль, hover — как на остальных страницах -->
+                            <!-- Artist row: click opens the profile, hover as on other pages -->
                             <Button HorizontalAlignment="Left" Cursor="Hand" Margin="2,3,2,0"
                                     Opacity="0"
                                     Template="{StaticResource ArtistHoverTemplate}"
@@ -424,9 +424,9 @@
             </ListView>
         </Grid>
 
-<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
-             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
-             при переключении задний фон не «прыгает» -->
+<!-- Empty state: icon is pinned to the CENTER of the page (bottom edge 16px above
+             center), text grows downward from center — the icon's anchor point is the same
+             in all bars, so the background does not "jump" when switching -->
         <Border Grid.Row="2" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource Bool2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

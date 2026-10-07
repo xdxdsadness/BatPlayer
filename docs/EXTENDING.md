@@ -1,124 +1,67 @@
-# Расширение Bat Player
+# Extending
 
-## Добавить новый раздел в боковую панель
+## Add a sidebar page
 
-1. Создай новый `PageViewModel` в `ViewModels/`:
+1. Create a `PageViewModel` in `ViewModels/`:
+
 ```csharp
 public partial class StatsViewModel : PageViewModel
 {
-    public StatsViewModel() { Title = "Статистика"; }
+    public StatsViewModel() { Title = "Stats"; }
 }
 ```
 
-2. Создай `StatsView.xaml` UserControl в `Views/`.
+2. Create `StatsView.xaml` (UserControl) in `Views/`.
 
-3. Зарегистрируй DataTemplate в `App.xaml`:
+3. Register a DataTemplate in `App.xaml`:
+
 ```xml
 <DataTemplate DataType="{x:Type vm:StatsViewModel}">
     <v:StatsView/>
 </DataTemplate>
 ```
 
-4. Добавь RadioButton в `MainWindow.xaml` в sidebar:
+4. Add a RadioButton to the sidebar in `MainWindow.xaml`:
+
 ```xml
 <RadioButton Style="{StaticResource NavButton}" GroupName="Nav"
-             Content="Статистика"
+             Content="Stats"
              Command="{Binding NavigateCommand}"
              CommandParameter="Stats"/>
 ```
 
-5. В `MainViewModel.Navigate` добавь case:
-```csharp
-"Stats" => Stats
-```
+5. Add a `"Stats" => Stats` case to `MainViewModel.Navigate`.
 
-## Добавить новый аудиоэффект
+## Add an audio effect
 
-1. Создай класс, реализующий `ISampleProvider`, например `ReverbSampleProvider`:
-```csharp
-public sealed class ReverbSampleProvider : ISampleProvider
-{
-    private readonly ISampleProvider _source;
-    // ... reverb DSP implementation
-    public WaveFormat WaveFormat => _source.WaveFormat;
-    public int Read(float[] buffer, int offset, int count) { /* ... */ }
-}
-```
+1. Implement `ISampleProvider`, e.g. `ReverbSampleProvider`.
+2. Insert it into the chain in `AudioEngine.Open` between the equalizer and the volume provider.
+3. Add the toggle to `AppSettings` and the Settings UI.
 
-2. В `AudioEngine.Open` вставь в цепочку:
-```csharp
-_equalizer = new EqualizerSampleProvider(_sampleProvider);
-var reverb = new ReverbSampleProvider(_equalizer); // <-- new effect
-_volumeProvider = new VolumeSampleProvider(reverb);
-_output.Init(_volumeProvider);
-```
+## Add an audio format
 
-3. Добавь свойство включения в `AppSettings` и UI в `SettingsView`.
+NAudio already handles most formats via `MediaFoundationReader`. For a custom codec:
 
-## Добавить поддержку нового аудиоформата
+1. Add a case in `AudioEngine.CreateReader`.
+2. Add the extension to `Helpers.FileHelpers.AudioExtensions`.
+3. Add it to the file dialog filter in `MainViewModel.AddFilesAsync`.
 
-NAudio через `MediaFoundationReader` уже поддерживает большинство форматов. Если нужен специфичный кодек:
+## Add a localization language
 
-1. В `AudioEngine.CreateReader` добавь новый case:
-```csharp
-".myformat" => new MyCustomReader(filePath),
-```
+1. Create `Resources/Strings.{lang}.resx` (e.g. `Strings.de.resx`).
+2. Copy the keys from `Strings.resx` and translate the values.
+3. Add a ComboBoxItem for the language in the Settings UI.
 
-2. Добавь расширение в `Helpers.FileHelpers.AudioExtensions`.
+## Add a global hotkey
 
-3. Добавь формат в фильтр диалога в `MainViewModel.AddFilesAsync`.
+1. Add a `HotkeyBinding` property to `Models/AppSettings`.
+2. Handle it in `MainWindow.OnGlobalKeyDown`.
+3. For OS-level registration add a call in `GlobalHotkeyService.Initialize`.
 
-## Добавить новый язык локализации
+## Add a test
 
-1. Создай `Resources/Strings.{lang}.resx` (например, `Strings.de.resx`).
-2. Скопируй все ключи из `Strings.ru.resx` и переведи значения.
-3. В `SettingsView` добавь `ComboBoxItem` для нового языка.
+Create a class under `tests/BatPlayer.Tests/` and run `dotnet test`.
 
-## Добавить глобальную горячую клавишу
+## Add a control style
 
-1. В `Models/AppSettings` добавь свойство:
-```csharp
-public HotkeyBinding MyAction { get; set; } = new() { Key = 80, Modifiers = 6 };
-```
-
-2. В `MainWindow.OnGlobalKeyDown` добавь проверку:
-```csharp
-else if (MatchKey(s.MyAction, key, modifiers)) { MyCommand(); e.Handled = true; }
-```
-
-3. Для глобальной (OS-level) регистрации — добавь вызов в `GlobalHotkeyService.Initialize`:
-```csharp
-RegisterHotkey(3, vkCode, modifiers, () => MyAction());
-```
-
-## Добавить тест
-
-1. В `tests/BatPlayer.Tests/` создай новый класс:
-```csharp
-public class MyServiceTests
-{
-    [Fact]
-    public async Task MyScenario_WorksExpected()
-    {
-        // Arrange
-        // Act
-        // Assert
-    }
-}
-```
-
-2. Запусти: `dotnet test`.
-
-## Создать новый визуальный стиль кнопки
-
-1. Добавь стиль в `Themes/DarkTheme.xaml`:
-```xml
-<Style x:Key="MyButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-    <Setter Property="Background" Value="{StaticResource MyBrandBrush}"/>
-</Style>
-```
-
-2. Используй:
-```xml
-<Button Style="{StaticResource MyButton}" Content="Click me"/>
-```
+Add a keyed style in `Themes/DarkTheme.xaml` and reference it with `{StaticResource ...}`.

@@ -7,15 +7,14 @@ using BatPlayer.Audio;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Глобальные горячие клавиши Windows через RegisterHotKey.
-/// Регистрируется на скрытом окне-приёмнике сообщений.
+/// Windows global hotkeys via RegisterHotKey.
+/// Registered on a hidden message-receiver window.
 /// </summary>
 public sealed class GlobalHotkeyService : IDisposable
 {
     private readonly AudioService _audio;
     private HwndSource? _source;
     private readonly System.Collections.Generic.Dictionary<int, Action> _actions = new();
-    private int _nextId;
 
     private const int WM_HOTKEY = 0x0312;
 

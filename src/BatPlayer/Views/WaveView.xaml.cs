@@ -13,11 +13,10 @@ namespace BatPlayer.Views;
 public partial class WaveView : UserControl
 {
     private WaveViewModel? _vm;
-    // Геометрия hero-зоны, снятая ДО смены HeroCurrent (в PropertyChanging — биндинги
-    // ещё не подменяли слоты): обложки летят между слотами. Слот без карточки (нет
-    // предыдущего/следующего) свёрнут — его геометрия зеркалится из противоположного
-    // слота (колонки симметричны): в этот переход слот появится, и прилетающая в него
-    // карточка должна знать куда.
+    // Hero-zone geometry captured BEFORE HeroCurrent changes (in PropertyChanging —
+    // bindings haven't swapped the slots yet): covers fly between slots. A collapsed
+    // slot (no prev/next) is mirrored from the opposite slot (columns are symmetric):
+    // the slot appears in this transition and the incoming card must know where to land.
     private readonly struct HeroSnapshot
     {
         public readonly Rect Center, Left, Right;
@@ -28,8 +27,8 @@ public partial class WaveView : UserControl
         }
     }
 
-    /// <summary>Слайд новой карточки и надписи уходящего слота (px, мс) — один и тот же
-    /// жест в обе стороны перехода, чтобы надписи не выглядели неподвижными.</summary>
+    /// <summary>Slide of the new card and of the outgoing slot's caption (px, ms) — the same
+    /// gesture in both transition directions so captions never look motionless.</summary>
     private const double SlideShift = 48;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(320);
 
@@ -41,8 +40,8 @@ public partial class WaveView : UserControl
     {
         InitializeComponent();
 
-        //DataContext страницы — WaveViewModel (контент ContentControl'а). Он может
-        //приехать до загрузки XAML — стартовые состояния применяем на Loaded.
+        // The page's DataContext is the WaveViewModel (ContentControl content). It can
+        // arrive before the XAML loads — starting states are applied on Loaded.
         DataContextChanged += OnDataContextChanged;
         Loaded += (_, _) => PlayHeroFade();
     }
@@ -65,8 +64,8 @@ public partial class WaveView : UserControl
     private void OnWavePropertyChanging(object? sender, PropertyChangingEventArgs e)
     {
         if (e.PropertyName != nameof(WaveViewModel.HeroCurrent)) return;
-        // Смена среди незавершённого полёта: сбрасываем его (элементы прыгают в слоты)
-        // и начинаем новый перелёт с чистой геометрией
+        // A change during an unfinished flight: reset it (elements snap into slots)
+        // and start a new flight with clean geometry.
         if (_heroFlightActive) ClearHeroFlight();
         _heroChangingFrom = _vm?.HeroCurrent;
         _snapshot = CaptureHeroSnapshot();
@@ -76,12 +75,12 @@ public partial class WaveView : UserControl
     {
         if (e.PropertyName == nameof(WaveViewModel.HeroCurrent))
         {
-            AnimateHeroChange(); // карусельный перелёт обложек либо мягкий фейд панели
+            AnimateHeroChange(); // carousel cover flight or a soft panel fade
         }
     }
 
-    /// <summary>Мягкий фейд hero-панели — для смен, где перелёта нет: первое появление,
-    /// перескок по списку, новый микс, пустой соседний слот.</summary>
+    /// <summary>Soft hero-panel fade — for transitions with no flight: first appearance,
+    /// list jumps, a new mix, an empty neighbor slot.</summary>
     private void PlayHeroFade()
     {
         var anim = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(260))
@@ -91,14 +90,13 @@ public partial class WaveView : UserControl
         HeroPanel.BeginAnimation(OpacityProperty, anim);
     }
 
-    // ===================== Карусельный перелёт обложек =====================
+    // ===================== Carousel cover flight =====================
 
-    /// <summary>Смена трека волны: старая карточка (обложка + подпись) уезжает из центра
-    /// в освободившийся боковой слот (уменьшаясь и притухая до 0.38), новая влетает из
-    /// соседнего слота в центр (увеличиваясь и проявляясь), в освободившемся слоте
-    /// проявляется новая боковая карточка. Элементы летят «сами» — контент слотов к этому
-    /// моменту уже подменён биндингами, поэтому не нужно ни клонировать визуал, ни
-    /// скрывать слоты.</summary>
+    /// <summary>Wave track change: the old card (cover + caption) leaves the center for the
+    /// freed side slot (shrinking and dimming to 0.38), the new one flies in from the
+    /// neighbor slot to the center (growing and brightening), and the new side card fades
+    /// in at the freed slot. Elements fly "by themselves" — slot content has already been
+    /// swapped by bindings, so nothing needs cloning or hiding.</summary>
     private void AnimateHeroChange()
     {
         var from = _heroChangingFrom;
@@ -119,35 +117,34 @@ public partial class WaveView : UserControl
         var iTo = cards.IndexOf(to);
         if (snap == null || iFrom < 0 || Math.Abs(iTo - iFrom) != 1)
         {
-            PlayHeroFade(); // не соседние карточки — перелёт не строится, мягкий фейд
+            PlayHeroFade(); // not adjacent cards — no flight, soft fade
             return;
         }
 
         var s = snap.Value;
         var forward = iTo > iFrom;
-        var slotFrom = forward ? s.Right : s.Left;      // откуда влетает новый центр
-        var slotTo = forward ? s.Left : s.Right;        // куда уходит старый трек
+        var slotFrom = forward ? s.Right : s.Left;      // where the new center flies in from
+        var slotTo = forward ? s.Left : s.Right;        // where the old track goes
         if (slotFrom.IsEmpty || slotTo.IsEmpty)
         {
-            PlayHeroFade(); // соседний слот пуст/свёрнут — лететь некуда
+            PlayHeroFade(); // neighbor slot is empty/collapsed — nowhere to fly
             return;
         }
 
-        // Слот, который в этом переходе только что появился (у края списка не было
-        // прошлого/следующего), обязан быть измерен ДО старта перелёта: биндинги
-        // выставили его видимость прямо перед этим вызовом, а layout отложен до
-        // рендера. Без синхронизации улетающая карточка первые кадры невидима и
-        // «втыкается» в слот уже в полёте — первый переход микса выглядел не так,
-        // как все последующие.
+        // A slot that just appeared in this transition (at the list edge there was no
+        // prev/next) must be measured BEFORE the flight starts: bindings set its
+        // visibility right before this call, and layout is deferred to render. Without
+        // this sync the outgoing card is invisible for the first frames and "sticks"
+        // into the slot mid-flight — the mix's first transition looked off.
         HeroPanel.UpdateLayout();
 
         _heroFlightActive = true;
         var duration = TimeSpan.FromMilliseconds(450);
         var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
-        var stop = FillBehavior.Stop; // по завершении вернуть базовые значения (совпадают)
+        var stop = FillBehavior.Stop; // on completion restore base values (they match)
 
-        // 1) Старый трек: из центра в боковой слот, уменьшаясь; яркость 1.0 → 0.38.
-        //    0.38 — базовая приглушённость слота, поэтому приземление без вспышки.
+        // 1) Old track: center -> side slot, shrinking; brightness 1.0 -> 0.38.
+        //    0.38 is the slot's base dimness, so it lands without a flash.
         var outCover = forward ? HeroPrevCover : HeroNextCover;
         FlyToIdentity(forward ? PrevCoverScale : NextCoverScale,
                       forward ? PrevCoverShift : NextCoverShift,
@@ -155,18 +152,17 @@ public partial class WaveView : UserControl
         outCover.BeginAnimation(OpacityProperty,
             new DoubleAnimation(1.0, 0.38, duration) { EasingFunction = ease, FillBehavior = stop });
 
-        // 1a) Подпись уходящего трека едет вместе с обложкой: пока обложка в пути,
-        //     текст невидим, затем всплывает на место синхронно с её приземлением
-        //     (0.38 — базовая приглушённость слота). Тот же жест, что у подписи
-        //     выбранного трека в центре. Раньше текст подменялся мгновенно: слот
-        //     показывал подпись раньше, чем туда прилетала обложка, и тексты двух
-        //     карточек выглядели рассинхронизированными.
+        // 1a) The outgoing track's caption rides with the cover: while the cover is in
+        //     flight the text is invisible, then rises into place in sync with its landing
+        //     (0.38 is the slot's base dimness) — the same gesture as the center caption.
+        //     The text used to swap instantly: the slot showed a caption before the cover
+        //     arrived, and the two cards' texts looked out of sync.
         RiseToPlaceDelayed(forward ? HeroPrevText : HeroNextText,
                            forward ? PrevTextShift : NextTextShift,
                            0.0, 0.38, TextSyncDelay, duration, ease, stop);
 
-        // 2) Новый трек: из бокового слота в центр, увеличиваясь; 0.38 → 1.0.
-        //    ZIndex — на время полёта: центр отрывается от проявляющейся под ним карточки.
+        // 2) New track: side slot -> center, growing; 0.38 -> 1.0.
+        //    ZIndex for the flight: the center lifts off the card fading in beneath it.
         Panel.SetZIndex(HeroCurrentPanel, 10);
         var centerFlight = FlyToIdentity(HeroCoverScale, HeroCoverShift,
                                          s.Center, slotFrom, duration, ease, stop);
@@ -178,14 +174,14 @@ public partial class WaveView : UserControl
             _heroFlightActive = false;
         };
 
-        // 2a) Подпись нового трека: проявляется и «всплывает», когда обложка
-        //     подъезжает к центру — одновременно с ней
+        // 2a) New track's caption: fades in and rises as the cover reaches
+        //     the center — together with it.
         RiseToPlaceDelayed(HeroCurrentText, CurTextShift,
                            0.38, 1.0, TextSyncDelay, duration, ease, stop);
 
-        // 3) В освободившемся слоте проявляется новая карточка: обложка+подпись (body)
-        //    фейдятся, а надпись слота видна с первого кадра и слайдом «встречает» её.
-        //    Первые 100 мс body невидим — слот должен освободиться от улетающей подписи.
+        // 3) A new card fades in at the freed slot: cover+caption (body) fade while the
+        //    slot caption is visible from the first frame and slides to "meet" it.
+        //    The first 100ms the body is invisible — the slot must clear of the outgoing caption.
         var hasIncoming = forward ? iTo + 1 < cards.Count : iTo > 0;
         if (hasIncoming)
         {
@@ -197,7 +193,7 @@ public partial class WaveView : UserControl
             inBody.BeginAnimation(OpacityProperty, inOpacity);
         }
 
-        // 3b) Слайд новой карточки — едет с той стороны, куда нажали
+        // 3b) New card slide — comes from the side that was clicked
         if (hasIncoming)
             (forward ? NextButtonShift : PrevButtonShift).BeginAnimation(TranslateTransform.XProperty,
                 new DoubleAnimation(forward ? SlideShift : -SlideShift, 0, SlideDuration)
@@ -207,18 +203,18 @@ public partial class WaveView : UserControl
                 });
     }
 
-    /// <summary>Задержка подписи: обложка первые ~40% перелёта ещё в пути — текст
-    /// ждёт на месте и «доплывает» вместе с ней, завершаясь в тот же момент.</summary>
+    /// <summary>Caption delay: the cover is still in flight for the first ~40% — the text
+    /// waits in place and "floats" in with it, finishing at the same moment.</summary>
     private static readonly TimeSpan TextSyncDelay = TimeSpan.FromMilliseconds(180);
 
-    /// <summary>Вертикальный всплеск подписи при смене трека (px): подпись приподнимается
-    /// и садится на место синхронно с обложкой. Вертикаль — чтобы движение текста
-    /// не зависело от направления перехода.</summary>
+    /// <summary>Vertical caption rise on track change (px): the caption lifts and settles
+    /// in sync with the cover. Vertical — so the text motion doesn't depend on the
+    /// transition direction.</summary>
     private const double TextRise = 14;
 
-    /// <summary>Подпись трека: держится на месте до TextSyncDelay, затем всплывает
-    /// (снизу вверх) с плавной сменой яркости. Без масштаба — шрифт всегда своего
-    /// размера. Финиш ровно на total (конец полёта обложки).</summary>
+    /// <summary>Track caption: holds in place until TextSyncDelay, then rises (bottom-up)
+    /// with a smooth brightness change. No scaling — the font keeps its own size.
+    /// Finishes exactly at total (the end of the cover flight).</summary>
     private static void RiseToPlaceDelayed(FrameworkElement el, TranslateTransform shift,
         double opacityFrom, double opacityTo,
         TimeSpan hold, TimeSpan total, IEasingFunction ease, FillBehavior stop)
@@ -236,14 +232,14 @@ public partial class WaveView : UserControl
         el.BeginAnimation(OpacityProperty, opacityAnim);
     }
 
-    /// <summary>Перелёт элемента: стартует из прямоугольника fromRect (в координатах
-    /// HeroPanel) и приезжает в своё обычное место. Возвращает анимацию горизонтального
-    /// сдвига — к ней вешается Completed.</summary>
+    /// <summary>Element flight: starts from the fromRect rectangle (in HeroPanel coordinates)
+    /// and arrives at its normal place. Returns the horizontal shift animation —
+    /// Completed is attached to it.</summary>
     private static DoubleAnimation FlyToIdentity(ScaleTransform scale, TranslateTransform shift,
         Rect ownRect, Rect fromRect, TimeSpan duration, IEasingFunction ease, FillBehavior stop)
     {
-        // Масштаб и сдвиг считаются вокруг левого верхнего угла (RenderTransformOrigin 0,0),
-        // поэтому прямоугольники интерполируются друг в друга линейно и без перекрытий
+        // Scale and shift are computed around the top-left corner (RenderTransformOrigin 0,0),
+        // so the rectangles interpolate into each other linearly and without overlaps
         var k = fromRect.Width / ownRect.Width;
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,
             new DoubleAnimation(k, 1, duration) { EasingFunction = ease, FillBehavior = stop });
@@ -257,7 +253,7 @@ public partial class WaveView : UserControl
         return tx;
     }
 
-    /// <summary>Сброс активного перелёта: все анимации слотов к базовым значениям.</summary>
+    /// <summary>Reset the active flight: all slot animations back to their base values.</summary>
     private void ClearHeroFlight()
     {
         _heroFlightActive = false;
@@ -288,10 +284,10 @@ public partial class WaveView : UserControl
         shift.BeginAnimation(TranslateTransform.YProperty, null);
     }
 
-    /// <summary>Прямоугольники обложек в координатах HeroPanel. Снимается ДО подмены
-    /// контента: размеры слотов от контента не зависят, так что геометрия верна и после
-    /// смены. Свёрнутый слот (нет предыдущего/следующего) зеркалится из противоположного —
-    /// в этот переход он появится, и прилетающая в него карточка должна знать куда.</summary>
+    /// <summary>Cover rectangles in HeroPanel coordinates. Captured BEFORE the content swap:
+    /// slot sizes don't depend on content, so the geometry stays valid after the change.
+    /// A collapsed slot (no prev/next) is mirrored from the opposite one — it appears in
+    /// this transition and the incoming card must know where.</summary>
     private HeroSnapshot? CaptureHeroSnapshot()
     {
         if (HeroPanel is not { IsLoaded: true, IsVisible: true }) return null;
@@ -309,7 +305,7 @@ public partial class WaveView : UserControl
         return new HeroSnapshot(center, left, right);
     }
 
-    /// <summary>Зеркальный прямоугольник относительно центра панели.</summary>
+    /// <summary>Rectangle mirrored about the panel's center.</summary>
     private Rect MirrorX(Rect rect, double panelWidth)
         => new(panelWidth - rect.X - rect.Width, rect.Y, rect.Width, rect.Height);
 

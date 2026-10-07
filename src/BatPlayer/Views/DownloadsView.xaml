@@ -10,11 +10,11 @@
         <cv:EmptyToVisibilityConverter x:Key="Empty2Vis"/>
         <cv:InverseIntToVisibilityConverter x:Key="InverseInt2Vis"/>
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
-        <!-- true, если на карточке — играющий сейчас трек (смена Play/Pause) -->
+        <!-- true when this card is the currently playing track (Play/Pause swap) -->
         <cv:CurrentTrackPlayingConverter x:Key="IsCurrentTrackPlaying"/>
-        <!-- Контейнер карточки: как в SoundCloudLikesView, без подсветки выделения -->
+        <!-- Card container: like SoundCloudLikesView, no selection highlight -->
         <Style x:Key="DlCardStyle" TargetType="ListViewItem" BasedOn="{StaticResource TrackCardStyle}">
-            <!-- Шаблон НЕ переопределяется: hover-scale и пружина нажатия наследуются из TrackCardStyle (раньше голый ContentPresenter отключал их — анимации наведения работали только на Home) -->
+            <!-- Template is NOT overridden: hover-scale and the press spring are inherited from TrackCardStyle (a bare ContentPresenter used to disable them outside Home) -->
             <EventSetter Event="MouseLeftButtonUp" Handler="Card_Click"/>
         </Style>
     </UserControl.Resources>
@@ -36,7 +36,7 @@
                            Foreground="{DynamicResource TextPrimaryBrush}"/>
                 <TextBlock Text="{Binding CounterText}" FontSize="12" Margin="0,3,0,0"
                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                <!-- Подсказка: на странице локальные файлы, а не SC-кэш -->
+                <!-- Hint: this page shows local files, not the SC cache -->
                 <TextBlock Text="{Binding HintText}" FontSize="12" Margin="0,2,0,0"
                            Foreground="{DynamicResource TextInactiveBrush}"/>
             </StackPanel>
@@ -50,7 +50,7 @@
             </Button>
 </Grid>
 
-        <!-- Карточки локальных треков (обложка из кэша, название, исполнитель) -->
+        <!-- Local track cards (cover from cache, title, artist) -->
         <Grid Grid.Row="1" Margin="24,0,16,4">
             <ListView controls:ScrollHeaderCollapse.Header="{Binding ElementName=PageHeader}" ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
                       ItemsSource="{Binding Tracks}"
@@ -64,18 +64,18 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel>
-                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
-                                 SquareBorder: квадрат уже в measure — без двойного
-                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <!-- Square cover (1:1) spanning the card width.
+                                 SquareBorder already makes it square in measure — no second
+                                 layout pass from a self-binding Height=ActualWidth. -->
                             <controls:SquareBorder x:Name="CoverRoot" CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
-                                    <!-- Обложка из локального кэша (artwork_local_path); нет файла — плейсхолдер.
-                                         LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые. -->
-                                    <!-- Нет обложки: серый силуэт мыши — единый плейсхолдер
-                                         всех баров (CardBatPlaceholder, без вращения) -->
+                                    <!-- Cover from the local cache (artwork_local_path); placeholder when absent.
+                                         LazyCover decodes 8 at a time in the background; only visible covers load while scrolling. -->
+                                    <!-- No cover: gray bat silhouette — the single placeholder
+                                         used by all bars (CardBatPlaceholder, no rotation) -->
                                     <Image Style="{StaticResource CardBatPlaceholder}"/>
-                                    <!-- Обложка fade-in поверх мыши с задержкой — как на платформенных страницах -->
+                                    <!-- Cover fades in over the bat with a delay — like on the platform pages -->
                                     <Border CornerRadius="8" controls:LazyCover.Path="{Binding CoverCachePath}">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -99,7 +99,7 @@
                                         </Border.Background>
                                     </Border>
 
-                                    <!-- Полупрозрачный белый оверлей: при наведении ИЛИ когда играет этот трек -->
+                                    <!-- Translucent white overlay: on hover OR while this track plays -->
                                     <Border x:Name="CoverHoverOverlay" CornerRadius="8"
                                             Background="#40FFFFFF" IsHitTestVisible="False">
                                         <Border.Style>
@@ -138,8 +138,8 @@
                                                                 </Storyboard>
                                                             </BeginStoryboard>
                                                         </DataTrigger.EnterActions>
-                                                        <!-- ExitActions обязателен: без него Enter-анимация «залипала» на
-                                                             opacity=1 при смене трека / пересборке списка (несколько заставок). -->
+                                                        <!-- ExitActions is required: without it the enter animation stuck at
+                                                             opacity=1 on track change / list rebuild. -->
                                                         <DataTrigger.ExitActions>
                                                             <BeginStoryboard>
                                                                 <Storyboard>
@@ -154,7 +154,7 @@
                                         </Border.Style>
                                     </Border>
 
-                                    <!-- Центральная кнопка Play (меняется на Pause, когда играет этот трек) -->
+                                    <!-- Central Play button (switches to Pause while this track plays) -->
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="0.34*"/>
@@ -166,7 +166,7 @@
                                             <RowDefinition Height="0.32*"/>
                                             <RowDefinition Height="0.34*"/>
                                         </Grid.RowDefinitions>
-<!-- «+ в плейлист» — центральная кнопка обложки -->
+<!-- "Add to playlist" — central cover button -->
                                                                                 <Button x:Name="CoverPlayButton" Grid.Column="1" Grid.Row="1"
                                                 Cursor="Hand"
                                                 Command="{Binding DataContext.PlayPauseTrackCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
@@ -267,7 +267,7 @@
                                 </Grid>
                             </controls:SquareBorder>
 
-                            <!-- Строка 1: сердечко (заливка — трек в избранном) + название -->
+                            <!-- Row 1: heart (filled when the track is a favorite) + title -->
                             <Grid Margin="2,8,2,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -295,7 +295,7 @@
                                            TextTrimming="CharacterEllipsis"/>
                             </Grid>
 
-                            <!-- Строка 2: исполнитель — клик по имени открывает профиль, hover — как в Home -->
+                            <!-- Row 2: artist — clicking the name opens the profile, hover as in Home -->
                             <Button HorizontalAlignment="Left" Cursor="Hand" Margin="2,3,2,0"
                                     Template="{StaticResource ArtistHoverTemplate}"
                                     Command="{Binding DataContext.OpenArtistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -309,9 +309,9 @@
             </ListView>
         </Grid>
 
-<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
-             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
-             при переключении задний фон не «прыгает» -->
+<!-- Empty state: the icon is pinned to the page CENTER (its bottom edge sits
+             16px above the center), the text grows downward — the icon point is
+             identical in every bar, so the background does not "jump" on switching -->
         <Border Grid.Row="1" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource Bool2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

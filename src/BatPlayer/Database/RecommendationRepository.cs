@@ -8,29 +8,20 @@ using BatPlayer.Helpers;
 
 namespace BatPlayer.Database;
 
-/// <summary>Кандидат волны: снимок метаданных трека из ответа /tracks/{id}/similar.
-/// Отдельный класс от YmTrackDto — хранится в wave_similar и не зависит от раскладки API.</summary>
+/// <summary>Wave candidate: track metadata snapshot from a /tracks/{id}/similar response.
+/// Separate from YmTrackDto — stored in wave_similar, independent of the API layout.</summary>
 public sealed class WaveCandidateRow
 {
     public string YmId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Artist { get; set; } = string.Empty;
     public long DurationMs { get; set; }
-    /// <summary>Шаблон обложки с "%%" вместо размера (как в API); '' — обложки нет.</summary>
+    /// <summary>Cover URI template with "%%" instead of size (as in the API); '' = no cover.</summary>
     public string CoverUri { get; set; } = string.Empty;
     public bool Available { get; set; } = true;
 }
 
-/// <summary>Сид волны: ym_id трека, по которому запрашивается /similar.</summary>
-public sealed class WaveSeedRow
-{
-    public string YmId { get; set; } = string.Empty;
-    /// <summary>Источник сида ("yandex" — лайк ЯМ, "vk", "soundcloud", "local"): только
-    /// для логов/диагностики; на подбор кандидатов не влияет.</summary>
-    public string Source { get; set; } = string.Empty;
-}
-
-/// <summary>Запись журнала wave_suggested: трек уже предлагался волной.</summary>
+/// <summary>wave_suggested log entry: the track has already been suggested by the wave.</summary>
 public sealed class WaveSuggestedRow
 {
     public string YmId { get; set; } = string.Empty;
@@ -41,21 +32,21 @@ public sealed class WaveSuggestedRow
 }
 
 /// <summary>
-/// Хранилище «Моей волны»: кэш ответов /similar (wave_similar), сопоставление сидов
-/// VK/SC/локальных треков с ym_id через /search (wave_seed_map) и журнал предложений
-/// (wave_suggested). Таблицы создаёт миграция v5 (DatabaseContext).
+/// My Wave storage: cache of /similar responses (wave_similar), mapping of VK/SC/local
+/// seeds to ym_id via /search (wave_seed_map), and the suggestion log (wave_suggested).
+/// Tables are created by migration v5 (DatabaseContext).
 ///
-/// ОТДЕЛЬНЫЕ соединения на операцию (как HistoryService.GetStatsAsync), а не общее
-/// из ServiceContainer: генерация волны выполняется в фоне (Task.Run), и запросы
-/// на общем соединении конфликтовали бы с запросами страниц/плеера — Microsoft.Data.Sqlite
-/// не допускает параллельных команд на одном соединении. WAL (см. InitializeAsync)
-/// обеспечивает конкурентное чтение/запись на уровне файла.
+/// A separate connection per operation (like HistoryService.GetStatsAsync), not the shared
+/// ServiceContainer one: wave generation runs in the background (Task.Run), and queries
+/// on a shared connection would conflict with page/player queries — Microsoft.Data.Sqlite
+/// does not allow parallel commands on one connection. WAL (see InitializeAsync) provides
+/// concurrent file-level read/write.
 /// </summary>
 public sealed class RecommendationRepository
 {
     private readonly string _connectionString;
 
-    /// <param name="dbPath">Путь файла БД; тесты передают временный.</param>
+    /// <param name="dbPath">Database file path; tests pass a temporary one.</param>
     public RecommendationRepository(string dbPath)
         => _connectionString = $"Data Source={dbPath};Cache=Shared;Pooling=True;";
 
@@ -66,9 +57,9 @@ public sealed class RecommendationRepository
         return conn;
     }
 
-    // ======================== Кэш похожести (wave_similar) ========================
+    // ======================== Similarity cache (wave_similar) ========================
 
-    /// <summary>Сиды, кэш которых отсутствует или старше maxAge — им нужен запрос /similar.</summary>
+    /// <summary>Seeds whose cache is missing or older than maxAge — they need a /similar request.</summary>
     public async Task<List<string>> GetStaleSeedsAsync(IEnumerable<string> seedYmIds, TimeSpan maxAge)
     {
         var ids = seedYmIds.Where(i => !string.IsNullOrEmpty(i)).Distinct().ToList();
@@ -88,7 +79,7 @@ public sealed class RecommendationRepository
         return ids.Where(id => !fresh.Contains(id)).ToList();
     }
 
-    /// <summary>Свежие кандидаты из кэша для перечисленных сидов (по одному срезу на сид).</summary>
+    /// <summary>Fresh cached candidates for the listed seeds (one slice per seed).</summary>
     public async Task<Dictionary<string, List<WaveCandidateRow>>> GetSimilarAsync(
         IEnumerable<string> seedYmIds, TimeSpan maxAge)
     {
@@ -125,7 +116,7 @@ public sealed class RecommendationRepository
         return result;
     }
 
-    /// <summary>Заменить кэш сида свежим ответом /similar (полная перезапись среза).</summary>
+    /// <summary>Replace a seed's cache with a fresh /similar response (full slice rewrite).</summary>
     public async Task ReplaceSimilarAsync(string seedYmId, IReadOnlyList<WaveCandidateRow> candidates)
     {
         var fetchedAt = DateTime.UtcNow.ToString("o");
@@ -171,11 +162,11 @@ public sealed class RecommendationRepository
         }
     }
 
-    // ===================== Сопоставление сидов (wave_seed_map) =====================
+    // ===================== Seed mapping (wave_seed_map) =====================
 
     /// <summary>
-    /// Кэш сопоставления сида с ym_id: null — поиск ещё не выполнялся; YmId='' —
-    /// выполнялся и матча не нашёл (негативный кэш; ResolvedAt регулирует TTL повтора).
+    /// Cached seed-to-ym_id mapping: null = never searched; YmId='' = searched and no
+    /// match found (negative cache; ResolvedAt governs the retry TTL).
     /// </summary>
     public async Task<(string YmId, DateTime ResolvedAt)?> GetSeedMapAsync(string source, string seedId)
     {
@@ -203,7 +194,7 @@ public sealed class RecommendationRepository
             new { source, seedId, ymId, now = DateTime.UtcNow.ToString("o") });
     }
 
-    // ======================= Журнал предложений (wave_suggested) =======================
+    // ======================= Suggestion log (wave_suggested) =======================
 
     public async Task<List<WaveSuggestedRow>> GetSuggestedAsync()
     {
@@ -222,8 +213,8 @@ public sealed class RecommendationRepository
         }).ToList();
     }
 
-    /// <summary>Пометить треки предложенными (upsert; повторное предложение обновляет дату
-    /// и сбрасывает played — свежесть предложения важнее прошлой статистики).</summary>
+    /// <summary>Mark tracks as suggested (upsert; re-suggesting updates the date and
+    /// resets played — freshness matters more than past history).</summary>
     public async Task MarkSuggestedAsync(IEnumerable<(string YmId, string Artist, string Title)> tracks)
     {
         var rows = tracks
@@ -231,8 +222,8 @@ public sealed class RecommendationRepository
             .Select(t => new
             {
                 YmId = t.YmId,
-                // Семейный ключ (фиты отрезаны) — совпадает с ключами RankCandidates:
-                // демоушн и дисконт прослушек должны находить этот трек в журнале.
+                // Family key (features stripped) — matches RankCandidates keys so
+                // demotion and play discounts find this track in the log.
                 ArtistKey = ArtistHelper.Key(ArtistHelper.StripFeatures(
                     ArtistHelper.Split(t.Artist).FirstOrDefault() ?? string.Empty)),
                 TitleKey = MatchHelper.Normalize(t.Title),
@@ -252,8 +243,8 @@ public sealed class RecommendationRepository
             """, rows);
     }
 
-    /// <summary>Отметить прослушанные среди предложенных (вызывается перед генерацией:
-    /// трек, который пользователь реально слушал после предложения, не исключается).</summary>
+    /// <summary>Mark suggested tracks as played (called before generation: a track the
+    /// user actually played after being suggested is not excluded).</summary>
     public async Task MarkPlayedAsync(IReadOnlyCollection<string> ymIds)
     {
         var ids = ymIds.Where(i => !string.IsNullOrEmpty(i)).Distinct().ToList();
@@ -265,7 +256,7 @@ public sealed class RecommendationRepository
             new { ids });
     }
 
-    /// <summary>Удалить журнал старше months — таблица не должна расти вечно.</summary>
+    /// <summary>Delete log entries older than months — the table must not grow forever.</summary>
     public async Task PruneAsync(int months)
     {
         await using var conn = Open();
@@ -274,11 +265,11 @@ public sealed class RecommendationRepository
             new { cutoff = DateTime.UtcNow.AddMonths(-months).ToString("o") });
     }
 
-    // ======================= Срезы play_log (сигналы вкуса) =======================
+    // ======================= play_log slices (taste signals) =======================
 
-    /// <summary>Прослушки за период: (исполнитель, название, played_at) — сырьё для
-    /// аффинности по исполнителям и фильтра «недавно играло». Читается из play_log,
-    /// который плеер уже пишет для всех источников, включая платформенные треки.</summary>
+    /// <summary>Plays over the period: (artist, title, played_at) — input for artist
+    /// affinity and the "recently played" filter. Read from play_log, which the player
+    /// already writes for all sources, including platform tracks.</summary>
     public async Task<List<(string Artist, string Title, DateTime PlayedAt)>> GetRecentPlaysAsync(int days)
     {
         await using var conn = Open();

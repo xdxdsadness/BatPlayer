@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 namespace BatPlayer.Services.SoundCloud;
 
 /// <summary>
-/// DTO для неофициального web-API SoundCloud (api-v2.soundcloud.com).
-/// Поля названы по snake_case JSON через JsonPropertyName; незнакомые поля игнорируются —
-/// API регулярно добавляет новые, парсинг не должен падать.
+/// DTOs for the unofficial SoundCloud web API (api-v2.soundcloud.com).
+/// Fields are mapped to snake_case JSON via JsonPropertyName; unknown fields are ignored —
+/// the API regularly adds new ones, so parsing must not fail.
 /// </summary>
 
 public sealed class ScUser
@@ -48,7 +48,7 @@ public sealed class ScMedia
     public List<ScTranscoding> Transcodings { get; set; } = new();
 }
 
-/// <summary>Трек из collection[].track (лайки, /me/likes/tracks).</summary>
+/// <summary>A track from collection[].track (likes, /me/likes/tracks).</summary>
 public sealed class ScTrack
 {
     [JsonPropertyName("id")]
@@ -57,7 +57,7 @@ public sealed class ScTrack
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>Полная длительность в миллисекундах (int в API, long на всякий случай).</summary>
+    /// <summary>Full duration in milliseconds (int in the API, long for safety).</summary>
     [JsonPropertyName("duration")]
     public long DurationMs { get; set; }
 
@@ -70,21 +70,21 @@ public sealed class ScTrack
     [JsonPropertyName("streamable")]
     public bool Streamable { get; set; }
 
-    /// <summary>Счётчик прослушиваний трека — фильтр ноунеймов в related-кандидатах
-    /// волны (у «нейро-треков» и мусорных заливок он на порядки ниже порога).</summary>
+    /// <summary>Track playback count — filters no-name uploads out of related-track
+    /// candidates (AI tracks and junk uploads sit orders of magnitude below the threshold).</summary>
     [JsonPropertyName("playback_count")]
     public long PlaybackCount { get; set; }
 
-    /// <summary>"SNIPPET" — Go+-трек (полная версия только по подписке SoundCloud),
-    /// "BLOCK" — недоступен в регионе; null — обычный проигрываемый трек.
-    /// У Go+/заблокированных транскодинги всегда отвечают 404 — проверяем ДО сети.</summary>
+    /// <summary>"SNIPPET" — Go+ track (full version only with a SoundCloud subscription),
+    /// "BLOCK" — unavailable in the region; null — a normally playable track.
+    /// Go+/blocked tracks' transcodings always answer 404 — checked BEFORE the network.</summary>
     [JsonPropertyName("policy")]
     public string? Policy { get; set; }
 
-    /// <summary>Модель монетизации: "AD_SUPPORTED" — трек с рекламой (SoundCloud
-    /// отдаёт его ТОЛЬКО зашифрованным CENC/Widevine-стримом — обычные
-    /// progressive/hls-транскодинги отвечают 404 даже залогиненным), "BLACKBOX" —
-    /// обычный трек с открытыми стримами. Диагностика «почему не играет».</summary>
+    /// <summary>Monetization model: "AD_SUPPORTED" — an ad-supported track (SoundCloud
+    /// serves it ONLY as an encrypted CENC/Widevine stream — regular progressive/hls
+    /// transcodings answer 404 even when logged in), "BLACKBOX" — a normal track with
+    /// open streams. Diagnoses "why it won't play".</summary>
     [JsonPropertyName("monetization_model")]
     public string? MonetizationModel { get; set; }
 
@@ -104,10 +104,10 @@ public sealed class ScTrack
     public string Kind { get; set; } = string.Empty;
 }
 
-/// <summary>Элемент коллекции лайков: либо track, либо playlist (плейлисты пропускаем).</summary>
+/// <summary>A likes collection item: either a track or a playlist (playlists are skipped).</summary>
 public sealed class ScLikeItem
 {
-    /// <summary>Дата лайка (не дата загрузки трека) — хранится в liked_at.</summary>
+    /// <summary>Like date (not the track's upload date) — stored in liked_at.</summary>
     [JsonPropertyName("created_at")]
     public string? CreatedAt { get; set; }
 
@@ -127,17 +127,17 @@ public sealed class ScLikesResponse
     public string? NextHref { get; set; }
 }
 
-/// <summary>Ответ на GET {transcoding.url}?client_id=... — прямая mp3-ссылка.</summary>
+/// <summary>Response to GET {transcoding.url}?client_id=... — a direct mp3 link.</summary>
 public sealed class ScStreamResolve
 {
     [JsonPropertyName("url")]
     public string Url { get; set; } = string.Empty;
 }
 
-/// <summary>Ответ GET /search/tracks: {"collection":[…track…]} — для поиска
-/// играбельной копии DRM-трека (перекачанные другими пользователями версии).
-/// Отдельный «мягкий» DTO: в выдаче поиска поля бывают null (например,
-/// playback_count) — строгий ScTrack падает на всём ответе из-за одного элемента.</summary>
+/// <summary>GET /search/tracks response: {"collection":[…tracks…]} — used to find a
+/// playable copy of a DRM track (versions re-uploaded by other users). A separate "soft"
+/// DTO: search-result fields can be null (e.g. playback_count), and strict ScTrack would
+/// fail the whole response over a single element.</summary>
 public sealed class ScSearchResponse
 {
     [JsonPropertyName("collection")]
@@ -174,10 +174,10 @@ public sealed class ScSearchTrack
     public string? FullName { get; set; }
 }
 
-/// <summary>Пользователь, чья веб-сессия подключена (GET /me).</summary>
+/// <summary>The user whose web session is connected (GET /me).</summary>
 public sealed class ScMeResponse
 {
-    /// <summary>Числовой id пользователя (в JSON — number); используется для /users/{id}/likes.</summary>
+    /// <summary>Numeric user id (a number in JSON); used for /users/{id}/likes.</summary>
     [JsonPropertyName("id")]
     public long Id { get; set; }
 
@@ -194,8 +194,8 @@ public sealed class ScMeResponse
     public string? FullName { get; set; }
 }
 
-/// <summary>Ответ GET /tracks/{id}/related: {"collection":[…track…], "next_href":…} —
-/// похожие треки SoundCloud (пул «сцены» для «Моей волны»).</summary>
+/// <summary>GET /tracks/{id}/related response: {"collection":[…tracks…], "next_href":…} —
+/// SoundCloud's similar tracks (the "scene" pool for My Wave).</summary>
 public sealed class ScRelatedResponse
 {
     [JsonPropertyName("collection")]

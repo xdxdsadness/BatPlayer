@@ -6,27 +6,27 @@ using BatPlayer.Models;
 namespace BatPlayer.Helpers;
 
 /// <summary>
-/// Построение runtime-треков Track из строк soundcloud_likes (карточки Home, SoundCloud,
-/// «Загрузок» и профиля артиста). Такие треки существуют только в памяти: БД tracks не
-/// пишется, Id — отрицательные (-1 - index), чтобы гарантированно не пересекаться
-/// с локальными long-Id.
+/// Builds runtime Track objects from soundcloud_likes rows (Home, SoundCloud, and
+/// artist-profile cards). Such tracks exist only in memory: the tracks DB is not
+/// written, and Ids are negative (-1 - index) so they can never collide with local
+/// long Ids.
 /// </summary>
 public static class SoundCloudRuntimeTracks
 {
     /// <summary>
-    /// Карточка лайка для списка Home: FilePath пуст — реальный файл (локальный матч или
-    /// mp3 из кэша) резолвится при клике; CoverCachePath — локальная обложка из кэша.
-    /// DateAdded = время лайка: LoadAsync сортирует объединённый список по ней —
-    /// свежелайкнутый SC-трек встаёт над старыми треками других источников.
+    /// Like card for the Home list: FilePath is empty — the real file (local match or
+    /// cached mp3) is resolved on click; CoverCachePath is the local cached cover.
+    /// DateAdded = like time: LoadAsync sorts the merged list by it, so a freshly
+    /// liked SC track lands above older tracks from other sources.
     /// </summary>
     public static Track BuildRuntimeTrack(SoundCloudLikeRow like, string? artworkLocalPath, int index)
         => BuildRuntimeTrack(like.ScId, like.Title, like.Artist, like.DurationMs, artworkLocalPath, index,
             TrackTimestamps.ParseUtc(like.LikedAt));
 
     /// <summary>
-    /// Карточка по полям лайка (перегрузка для источников без SoundCloudLikeRow —
-    /// например SoundCloudCard на странице SoundCloud). addedAtUtc — дата лайка
-    /// (неизвестна у карточек волны/поиска — тогда «сейчас»).
+    /// Card from like fields (overload for sources without a SoundCloudLikeRow —
+    /// e.g. SoundCloudCard on the SoundCloud page). addedAtUtc is the like date
+    /// (unknown for wave/search cards — then "now").
     /// </summary>
     public static Track BuildRuntimeTrack(string scId, string title, string artist, long durationMs,
                                           string? artworkLocalPath, int index,
@@ -40,15 +40,15 @@ public static class SoundCloudRuntimeTracks
             Artist = artist,
             DurationTicks = durationMs * TimeSpan.TicksPerMillisecond,
             CoverCachePath = artworkLocalPath,
-            IsFavorite = true, // лайки
+            IsFavorite = true, // likes
             IsAvailable = true,
             DateAdded = addedAtUtc == default ? DateTime.UtcNow : addedAtUtc,
             Source = Track.SourceSoundCloud,
         };
 
     /// <summary>
-    /// Файловый вариант runtime-трека для плеера: FilePath = mp3 из дискового кэша.
-    /// Id/ScId сохраняются, чтобы повторный клик по карточке давал паузу/возобновление.
+    /// File-backed variant of the runtime track for the player: FilePath = mp3 from the
+    /// disk cache. Id/ScId are preserved so a second click on the card pauses/resumes.
     /// </summary>
     public static Track WithCachedFile(Track runtime, string cachedFilePath)
         => new()
@@ -67,10 +67,10 @@ public static class SoundCloudRuntimeTracks
         };
 
     /// <summary>
-    /// Нужен ли треку резолв пути перед воспроизведением: FilePath пуст и это трек
-    /// удалённой платформы (Source="soundcloud" или "vk") с известным ScId — при "vk"
-    /// ScId хранит vk_id (см. Track.ScId). Чистая функция — покрыта тестами; локальные
-    /// треки (и платформенные карточки с уже резолвнутым файлом) открываются как есть.
+    /// Whether the track needs path resolution before playback: FilePath is empty and it
+    /// is a remote platform track (Source="soundcloud" or "vk") with a known ScId — for
+    /// "vk" ScId holds vk_id (see Track.ScId). Local tracks (and platform cards with an
+    /// already-resolved file) open as-is.
     /// </summary>
     public static bool NeedsFilePathResolve(Track? track)
         => track != null
@@ -78,16 +78,15 @@ public static class SoundCloudRuntimeTracks
            && track.IsPlatformTrack
            && !string.IsNullOrEmpty(track.ScId);
 
-    /// <summary>Лимит SC-лайков для фильтра «Недавно игравшиеся» — как локальный лимит
-    /// LibraryService.GetRecentlyPlayedAsync.</summary>
+    /// <summary>SC likes limit for the "Recently Played" filter — same as the local limit
+    /// in LibraryService.GetRecentlyPlayedAsync.</summary>
     public const int RecentlyPlayedScLimit = 50;
 
     /// <summary>
-    /// SC-часть списка библиотеки по фильтру страницы (Home/Recent/RecentlyPlayed/Favorites).
-    /// Лайки приходят из репозитория уже в порядке liked_at DESC (новые сверху) — порядок
-    /// сохраняется. Чистая функция — покрыта юнит-тестами:
-    /// «Played» — первые 50 лайков (как локальный лимит); «Favorites» и «All» (Home) — все;
-    /// «Recent» (недавно добавленные) — пусто: страница только про локальные файлы.
+    /// SC part of the library list for the page filter (Home/Recent/RecentlyPlayed/Favorites).
+    /// Likes arrive from the repository already in liked_at DESC order (newest first) —
+    /// the order is preserved. "Played" = first 50 likes (the local limit); "Favorites"
+    /// and "All" (Home) = all; "Recent" (newly added) = empty: the page is local files only.
     /// </summary>
     public static List<Track> BuildScAppend(string filterMode, IReadOnlyList<SoundCloudLikeRow> likes,
         int startIndex = 0)
@@ -105,13 +104,12 @@ public static class SoundCloudRuntimeTracks
     }
 
     /// <summary>
-    /// Кандидат фоновой предзагрузки (префетч) при старте трека: следующий элемент
-    /// очереди (строго currentIndex+1), если это ещё не резолвнутая SC-карточка —
-    /// FilePath пуст (файл доберёт общий FilePathResolver в кэш, к моменту
-    /// переключения трек стартует без лага скачивания). Локальные треки и SC-карточки
-    /// с готовым файлом предзагрузки не требуют; помеченные недоступными
-    /// (IsAvailable=false от неудачного резолва в этой сессии) не префетчатся:
-    /// авто-переход их всё равно скипает. Чистая функция — покрыта юнит-тестами.
+    /// Background prefetch candidate when a track starts: the next queue item
+    /// (strictly currentIndex+1) if it is an SC card without a resolved file —
+    /// FilePath is empty (the shared FilePathResolver will put the file in the cache,
+    /// so the track starts without download lag on switch). Local tracks and SC cards
+    /// with a ready file need no prefetch; unavailable ones (IsAvailable=false from a
+    /// failed resolve in this session) are not prefetched — auto-advance skips them anyway.
     /// </summary>
     public static Track? GetNextSoundCloudCandidate(IReadOnlyList<Track>? queue, int currentIndex)
     {
@@ -125,14 +123,13 @@ public static class SoundCloudRuntimeTracks
     }
 
     /// <summary>
-    /// Поиск по библиотеке: локальные треки (title/artist/album/genre, регистронезависимо)
-    /// плюс совпавшие по title/artist лайки SoundCloud — runtime-карточки в КОНЦЕ списка
-    /// (FilePath пуст: файл резолвится на клике через AudioService.FilePathResolver).
-    /// Пустой/пропущенный запрос — локальные без фильтра и без SC-карточек: пустой поиск
-    /// означает обычный список страницы, а лайки на Home добавляет LoadAsync.
-    /// startIndex — смещение нумерации runtime-Id (Id = -1 - index): не пересекается
-    /// ни с локальными Id, ни с SC-карточками, построенными ранее.
-    /// Чистая функция — покрыта юнит-тестами.
+    /// Library search: local tracks (title/artist/album/genre, case-insensitive) plus
+    /// SoundCloud likes matching title/artist — runtime cards at the END of the list
+    /// (FilePath empty: resolved on click via AudioService.FilePathResolver).
+    /// An empty/missing query returns unfiltered local tracks and no SC cards: an empty
+    /// search means the regular page list; likes are added to Home by LoadAsync.
+    /// startIndex offsets the runtime-Id numbering (Id = -1 - index) so it collides with
+    /// neither local Ids nor previously built SC cards.
     /// </summary>
     public static List<Track> FilterWithSoundCloud(IReadOnlyList<Track> localTracks,
                                                    IReadOnlyList<SoundCloudLikeRow> scLikes,
@@ -156,16 +153,9 @@ public static class SoundCloudRuntimeTracks
             }
         }
 
-        var scIndex = startIndex;
-        foreach (var like in scLikes)
-        {
-            if (like.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
-             || like.Artist.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add(BuildRuntimeTrack(like, like.ArtworkLocalPath, scIndex));
-                scIndex++;
-            }
-        }
+        var scMatches = RuntimeTrackFilter.Filter(startIndex, scLikes, query,
+            r => r.Title, r => r.Artist, (r, i) => BuildRuntimeTrack(r, r.ArtworkLocalPath, i));
+        result.AddRange(scMatches);
 
         return result;
     }

@@ -15,8 +15,8 @@ namespace BatPlayer;
 
 public partial class App : Application
 {
-    // Явная идентичность на панели задач: без неё шелл выводит имя из кэша по пути
-    // exe — при замене сборки в меню панели задач оставалось старое «BatPlayer».
+    // Explicit taskbar identity: without it the shell uses a name cached by exe
+    // path — after a rebuild the taskbar menu kept the old "BatPlayer".
     private const string AppUserModelId = "BatPlayer";
 
     [DllImport("shell32.dll", SetLastError = true)]
@@ -24,14 +24,14 @@ public partial class App : Application
     public static string AppDataDir { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BatPlayer");
 
-    public static string DatabasePath { get; } = Path.Combine(AppDataDir, "obsidian.db");
+    public static string DatabasePath { get; } = Path.Combine(AppDataDir, "batplayer.db");
     public static string SettingsPath { get; } = Path.Combine(AppDataDir, "settings.json");
     public static string CoverCacheDir { get; } = Path.Combine(AppDataDir, "cover_cache");
 
     private static IServiceProvider? _services;
     public static IServiceProvider Services => _services ?? throw new InvalidOperationException("Services not initialized");
 
-    /// <summary>True while the app is deliberately exiting (tray "Выход") — window close must not hide to tray.</summary>
+    /// <summary>True while the app is deliberately exiting (tray "Exit") — window close must not hide to tray.</summary>
     public static bool IsExiting { get; set; }
 
     private const string MutexName = @"Local\BatPlayer.Instance";
@@ -46,8 +46,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Переезд данных после переименования проекта ObsidianPlayer → BatPlayer:
-        // один раз переносим старую папку LocalApplicationData (база, настройки, авторизации).
+        // One-time data migration after the ObsidianPlayer → BatPlayer rename:
+        // moves the old LocalApplicationData folder (db, settings, auth).
         try
         {
             var oldAppData = Path.Combine(
@@ -57,16 +57,32 @@ public partial class App : Application
         }
         catch (Exception ex) { Logger.Warn($"AppData migration failed: {ex.Message}"); }
 
-        // Идентичность панели задач — ДО jump list и любых окон.
+        // One-time database file rename left from the same rename (obsidian.db -> batplayer.db).
+        try
+        {
+            var legacyDb = Path.Combine(AppDataDir, "obsidian.db");
+            if (!File.Exists(DatabasePath) && File.Exists(legacyDb))
+            {
+                File.Move(legacyDb, DatabasePath);
+                foreach (var suffix in new[] { "-wal", "-shm" })
+                {
+                    var side = legacyDb + suffix;
+                    if (File.Exists(side)) File.Move(side, DatabasePath + suffix);
+                }
+            }
+        }
+        catch (Exception ex) { Logger.Warn($"Database file rename failed: {ex.Message}"); }
+
+        // Taskbar identity must be set BEFORE the jump list and any windows.
         try { SetCurrentProcessExplicitAppUserModelID(AppUserModelId); }
         catch (Exception ex) { Logger.Warn($"SetCurrentProcessExplicitAppUserModelID failed: {ex.Message}"); }
 
-        // Регистрация Code Page провайдера для поддержки кодировок (включая Windows-1251)
-        // Необходимо для self-contained приложений в .NET 8+
+        // Register the code pages provider (incl. Windows-1251); required for
+        // self-contained apps on .NET 8+.
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
         // Single instance: a second launch either tells the running one to exit
-        // (taskbar jump list "Выход") or activates it, then dies.
+        // (taskbar jump list "Exit") or activates it, then dies.
         _instanceMutex = new Mutex(true, MutexName, out var isNew);
         Logger.Info($"Startup: args=[{string.Join(" ", e.Args)}] isNew={isNew}");
         if (!isNew)
@@ -138,21 +154,18 @@ public partial class App : Application
 
             Logger.Info("Bat Player started.");
 
-            // Тема/акцент — до создания окна: StaticResource-кисти резолвятся при
-            // загрузке MainWindow и подхватывают перезаписанные ресурсы.
+            // Theme/accent before the window: StaticResource brushes resolve while
+            // MainWindow loads and pick up the overridden resources.
             if (_services?.GetService(typeof(SettingsService)) is SettingsService ss)
                 ApplyVisualResources(ss.Current);
 
             var window = new MainWindow();
             window.Show();
 
-            // Антиблокировка SoundCloud: фоново проверяем прямой доступ и при блокировке
-            // поднимаем zapret (UAC — один раз за сессию), чтобы первый клик уже играл.
-            if (_services?.GetService(typeof(SettingsService)) is SettingsService startupSettings
-                && _services.GetService(typeof(global::BatPlayer.Services.SoundCloud.SoundCloudService)) is global::BatPlayer.Services.SoundCloud.SoundCloudService)
-            {
-                global::BatPlayer.Services.SoundCloud.SoundCloudZapret.StartWatchdog(startupSettings.Current.SoundCloudZapretEnabled);
-            }
+            // Built-in DPI bypass: probe access in the background; on blocking, start
+            // the packet-level engine (UAC once per session) so the first click plays.
+            if (_services?.GetService(typeof(SettingsService)) is SettingsService bypassSettings)
+                BatPlayer.Services.DpiBypass.StartWatchdog(bypassSettings.Current.DpiBypassEnabled);
         }
         catch (Exception ex)
         {
@@ -163,22 +176,22 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Применение визуальных настроек к ресурсам приложения: тема, акцент,
-    /// прозрачность страниц (для GIF-фона), тени обложек. Вызывается на старте
-    /// и по кнопке «Применить» — StaticResource при пересоздании окна подхватывает.
+    /// Applies visual settings to app resources: theme, accent, page transparency
+    /// (for the GIF background), cover shadows. Called at startup and by the
+    /// "Apply" button — a recreated window picks up the StaticResource values.
     /// </summary>
     public static void ApplyVisualResources(Models.AppSettings settings)
     {
         ThemeService.Apply(settings);
 
-        // GIF-фон виден только сквозь прозрачные страницы; выключен — страницы
-        // снова залиты фоном темы.
+        // The GIF background shows only through transparent pages; when disabled,
+        // pages revert to the theme background.
         Application.Current.Resources["PageBackgroundBrush"] =
             settings.BackgroundGifEnabled
                 ? System.Windows.Media.Brushes.Transparent
                 : Application.Current.Resources["BgBrush"];
 
-        // Тени обложек: ресурс-эффект в null, когда выключены.
+        // Cover shadows: null out the resource effect when disabled.
         Application.Current.Resources["CardCoverShadow"] =
             settings.CoverShadows
                 ? new System.Windows.Media.Effects.DropShadowEffect
@@ -191,9 +204,9 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Применить визуальные настройки СРАЗУ, без перезапуска приложения: окно
-    /// пересоздаётся с новыми ресурсами (StaticResource резолвятся при загрузке),
-    /// аудио-сервис живёт на уровне приложения — воспроизведение не прерывается.
+    /// Applies visual settings immediately, without restarting the app: the window
+    /// is recreated with the new resources (StaticResource resolves at load time);
+    /// the audio service lives at app level, so playback is not interrupted.
     /// </summary>
     public static void ApplyVisualSettingsAndRecreateWindow()
     {
@@ -201,9 +214,9 @@ public partial class App : Application
             ApplyVisualResources(ss.Current);
 
         var old = Application.Current.MainWindow;
-        // Старое окно прячем ДО сборки нового: иначе на время пересоздания (тяжёлая
-        // разметка + загрузка страниц) пользователь смотрит на замерший старый кадр,
-        // а взаимно перекрашивающиеся окна дают лишние полные перерисовки.
+        // Hide the old window BEFORE building the new one: otherwise the user
+        // stares at a frozen old frame while the window is rebuilt, and windows
+        // repainting over each other cause extra full redraws.
         old?.Hide();
         var fresh = new MainWindow(restorePlayback: false);
         Application.Current.MainWindow = fresh;

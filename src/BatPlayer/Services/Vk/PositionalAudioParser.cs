@@ -7,9 +7,9 @@ using BatPlayer.Services;
 namespace BatPlayer.Services.Vk;
 
 /// <summary>
-/// Один трек, извлечённый из позиционного массива ответа al_audio.php (веб-эндпоинт
-/// каталога музыки vk.com, тот же, которым пользуется веб-плеер). Часть полей может
-/// отсутствовать — VK меняет раскладку позиций; надёжны только vk_id и наличие url.
+/// One track extracted from a positional array of an al_audio.php response (the
+/// vk.com music catalog web endpoint used by the VK web player). Some fields may be
+/// missing — VK changes the layout; only vk_id and the presence of url are reliable.
 /// </summary>
 public sealed class ParsedWebAudio
 {
@@ -17,58 +17,56 @@ public sealed class ParsedWebAudio
     public long OwnerId { get; init; }
     public string Title { get; init; } = string.Empty;
     public string Artist { get; init; } = string.Empty;
-    /// <summary>Длительность в секундах; 0 — не удалось определить (позиция нестабильна).</summary>
+    /// <summary>Duration in seconds; 0 — could not be determined (position is unstable).</summary>
     public long DurationSec { get; init; }
-    /// <summary>Временная прямая ссылка mp3/hls; null — трек скрыт/удалён (неиграбелен).</summary>
+    /// <summary>Temporary direct mp3/hls URL; null — track is hidden/deleted (unplayable).</summary>
     public string? StreamUrl { get; init; }
-    /// <summary>Ссылка на обложку (sun*.userapi.com/*.jpg); null — карточка покажет плейсхолдер.</summary>
+    /// <summary>Artwork URL (sun*.userapi.com/*.jpg); null — the UI shows a placeholder.</summary>
     public string? ArtworkUrl { get; init; }
 
-    /// <summary>Скрытые/удалённые записи (без url) неиграбельны и в каталог не попадают.</summary>
+    /// <summary>Hidden/deleted entries (no url) are unplayable and excluded from the catalog.</summary>
     public bool IsPlayable => !string.IsNullOrEmpty(StreamUrl);
 
-    /// <summary>vk_id = "{owner_id}_{audio_id}" (тот же формат, что давал audio.get).</summary>
+    /// <summary>vk_id = "{owner_id}_{audio_id}" (same format audio.get used).</summary>
     public string VkId => $"{OwnerId}_{AudioId}";
 }
 
 /// <summary>
-/// Результат разбора тела ответа al_audio.php.
+/// Result of parsing an al_audio.php response body.
 /// </summary>
 internal sealed record AlAudioPayload(
     IReadOnlyList<ParsedWebAudio> Tracks,
-    /// <summary>Явный nextOffset из payload (VK отдаёт его не всегда); null — нет данных.</summary>
+    /// <summary>Explicit nextOffset from the payload (VK does not always send it); null — none.</summary>
     int? NextOffset,
-    /// <summary>Заявленный total раздела; 0 — в payload не нашёлся.</summary>
+    /// <summary>Reported section total; 0 — not found in the payload.</summary>
     int ReportedTotal,
-    /// <summary>Код ошибки из payload[0].code (0 — успех); не ноль — VK вернул ошибку раздела.</summary>
+    /// <summary>Error code from payload[0].code (0 — success); non-zero — VK returned a section error.</summary>
     int ErrorCode,
-    /// <summary>Хоть один JSON-чанк разобрался: false — ответ не al_audio вовсе (мусор/HTML).</summary>
+    /// <summary>At least one JSON chunk parsed; false — the response is not al_audio at all (garbage/HTML).</summary>
     bool Parsed);
 
 /// <summary>
-/// Разбор ответа внутреннего веб-эндпоинта al_audio.php. Ответ — текст вида
-/// `<!json>{"payload":[{"code":0,"data":[...]}]}`, где data содержит ПОЗИЦИОННЫЕ
-/// массивы треков. Формат позиций VK регулярно меняет, поэтому разбор lenient:
+/// Parses responses of the internal al_audio.php web endpoint. The response is text of
+/// the form `<!json>{"payload":[{"code":0,"data":[...]}]}` where data holds POSITIONAL
+/// track arrays. VK changes the layout regularly, so parsing is lenient:
 ///
-///   • трек-кандидат — массив длиной ≥ <see cref="MinTrackArrayLength"/>, у которого
-///     [0] — целое &gt; 0 (audio id), [1] — целое ≠ 0 (owner_id; у групповых записей
-///     он отрицательный) и среди верхнеуровневых элементов есть строка "http…";
-///   • сканируется всё дерево payload рекурсивно (список треков обычно data[1],
-///     но позиция обёртки тоже меняется) — короткие служебные массивы фильтр не
-///     проходят;
-///   • из строк-элементов: первый http не-картинка — стрим (mp3/hls), первый
-///     http-картинка (.jpg/.png/…) — обложка (если на верхнем уровне её нет —
-///     неглубокий поиск во вложенных массивах, обложки живут в element[13]-like);
-///   • artist/title — первые две не-http строки (VK всегда отдаёт artist раньше
-///     title на всех известных раскладках 2/3 и 3/4); одна строка — попытка
-///     разделить "Artist - Title";
-///   • duration — первое целое после позиции title в диапазоне 1..86400.
+///   • a track candidate is an array of length ≥ <see cref="MinTrackArrayLength"/> whose
+///     [0] is an integer &gt; 0 (audio id), [1] a non-zero integer (owner_id; negative
+///     for group posts), and whose top-level items include an "http…" string;
+///   • the whole payload tree is scanned recursively (the track list is usually data[1],
+///     but the wrapper position changes too) — short service arrays fail the filter;
+///   • from string items: the first http non-image is the stream (mp3/hls), the first
+///     http image (.jpg/.png/…) is the artwork (if absent at the top level, a shallow
+///     search runs through nested arrays — artwork lives in element[13]-like slots);
+///   • artist/title — the first two non-http strings (VK always emits artist before
+///     title on all known layouts); a single string is split on "Artist - Title";
+///   • duration — the first integer after the title position in range 1..86400.
 ///
-/// При первом успешном разборе в лог пишется один сырой элемент (обрезанный до
-/// 500 символов) — диагностика раскладки на живом ответе. Cookies/токены в логи
-/// не попадают (в payload трека их нет).
+/// On the first successful parse one raw element (truncated to 500 chars) is logged to
+/// diagnose the live layout. Cookies/tokens never reach the logs (the track payload
+/// contains none).
 /// </summary>
-/// <summary>Один трек из современной секции type=recent (кортежи-массивы).</summary>
+/// <summary>A track from the modern type=recent section (tuple arrays).</summary>
 public sealed class RecentAudioTuple
 {
     public long AudioId { get; init; }
@@ -76,18 +74,18 @@ public sealed class RecentAudioTuple
     public string Title { get; init; } = string.Empty;
     public string Artist { get; init; } = string.Empty;
     public long DurationSec { get; init; }
-    /// <summary>Хеш ссылки на поток: reload_audio строит из него mp3-ссылку.</summary>
+    /// <summary>Stream URL hash: reload_audio builds the mp3 URL from it.</summary>
     public string UrlHash { get; init; } = string.Empty;
-    /// <summary>Обложки через запятую (sun*.vkuserphoto.ru); пусто — плейсхолдер.</summary>
+    /// <summary>Comma-separated artwork URLs (sun*.vkuserphoto.ru); empty — placeholder.</summary>
     public string ArtworkUrls { get; init; } = string.Empty;
 }
 
 internal static class PositionalAudioParser
 {
-    /// <summary>Минимальная длина массива-кандидата в трек (реальные элементы ≥ 12 полей).</summary>
+    /// <summary>Minimum length of a track candidate array (real items have ≥ 12 fields).</summary>
     internal const int MinTrackArrayLength = 12;
 
-    /// <summary>Разумная верхняя граница duration (сек) — отсев id/флагов при поиске.</summary>
+    /// <summary>Sane upper bound for duration (sec) — filters out ids/flags during the search.</summary>
     private const long MaxDurationSec = 86400;
 
     private static readonly string[] ImageExtensions =
@@ -95,12 +93,12 @@ internal static class PositionalAudioParser
 
     private static bool _rawLogged;
 
-    // ========================= Тело ответа =========================
+    // ========================= Response body =========================
 
        /// <summary>
-    /// Полный разбор тела ответа al_audio.php (возможно несколько `&lt;!json&gt;`-чанков).
-    /// Мусор/HTML не бросают исключений — возвращается пустой результат; протухшую
-    /// сессию до этого этапа ловит <see cref="IsLoginHtml"/>.
+    /// Full parse of an al_audio.php response body (possibly several `&lt;!json&gt;` chunks).
+    /// Garbage/HTML never throws — an empty result is returned; an expired session is
+    /// caught earlier by <see cref="IsLoginHtml"/>.
     /// </summary>
     internal static AlAudioPayload ParsePayload(string body)
     {
@@ -121,11 +119,11 @@ internal static class PositionalAudioParser
                 if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("payload", out var payload)
                     && payload.ValueKind == JsonValueKind.Array)
                 {
-                    // Код ошибки раздела берём только с верхнеуровневых элементов payload
-                    // ({"code":N,"data":[...]}): вложенные "code" других объектов не трогаем.
+                    // Section error codes are taken only from top-level payload items
+                    // ({"code":N,"data":[...]}); nested "code" fields of other objects are ignored.
                     foreach (var item in payload.EnumerateArray())
                     {
-                        // Челлендж авторизации приходит СТРОКОЙ-статусом: {"payload":["3",[...]]}.
+                        // The audio auth challenge arrives as a status STRING: {"payload":["3",[...]]}.
                         if (item.ValueKind == JsonValueKind.String
                             && item.GetString() is { } status && status != "0")
                         {
@@ -146,7 +144,7 @@ internal static class PositionalAudioParser
             }
             catch (JsonException ex)
             {
-                // Чанк не JSON (обрыв/мусор) — остальные чанки всё равно пробуем.
+                // Chunk is not JSON (truncated/garbage) — try the remaining chunks anyway.
                 Logger.Error(ex, "VK al_audio JSON chunk parse failed");
             }
         }
@@ -155,8 +153,8 @@ internal static class PositionalAudioParser
     }
 
     /// <summary>
-    /// VK вернул страницу логина (HTML с формой входа) — cookies веб-сессии протухли.
-    /// Пустой ответ логином не считается (это транспортная проблема, а не сессия).
+    /// VK returned a login page (HTML with a sign-in form) — web session cookies expired.
+    /// An empty response does not count as a login page (that is a transport issue, not a session one).
     /// </summary>
     internal static bool IsLoginHtml(string body)
     {
@@ -171,9 +169,9 @@ internal static class PositionalAudioParser
     }
 
     /// <summary>
-    /// Разрезает тело на JSON-чанки: каждый сегмент после `&lt;!json&gt;`, начинающийся
-    /// с '{' (границы — до последнего '}', хвостовой мусор отрезается). Без маркера
-    /// целиком считаем чанком, только если тело начинается с '{'.
+    /// Splits the body into JSON chunks: each segment after `&lt;!json&gt;` starting with '{'
+    /// (bounds up to the last '}', trailing garbage trimmed). Without the marker, the body
+    /// counts as one chunk only if it starts with '{'.
     /// </summary>
     private static IEnumerable<string> SplitJsonChunks(string body)
     {
@@ -191,9 +189,9 @@ internal static class PositionalAudioParser
         }
     }
 
-    // ====================== Поиск трек-массивов ====================
+    // ====================== Track array search ====================
 
-    /// <summary>DFS по дереву JSON: кандидаты собираются, их вложенности не обходятся.</summary>
+    /// <summary>DFS over the JSON tree: candidates are collected, their subtrees are not traversed.</summary>
     private static void CollectTracks(JsonElement element, List<ParsedWebAudio> into)
     {
         switch (element.ValueKind)
@@ -205,7 +203,7 @@ internal static class PositionalAudioParser
                     if (track != null)
                     {
                         into.Add(track);
-                        return; // внутри трека других треков нет — не обходим
+                        return; // no tracks inside a track — do not traverse
                     }
                 }
                 foreach (var child in element.EnumerateArray())
@@ -220,8 +218,8 @@ internal static class PositionalAudioParser
     }
 
     /// <summary>
-    /// nextOffset/total ищутся где угодно в payload (VK кладёт их в служебные объекты
-    /// data — позиция меняется). Берутся первые найденные значения.
+    /// nextOffset/total are searched anywhere in the payload (VK puts them in service
+    /// data objects — the position changes). The first values found are used.
     /// </summary>
     private static void CollectNumbers(JsonElement element, ref int? nextOffset, ref int total)
     {
@@ -256,7 +254,7 @@ internal static class PositionalAudioParser
         }
     }
 
-    /// <summary>Трек-кандидат: длина ≥ 12, [0] — целое &gt; 0, [1] — целое ≠ 0, есть http-строка.</summary>
+    /// <summary>Track candidate: length ≥ 12, [0] an integer &gt; 0, [1] a non-zero integer, has an http string.</summary>
     internal static bool IsTrackCandidate(JsonElement element)
     {
         if (element.ValueKind != JsonValueKind.Array) return false;
@@ -284,10 +282,10 @@ internal static class PositionalAudioParser
         return item.TryGetInt64(out value);
     }
 
-    // ===================== Поля трека (lenient) ====================
+    // ===================== Track fields (lenient) ====================
 
     /// <summary>
-    /// Поля по правилам из доксуммарки типа. null — кандидат не сошёлся (нулевые id).
+    /// Fields extracted per the rules in the type's doc summary. null — candidate did not match (zero ids).
     /// </summary>
     internal static ParsedWebAudio? ParseTrackElement(JsonElement element)
     {
@@ -303,7 +301,7 @@ internal static class PositionalAudioParser
         foreach (var item in element.EnumerateArray())
         {
             index++;
-            if (index < 2) continue; // [0]/[1] — идентификаторы
+            if (index < 2) continue; // [0]/[1] — identifiers
 
             if (item.ValueKind == JsonValueKind.String)
             {
@@ -327,14 +325,14 @@ internal static class PositionalAudioParser
         string artist, title;
         if (texts.Count >= 2)
         {
-            // VK всегда отдаёт artist раньше title (позиции 2/3 или 3/4 на известных раскладках).
+            // VK always emits artist before title (positions 2/3 or 3/4 on known layouts).
             artist = texts[0].value;
             title = texts[1].value;
             titleIndex = texts[1].index;
         }
         else if (texts.Count == 1)
         {
-            // Иногда VK склеивает "Artist - Title" (subtitle-режим) — делим по первому " - ".
+            // Sometimes VK merges "Artist - Title" (subtitle mode) — split on the first " - ".
             var dash = texts[0].value.IndexOf(" - ", StringComparison.Ordinal);
             if (dash > 0)
             {
@@ -350,14 +348,14 @@ internal static class PositionalAudioParser
         }
         else
         {
-            // Нестандартная раскладка: названия не на верхнем уровне — оставляем пустыми,
-            // в лог уходит сырой элемент (см. LogRawElement) для разбора позиции.
+            // Unusual layout: titles not at the top level — leave empty; the raw element
+            // is logged (see LogRawElement) for layout analysis.
             artist = string.Empty;
             title = string.Empty;
         }
 
-        // duration — первое целое сразу после позиции title (на известных раскладках
-        // идёт соседним полем); при неизвестной позиции — поиск с индекса 2.
+        // duration — the first integer right after the title position (a neighboring field
+        // on known layouts); with an unknown position, search from index 2.
         var duration = 0L;
         var searchFrom = titleIndex >= 0 ? titleIndex + 1 : 2;
         for (var i = searchFrom; i < element.GetArrayLength(); i++)
@@ -369,8 +367,8 @@ internal static class PositionalAudioParser
             }
         }
 
-        // Обложка не на верхнем уровне — неглубокий поиск во вложенных массивах
-        // (element[13]-like): трековые вложенности — альбом/исполнители.
+        // Artwork not at the top level — shallow search in nested arrays
+        // (element[13]-like): track nesting holds album/artists.
         if (artworkUrl == null)
             artworkUrl = FindNestedImage(element, depth: 0);
 
@@ -421,7 +419,7 @@ internal static class PositionalAudioParser
         => !string.IsNullOrEmpty(s)
            && s.StartsWith("http", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Похоже ли на картинку (расширение до '?'; стрим-ссылки mp3/m3u8 отсюда исключены).</summary>
+    /// <summary>Looks like an image (extension before '?'; mp3/m3u8 stream URLs are excluded).</summary>
     private static bool IsImageUrl(string? s)
     {
         if (IsHttpString(s) == false) return false;
@@ -436,8 +434,8 @@ internal static class PositionalAudioParser
     }
 
     /// <summary>
-    /// Диагностика живой раскладки: один раз за процесс логируем сырой элемент
-    /// (до 500 символов) первого разобранного трека. Позиции полей в нём видны явно.
+    /// Live layout diagnostics: once per process, logs the raw element (up to 500 chars)
+    /// of the first parsed track; field positions are clearly visible in it.
     /// </summary>
     private static void LogRawElement(JsonElement element)
     {
@@ -452,17 +450,17 @@ internal static class PositionalAudioParser
         }
         catch (Exception ex)
         {
-            // Диагностика не должна ронять разбор.
+            // Diagnostics must not break parsing.
             Logger.Error(ex, "VK al_audio raw element logging failed");
         }
     }
 
     /// <summary>
-    /// Парс современной секции type=recent: payload[0] — код (0 = успех), payload[1][0] —
-    /// объект секции с "list" — массив кортежей треков:
+    /// Parses the modern type=recent section: payload[0] is the code (0 = success),
+    /// payload[1][0] is the section object whose "list" holds track tuples:
     ///   [0]=id, [1]=owner_id, [3]=title, [4]=artist, [5]=duration, [13]=url hash,
-    ///   [14]=обложки через запятую.
-    /// Мусор/неожиданная раскладка — пустой результат без исключений.
+    ///   [14]=comma-separated artwork URLs.
+    /// Garbage/unexpected layout — empty result without exceptions.
     /// </summary>
     internal static (int ErrorCode, List<RecentAudioTuple> Tracks) ParseRecentSection(string? body)
     {
@@ -487,7 +485,7 @@ internal static class PositionalAudioParser
                 return (0, tracks);
             }
 
-            // Код статуса: число или числовая строка в payload[0]
+            // Status code: a number or numeric string in payload[0]
             var status = payload[0];
             if (status.ValueKind == JsonValueKind.Number && status.TryGetInt32(out var code) && code != 0)
                 errorCode = code;
@@ -537,7 +535,7 @@ internal static class PositionalAudioParser
         }
         catch (JsonException)
         {
-            // мусор/обрыв — пустой результат
+            // garbage/truncation — empty result
         }
 
         return (errorCode, tracks);

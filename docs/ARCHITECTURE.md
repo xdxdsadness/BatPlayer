@@ -1,107 +1,92 @@
-# Архитектура Bat Player
+# Architecture
 
-## Общие принципы
+## Principles
 
-- **MVVM**: View (XAML) ↔ ViewModel (`ObservableObject`) ↔ Service (`singleton`).
-- **Dependency Injection**: лёгкий ручной `ServiceContainer` без Microsoft.Extensions.DependencyInjection (меньше зависимостей, тот же эффект).
-- **Single instance of AudioService**: один движок на всё приложение, переиспользуется всеми ViewModel.
-- **Async-first**: все I/O операции (БД, метаданные, сканирование) — `async/await`, UI не блокируется.
+- **MVVM**: View (XAML) <-> ViewModel (`ObservableObject`) <-> Service (singleton).
+- **Dependency injection**: lightweight hand-rolled `ServiceContainer` (no Microsoft.Extensions.DependencyInjection).
+- **Single AudioService instance**: one engine per app, shared by all ViewModels.
+- **Async-first**: all I/O (database, metadata, scanning) is async; the UI thread never blocks.
 
-## Слои
+## Layers
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   Views (XAML)                  │
-│  MainWindow · LibraryView · SettingsView ·      │
-│  EqualizerView · PlaylistView · NowPlayingWindow│
-└──────────────────┬──────────────────────────────┘
-                   │ DataBinding + Commands
-┌──────────────────▼──────────────────────────────┐
-│                  ViewModels                     │
-│  MainViewModel · PlayerBarViewModel ·           │
-│  LibraryViewModel · SettingsViewModel ·         │
-│  EqualizerViewModel · PlaylistViewModel ·       │
-│  SearchViewModel                                │
-└──────────────────┬──────────────────────────────┘
-                   │ method calls
-┌──────────────────▼──────────────────────────────┐
-│                   Services                      │
-│  LibraryService · AudioService ·                │
-│  MetadataService · PlaylistService ·            │
-│  SettingsService · HistoryService ·             │
-│  SearchService · CoverCacheService ·            │
-│  TrayService · GlobalHotkeyService ·            │
-│  EqualizerService                               │
-└──────────────────┬──────────────────────────────┘
-                   │
-        ┌──────────┴──────────┐
-        ▼                     ▼
-┌──────────────┐    ┌──────────────────┐
-│  Database    │    │     Audio        │
-│  SQLite +    │    │  AudioEngine     │
-│  Dapper      │    │  (NAudio+WASAPI) │
-└──────────────┘    │  Equalizer       │
-                    │  VolumeProvider  │
-                    └──────────────────┘
++-------------------------------------------------+
+|                   Views (XAML)                  |
+|  MainWindow - LibraryView - SettingsView - ...  |
++------------------------+------------------------+
+                         | data binding + commands
++------------------------v------------------------+
+|                  ViewModels                     |
+|  MainViewModel - LibraryViewModel - ...         |
++------------------------+------------------------+
+                         | method calls
++------------------------v------------------------+
+|                   Services                      |
+|  LibraryService - AudioService - DpiBypass - ...|
++------------+-----------------+------------------+
+             |                 |
+      +------v------+   +------v---------+
+      |  Database   |   |     Audio      |
+      | SQLite +    |   | AudioEngine    |
+      | Dapper      |   | (NAudio+WASAPI)|
+      +-------------+   +----------------+
 ```
 
-## Жизненный цикл приложения
+## Application lifecycle
 
-1. `App.OnStartup` — создаёт директории `%LocalAppData%\BatPlayer\` (`obsidian.db`, `settings.json`, `cover_cache/`, `logs/`).
-2. `DatabaseContext.InitializeAsync` — открывает SQLite, выполняет schema SQL, миграции.
-3. `ServiceContainer.Build` — регистрирует все сервисы как singletons.
-4. `MainWindow` конструктор — резолвит сервисы, создаёт `MainViewModel`, вызывает `_vm.InitializeAsync()`.
-5. `MainViewModel.InitializeAsync` — инициализирует трей, загружает библиотеку, восстанавливает состояние плеера.
-6. На закрытии — `AudioService.SaveStateAsync`, `SettingsService.SaveAsync`.
+1. `App.OnStartup` — creates `%LocalAppData%\BatPlayer\` (database, settings, cover cache, logs), migrates data from older versions, enforces single instance.
+2. `DatabaseContext.InitializeAsync` — opens SQLite, applies schema and migrations.
+3. `ServiceContainer.Build` — registers all services as singletons.
+4. `MainWindow` resolves services, creates `MainViewModel`, calls `InitializeAsync()`.
+5. `BatPlayer.Services.DpiBypass.StartWatchdog` — background probes; starts the packet-level bypass when access is blocked.
+6. On exit — `AudioService.SaveStateAsync`, `SettingsService.SaveAsync`.
 
 ## Audio pipeline
 
 ```
-File → WaveStream reader → SampleProvider → EqualizerSampleProvider
-                                              → VolumeSampleProvider
-                                              → WasapiOut (shared/exclusive)
-                                              → Audio Endpoint ( Speakers / Headphones )
+File -> WaveStream reader -> SampleProvider -> EqualizerSampleProvider
+                                             -> VolumeSampleProvider
+                                             -> WasapiOut (shared/exclusive)
+                                             -> audio endpoint
 ```
 
-- `EqualizerSampleProvider` — 10 BiQuad-фильтров (PeakingEQ) на канал, gain -12..+12 dB.
-- `VolumeSampleProvider` — масштабирование семплов для плавной регулировки громкости.
-- `WasapiOut` — нативный вывод через Windows Core Audio. Поддерживает shared (default) и exclusive режим.
+- `EqualizerSampleProvider` — 10 BiQuad peaking filters per channel, -12..+12 dB.
+- `VolumeSampleProvider` — sample scaling for smooth volume changes.
+- `WasapiOut` — native Windows Core Audio output, shared or exclusive mode.
 
-## База данных
+## Networking layer (streaming sources)
 
-SQLite-схема (см. `Database/DatabaseContext.cs`):
+- `SoundCloudHttp` / `VkHttp` / `YmHttp` — transport chain per service:
+  direct -> local `DpiBypassProxy` (TLS ClientHello fragmentation) -> user/system proxy.
+- `BatPlayer.Services.DpiBypass` — packet-level engine (WinDivert, see `Tools/bypass/`);
+  started automatically when the transport chain fails, no UI.
 
-| Таблица | Назначение |
+## Database
+
+SQLite schema lives in `Database/DatabaseContext.cs`:
+
+| Table | Purpose |
 |---|---|
-| `tracks` | основная таблица треков с метаданными |
-| `artists`, `albums`, `genres` | справочники |
-| `library_folders` | отслеживаемые папки |
-| `playlists`, `playlist_tracks` | плейлисты и состав |
-| `history` | история прослушиваний |
-| `playback_state` | сохранённое состояние (текущий трек, очередь, громкость) |
-| `schema_version` | версия схемы для миграций |
+| `tracks` | main track table with metadata |
+| `artists`, `albums`, `genres` | dictionaries |
+| `library_folders` | watched folders |
+| `playlists`, `playlist_tracks` | playlists and contents |
+| `history` | listening history |
+| `playback_state` | saved state (current track, queue, volume) |
+| `schema_version` | schema version for migrations |
 
-Индексы: на `title`, `artist`, `album`, `genre`, `date_added`, `is_favorite`, `playlist_id` — обеспечивают быстрый поиск даже на десятках тысяч треков.
+Indexes on `title`, `artist`, `album`, `genre`, `date_added`, `is_favorite`, `playlist_id` keep search fast on tens of thousands of tracks.
 
-## Производительность
+## Playback data flow
 
-- **Кэш обложек на диске** — SHA256 от байтов обложки как имя файла, не переизвлекается при повторном открытии.
-- **Виртуализация списков** — WPF `ListView` по умолчанию виртуализирует элементы, рендерит только видимые.
-- **Debounced search** — 200ms задержка перед выполнением поиска.
-- **Connection pooling** — `Cache=Shared;Pooling=True` в строке подключения SQLite.
-- **Фоновое сканирование** — `Task.Run` для метаданных, UI поток не блокируется.
+1. Double-click a track -> `LibraryViewModel.PlayTrackCommand` -> `AudioService.PlayTrack(track, contextQueue)`.
+2. `AudioService` builds the queue and calls `AudioEngine.Open(filePath, exclusiveMode, device)`.
+3. `AudioEngine` creates the reader and chains `EqualizerSampleProvider -> VolumeSampleProvider -> WasapiOut.Init`.
+4. `WasapiOut.Play` starts buffered playback; a 250 ms timer updates `Position`.
+5. On track end `PlaybackStopped` -> `AudioService.OnPlaybackStopped` -> `Next()`.
 
-## Поток данных при воспроизведении
+## State persistence
 
-1. Пользователь дабл-кликает трек → `LibraryViewModel.PlayTrackCommand` → `AudioService.PlayTrack(track, contextQueue)`.
-2. `AudioService` формирует очередь, вызывает `AudioEngine.Open(filePath, exclusiveMode, device)`.
-3. `AudioEngine` создаёт reader, прокидывает через `EqualizerSampleProvider → VolumeSampleProvider → WasapiOut.Init`.
-4. `WasapiOut.Play` запускает буферизированное воспроизведение.
-5. `AudioService._positionTimer` (250ms) обновляет `Position` через dispatcher.
-6. По окончании трека `WasapiOut.PlaybackStopped` → `AudioService.OnPlaybackStopped` → `Next()`.
-
-## Сохранение состояния
-
-- `AudioService.SaveStateAsync` сериализует `PlaybackState` (current track, queue, volume, shuffle/repeat) в `playback_state` таблицу.
-- `SettingsService.SaveAsync` пишет JSON в `settings.json` (атомарно через `.tmp` + `File.Replace`).
-- На старте `RestoreStateAsync` поднимает очередь из БД и возобновляет воспроизведение если `AutoResumePlayback=true`.
+- `AudioService.SaveStateAsync` serializes playback state into the `playback_state` table.
+- `SettingsService.SaveAsync` writes `settings.json` atomically (`.tmp` + `File.Move`).
+- On startup `RestoreStateAsync` rebuilds the queue and resumes playback when `AutoResumePlayback=true`.

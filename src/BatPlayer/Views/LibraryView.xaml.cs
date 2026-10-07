@@ -19,7 +19,7 @@ public partial class LibraryView : UserControl
         e.Handled = true;
     }
 
-    // Кнопка «+ в плейлист» на карточке: трек — текущий DataContext (Track).
+    // "+ add to playlist" button on the card: track is the current DataContext (Track).
     private void AddToPlaylist_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { DataContext: Models.Track track })

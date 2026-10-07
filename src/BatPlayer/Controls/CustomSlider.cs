@@ -5,8 +5,8 @@ using System.Windows.Media;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Тонкий слайдер с возможностью настройки толщины трека и размера ползунка.
-/// Используется для прогресс-бара трека и регулятора громкости.
+/// Slim slider with configurable track thickness and thumb size.
+/// Used for the track progress bar and the volume control.
 /// </summary>
 public sealed class CustomSlider : Slider
 {
@@ -14,8 +14,8 @@ public sealed class CustomSlider : Slider
     {
         DefaultStyleKeyProperty.OverrideMetadata(typeof(CustomSlider),
             new FrameworkPropertyMetadata(typeof(CustomSlider)));
-        // Клик по дорожке ставит бегунок ровно в точку клика штатным механизмом
-        // Slider'а (надёжный внутренний маппинг координат).
+        // Clicking the track moves the thumb exactly to the click point via the stock
+        // Slider mechanism (reliable internal coordinate mapping).
         IsMoveToPointEnabledProperty.OverrideMetadata(typeof(CustomSlider),
             new FrameworkPropertyMetadata(true));
     }

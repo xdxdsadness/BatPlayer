@@ -6,8 +6,8 @@ using System.Resources;
 namespace BatPlayer.Localization;
 
 /// <summary>
-/// Локализация приложения. Строки лежат в BatPlayer.Resources.Strings (Strings.resx,
-/// Strings.en.resx, Strings.ru.resx). Смена языка — на лету, без перезапуска.
+/// App localization. Strings live in BatPlayer.Resources.Strings (Strings.resx,
+/// Strings.en.resx, Strings.ru.resx). Language switches on the fly, without restart.
 /// XAML: {Binding [KeyName], Source={x:Static loc:Loc.T}}; code-behind: Loc.Get(key).
 /// </summary>
 public static class Loc
@@ -18,19 +18,19 @@ public static class Loc
     private static string _currentCode = string.Empty;
     private static CultureInfo _culture = CultureInfo.InvariantCulture;
 
-    /// <summary>Наблюдаемый источник строк для XAML-биндингов.</summary>
+    /// <summary>Observable string source for XAML bindings.</summary>
     public static Localizer T { get; } = new();
 
-    /// <summary>Культура, применённая последним вызовом SetLanguage.</summary>
+    /// <summary>Culture applied by the last SetLanguage call.</summary>
     public static CultureInfo CurrentCulture => _culture;
 
-    /// <summary>Событие после смены языка (перестроить трей-меню, заголовки VM и т.п.).</summary>
+    /// <summary>Raised after a language change (rebuild tray menu, VM titles, etc.).</summary>
     public static event EventHandler? LanguageChanged;
 
     /// <summary>
-    /// Применяет язык (например "en" или "ru"): выставляет CurrentUICulture,
-    /// уведомляет все {Binding [Key], Source=Loc.T} через PropertyChanged("Item[]").
-    /// Безопасно вызывать повторно с тем же кодом — уведомлений не будет.
+    /// Applies a language (e.g. "en" or "ru"): sets CurrentUICulture and notifies all
+    /// {Binding [Key], Source=Loc.T} via PropertyChanged("Item[]").
+    /// Safe to call again with the same code — no notifications are raised.
     /// </summary>
     public static void SetLanguage(string code)
     {
@@ -49,16 +49,16 @@ public static class Loc
         T.OnAllChanged();
     }
 
-    /// <summary>Локализованная строка по ключу; при отсутствии — ключ.</summary>
+    /// <summary>Localized string by key; falls back to the key when missing.</summary>
     public static string Get(string key, CultureInfo? culture = null)
         => _rm.GetString(key, culture ?? _culture)
            ?? _rm.GetString(key, CultureInfo.InvariantCulture)
            ?? key;
 
     /// <summary>
-    /// Источник строк для XAML-биндингов вида {Binding [Key], Source={x:Static loc:Loc.T}}.
-    /// Живёт столько же, сколько приложение; при смене языка кидает PropertyChanged("Item[]"),
-    /// после чего WPF перечитывает все индексаторные биндинги.
+    /// String source for XAML bindings like {Binding [Key], Source={x:Static loc:Loc.T}}.
+    /// Lives as long as the app; on a language change it raises PropertyChanged("Item[]"),
+    /// after which WPF re-reads all indexer bindings.
     /// </summary>
     public sealed class Localizer : INotifyPropertyChanged
     {

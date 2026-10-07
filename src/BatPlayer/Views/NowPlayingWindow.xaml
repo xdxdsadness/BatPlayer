@@ -58,7 +58,7 @@
                 <Grid Grid.Column="0" Margin="48">
                     <Border CornerRadius="16" Background="{DynamicResource PanelBrush}">
                         <Grid>
-                            <!-- Два слоя: кроссфейд обложки при смене трека (ведёт code-behind) -->
+                            <!-- Two layers: cover crossfade on track change (driven by code-behind) -->
                             <Image x:Name="NowCoverLayerA" Stretch="Uniform" Opacity="0"
                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                             <Image x:Name="NowCoverLayerB" Stretch="Uniform" Opacity="0"
@@ -66,8 +66,8 @@
                         </Grid>
                     </Border>
                     <Border x:Name="NowBatBorder" CornerRadius="16" Background="{DynamicResource PanelBrush}">
-                        <!-- Нет обложки: серый силуэт мыши — индикатор неактивного трека.
-                             Прозрачностью ведёт code-behind вместе со слоями обложки. -->
+                        <!-- No cover: gray bat silhouette — inactive-track indicator.
+                             Its opacity is driven by code-behind with the cover layers. -->
                         <Image Width="280" Stretch="Uniform" HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Source="pack://application:,,,/Resources/batlogo_gray.png" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -184,7 +184,7 @@
                                 </Path.RenderTransform>
                                 <Path.Style>
                                     <Style TargetType="Path">                                        <Setter Property="Data" Value="{StaticResource IconPlay}"/>
-                                        <!-- Оптическое центрирование play-треугольника (см. MainWindow) -->
+                                        <!-- Optical centering of the play triangle (see MainWindow) -->
                                         <Setter Property="Margin" Value="2.5,0,0,0"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">

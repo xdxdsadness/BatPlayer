@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
@@ -183,11 +183,6 @@
   <data name="SoundCloudProxyHint" xml:space="preserve"><value>Proxy (auto / off / socks5://host:port)</value></data>
   <data name="SoundCloudWebviewMissing" xml:space="preserve"><value>Signing in to SoundCloud requires the WebView2 Runtime (Microsoft Edge WebView2). Install it from the Microsoft website and try again.</value></data>
   <data name="SoundCloudSyncFailed" xml:space="preserve"><value>SoundCloud sync failed</value></data>
-  <data name="ZapretSearching" xml:space="preserve"><value>Bypassing SoundCloud blocking: looking for a working strategy…</value></data>
-  <data name="ZapretStrategy" xml:space="preserve"><value>Bypass: strategy {0}/{1}…</value></data>
-  <data name="ZapretFound" xml:space="preserve"><value>Bypass found — {0}</value></data>
-  <data name="ZapretFailed" xml:space="preserve"><value>Bypass failed — SoundCloud unavailable without VPN</value></data>
-  <data name="ZapretNeedUac" xml:space="preserve"><value>Bypass needs admin rights (UAC request declined)</value></data>
   <data name="SettingsSoundCloudSwitch" xml:space="preserve"><value>Switch account</value></data>
   <data name="SettingsSoundCloudSwitchHint" xml:space="preserve"><value>Sign out on the SoundCloud site and sign in with another account</value></data>
   <data name="SoundCloudSyncing" xml:space="preserve"><value>Syncing SoundCloud likes…</value></data>
@@ -306,4 +301,27 @@
   <data name="WaveEmptyHint" xml:space="preserve"><value>The mix is built from your music: Yandex Music likes, VK and SoundCloud tracks, and your local library. Connect Yandex Music in Settings — its similarity graph picks the candidates.</value></data>
   <data name="WaveNotConnected" xml:space="preserve"><value>Connect Yandex Music in Settings — the mix needs it</value></data>
   <data name="WaveFailed" xml:space="preserve"><value>Could not build the mix — try again</value></data>
+  <data name="ScApiOpeningBrowser" xml:space="preserve"><value>Opening the browser for SoundCloud sign-in...</value></data>
+  <data name="ScApiManualHint" xml:space="preserve"><value>  If you have an app at soundcloud.com/you/apps — enter its client_id below and press Save.</value></data>
+  <data name="ScApiAutoRegUnavailable" xml:space="preserve"><value>Auto-registration unavailable: create an app at soundcloud.com/you/apps (redirect: http://127.0.0.1:8765/callback), enter the client_id and press Save</value></data>
+  <data name="ErrorPrefix" xml:space="preserve"><value>Error: </value></data>
+  <data name="ClientIdTooShort" xml:space="preserve"><value>client_id is too short</value></data>
+  <data name="ScApiRegisteringApp" xml:space="preserve"><value>Registering the SoundCloud API app...</value></data>
+  <data name="ScApiReconnectingOwnApp" xml:space="preserve"><value>Reconnecting with your app's credentials (second browser sign-in)...</value></data>
+  <data name="ScApiWaitingBrowser" xml:space="preserve"><value>Waiting for the SoundCloud sign-in in the browser...</value></data>
+  <data name="ScApiCanceledPage" xml:space="preserve"><value>Canceled: </value></data>
+  <data name="ScApiSignInCanceled" xml:space="preserve"><value>Sign-in canceled: </value></data>
+  <data name="ScApiConnectedPage" xml:space="preserve"><value>&lt;h2&gt;SoundCloud API connected&lt;/h2&gt;You can close this window.</value></data>
+  <data name="ScApiExchangingCode" xml:space="preserve"><value>Exchanging the code for a token...</value></data>
+  <data name="ScApiAppRegistered" xml:space="preserve"><value>App registered (client_id {0}).</value></data>
+  <data name="ScApiAppAlreadyRegistered" xml:space="preserve"><value>App already registered — fetching its credentials...</value></data>
+  <data name="ScApiAppFound" xml:space="preserve"><value>Found a registered app (client_id {0}).</value></data>
+  <data name="ScApiRegNeedsPro" xml:space="preserve"><value>App registration is unavailable for this account — a SoundCloud Artist Pro subscription is required</value></data>
+  <data name="ScApiRegNameRejected" xml:space="preserve"><value>App name rejected by SoundCloud</value></data>
+  <data name="ScApiRegWebsiteRejected" xml:space="preserve"><value>App website URL rejected by SoundCloud</value></data>
+  <data name="ScApiRegUnavailable" xml:space="preserve"><value>App registration unavailable ({0})</value></data>
+  <data name="ScApiConnect" xml:space="preserve"><value>Connect API</value></data>
+  <data name="ScApiDisconnect" xml:space="preserve"><value>Disconnect API</value></data>
+  <data name="UntitledTrack" xml:space="preserve"><value>(untitled)</value></data>
+  <data name="NewPlaylistName" xml:space="preserve"><value>New playlist</value></data>
 </root>

@@ -6,9 +6,9 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты патча длительности склеенного fMP4: длительность в mvhd, вставка mehd,
-/// коррекция размера moov. Фикстуры собираются вручную из боксов — структура
-/// минимальна, но повторяет layout init-сегмента SoundCloud (mvhd v0, timescale 1000).
+/// Tests for fMP4 concat duration patching: mvhd duration, mehd insertion, moov size
+/// correction. Fixtures are hand-built boxes — minimal but matching the SoundCloud
+/// init-segment layout (mvhd v0, timescale 1000).
 /// </summary>
 public class Fmp4DurationPatcherTests
 {
@@ -20,7 +20,7 @@ public class Fmp4DurationPatcherTests
 
         var patched = Fmp4DurationPatcher.Patch(data, durationMs);
 
-        // mehd вставлен (+16 байт), moov подрос, mvhd.duration = длительности в таймскейле.
+        // mehd inserted (+16 bytes), moov grew, mvhd.duration set in timescale units.
         Assert.Equal(data.Length + 16, patched.Length);
         Assert.Equal(142_439, (int)ReadUInt32BE(patched, MvhdDurationOffset(data)));
         var (mehdOffset, mehdSize) = FindBox(patched, 0, patched.Length, "mehd");
@@ -29,11 +29,11 @@ public class Fmp4DurationPatcherTests
         Assert.Equal(142_439, (int)ReadUInt32BE(patched, mehdOffset + 12));
 
         var (moovOffset, moovSize) = FindBox(patched, 0, patched.Length, "moov");
-        // moov = заголовок(8) + mvhd(108) + mehd(16); поле размера боксa согласовано.
+        // moov = header(8) + mvhd(108) + mehd(16); size field is consistent.
         Assert.Equal(8 + 108 + 16, moovSize);
         Assert.Equal(moovSize, (int)ReadUInt32BE(patched, moovOffset));
 
-        // Исходные байты не тронуты (патч работает с копией).
+        // Original bytes untouched (patch works on a copy).
         Assert.Equal(0, (int)ReadUInt32BE(data, MvhdDurationOffset(data)));
     }
 
@@ -47,15 +47,15 @@ public class Fmp4DurationPatcherTests
         var (mvhdOffset, mvhdSize) = FindBox(patched, moovOffset, moovOffset + moovSize, "mvhd");
         var (mehdOffset, _) = FindBox(patched, moovOffset, moovOffset + moovSize, "mehd");
 
-        // mehd строго внутри moov и сразу после mvhd — читатели фрагментированного
-        // mp4 ищут его именно там.
+        // mehd sits strictly inside moov right after mvhd — exactly where fragmented
+        // mp4 readers look for it.
         Assert.Equal(mvhdOffset + mvhdSize, mehdOffset);
     }
 
     [Fact]
     public void Patch_TimescaleScalesDuration()
     {
-        // timescale 44100: длительность пересчитывается из миллисекунд в юниты таймскейла.
+        // timescale 44100: ms duration converted to timescale units.
         var data = BuildFmp4(timescale: 44_100, movieDuration: 0);
 
         var patched = Fmp4DurationPatcher.Patch(data, 1000);
@@ -75,8 +75,8 @@ public class Fmp4DurationPatcherTests
     [Fact]
     public void Patch_GarbageInput_ReturnsOriginalBytes()
     {
-        // Мусор/усечённый файл не должен падать: возвращаем как есть, файл остаётся
-        // валидным для декодирования (пусть и без длительности).
+        // Garbage/truncated input must not throw: return as-is, the file stays
+        // decodable (just without duration).
         var garbage = new byte[] { 0x00, 0x01, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
         Assert.Same(garbage, Fmp4DurationPatcher.Patch(garbage, 1000));
 
@@ -87,13 +87,13 @@ public class Fmp4DurationPatcherTests
         Assert.Same(noMoov, Fmp4DurationPatcher.Patch(noMoov, 1000));
     }
 
-    /// <summary>Минимальный fMP4: ftyp + moov{mvhd(v0, timescale, duration)} + пара moof/mdat.</summary>
+    /// <summary>Minimal fMP4: ftyp + moov{mvhd(v0, timescale, duration)} + a moof/mdat pair.</summary>
     private static byte[] BuildFmp4(uint timescale, uint movieDuration)
     {
-        var mvhd = new byte[108]; // стандартный размер mvhd v0
+        var mvhd = new byte[108]; // standard mvhd v0 size
         WriteUInt32BE(mvhd, 0, (uint)mvhd.Length);
         mvhd[4] = (byte)'m'; mvhd[5] = (byte)'v'; mvhd[6] = (byte)'h'; mvhd[7] = (byte)'d';
-        // version=0/flags=0, creation/modification = 0; затем timescale и duration.
+        // version=0/flags=0, creation/modification = 0; then timescale and duration.
         WriteUInt32BE(mvhd, 20, timescale);
         WriteUInt32BE(mvhd, 24, movieDuration);
 
@@ -114,7 +114,7 @@ public class Fmp4DurationPatcherTests
         return box;
     }
 
-    /// <summary>Смещение поля duration в mvhd (v0: 12 заголовок + 8 дат + 4 timescale).</summary>
+    /// <summary>Offset of the duration field in mvhd (v0: 12 header + 8 dates + 4 timescale).</summary>
     private static int MvhdDurationOffset(byte[] data)
     {
         var (moovOffset, moovSize) = FindBox(data, 0, data.Length, "moov");
@@ -122,8 +122,8 @@ public class Fmp4DurationPatcherTests
         return mvhdOffset + 24;
     }
 
-    // Контейнерные боксы, внутрь которых спускаемся: mehd лежит внутри moov,
-    // поэтому контейнер нельзя перепрыгивать целиком.
+    // Container boxes we descend into: mehd lives inside moov, so containers must
+    // not be skipped wholesale.
     private static readonly System.Collections.Generic.HashSet<string> ContainerBoxes =
         new() { "moov", "trak", "mdia", "minf", "stbl", "mvex", "edts", "udta" };
 

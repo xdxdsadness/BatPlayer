@@ -23,9 +23,8 @@
                        Foreground="{DynamicResource TextSecondaryBrush}"/>
         </StackPanel>
 
-        <!-- Period switcher: IsChecked двусторонне связан с VM.Period — выделение
-             всегда отражает реальный период данных (раньше Day был зашит в XAML
-             и подсветка расходилась с показанной статистикой) -->
+        <!-- Period switcher: IsChecked is two-way bound to VM.Period so the selection
+             always reflects the actual data period -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="32,4,24,12">
             <RadioButton GroupName="StatsPeriod" Style="{StaticResource NavButton}" Margin="0,0,8,0"
                          IsChecked="{Binding Period, Converter={StaticResource EnumEqualsBool}, ConverterParameter=Day, Mode=TwoWay}"

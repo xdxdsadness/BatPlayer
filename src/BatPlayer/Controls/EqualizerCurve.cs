@@ -13,19 +13,19 @@ using BatPlayer.Models;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// График эквалайзера в духе FabFilter Pro-Q: лог-шкала частот 20 Гц…20 кГц,
-/// ±12 дБ, суммарная АЧХ по коэффициентам биквадов.
-/// Жесты и горячие клавиши:
-///  - двойной клик по графику — ДОБАВИТЬ узел (Bell) в точке клика;
-///  - перетаскивание узла — усиление (вертикаль) и частота (горизонталь);
-///  - двойной клик по узлу — УДАЛИТЬ узел;
-///  - ПКМ по узлу — сменить тип: Bell → НЧ-срез → ВЧ-срез;
-///  - колесо над узлом Bell — усиление; над срезом — крутизна 12/18/24/30/36/48 дБ/окт;
-///  - колесо над пустым графиком — сжать/растянуть ВСЮ кривую;
-///  - Alt+перетаскивание узла — то же масштабирование кривой мышью;
-///  - Shift+перетаскивание — движение строго по горизонтали либо вертикали.
-/// Анти-лаг: во время перетаскивания картинка рисуется из локального состояния,
-/// а значения в модель/движок уходят не чаще ~30 Гц (финал — при отпускании).
+/// FabFilter Pro-Q style equalizer curve: log frequency scale 20 Hz…20 kHz, ±12 dB,
+/// summed frequency response from biquad coefficients.
+/// Gestures and shortcuts:
+///  - double-click on the curve — ADD a node (Bell) at the click point;
+///  - node drag — gain (vertical) and frequency (horizontal);
+///  - double-click on a node — DELETE it;
+///  - right-click on a node — change type: Bell → low cut → high cut;
+///  - wheel over a Bell node — gain; over a cut — slope 12/18/24/30/36/48 dB/oct;
+///  - wheel over empty curve — compress/stretch the WHOLE curve;
+///  - Alt+drag — the same curve scaling with the mouse;
+///  - Shift+drag — constrain movement to horizontal or vertical.
+/// Anti-lag: while dragging, the picture is drawn from local state; values reach the
+/// model/engine at most ~30 Hz (final values on release).
 /// </summary>
 public sealed class EqualizerCurve : FrameworkElement
 {
@@ -33,19 +33,19 @@ public sealed class EqualizerCurve : FrameworkElement
     public const double MaxDb = 12;
     public const double MinFreq = 20;
     public const double MaxFreq = 20000;
-    private const double BandQ = 1.41;          // ширина Bell, как в EqualizerSampleProvider
+    private const double BandQ = 1.41;          // Bell width, as in EqualizerSampleProvider
     private const int CurveSteps = 300;
     private const double NodeHitRadius = 12;
-    private const double EnginePushIntervalMs = 30; // троттлинг записи в модель при драге
+    private const double EnginePushIntervalMs = 30; // model-write throttle while dragging
 
-    // Математика кривой считается на 48 кГц: форма фильтров на этих частотах
-    // между 44.1 и 48 кГц визуально не различима.
+    // Curve math is computed at 48 kHz: filter shapes at these frequencies are
+    // visually indistinguishable between 44.1 and 48 kHz.
     private const double ReferenceSampleRate = 48000;
 
     private const double PaddingLeft = 38, PaddingBottom = 22, PaddingTop = 8, PaddingRight = 10;
 
-    // Сетка как в Pro-Q: вертикали на стандартных частотах (подписаны все),
-    // горизонтали каждые 3 дБ (подписаны все).
+    // Pro-Q style grid: verticals at standard frequencies (all labeled),
+    // horizontals every 3 dB (all labeled).
     private static readonly double[] GridFreqs = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
     private static readonly double[] GridDb = { -12, -9, -6, -3, 0, 3, 6, 9, 12 };
 
@@ -59,29 +59,29 @@ public sealed class EqualizerCurve : FrameworkElement
         set => SetValue(BandsProperty, value);
     }
 
-    /// <summary>Двойной клик по пустому месту графика: добавить полосу.</summary>
+    /// <summary>Double-click on empty curve space: add a band.</summary>
     public event EventHandler<(double Freq, double Gain)>? AddNodeRequested;
-    /// <summary>Двойной клик по узлу: удалить полосу (индекс в Bands).</summary>
+    /// <summary>Double-click on a node: remove the band (index into Bands).</summary>
     public event EventHandler<int>? RemoveNodeRequested;
 
     private int _hoverIndex = -1;
     private int _dragIndex = -1;
-    private bool _altScale;          // Alt: масштаб всей кривой
-    private int _lockAxis;           // Shift: 0 = свободно, 1 = горизонталь, 2 = вертикаль
+    private bool _altScale;          // Alt: scale the whole curve
+    private int _lockAxis;           // Shift: 0 = free, 1 = horizontal, 2 = vertical
     private double _dragStartY;
     private Point _dragStartPoint;
     private double[] _scaleStartGains = Array.Empty<double>();
     private double _scaleFactor = 1;
-    private int _lastCreatedIndex = -1;      // узел, созданный одиночным кликом
-    private long _lastCreatedTicks;          // guard: двойной клик по нему не удаляет
+    private int _lastCreatedIndex = -1;      // node created by a single click
+    private long _lastCreatedTicks;          // guard: a double-click on it doesn't remove it
 
-    // Локальное состояние перетаскиваемого узла: рисуем из него КАЖДЫЙ кадр,
-    // в модель/движок пишем троттлингом (источник лагов — синхронная запись
-    // в модель и пересчёт фильтров на каждое событие мыши).
+    // Local state of the dragged node: drawn from it EVERY frame; the model/engine is
+    // written throttled (the lag source was the synchronous model write and filter
+    // recompute on every mouse event).
     private double _dragFreq, _dragGain;
     private readonly Stopwatch _pushThrottle = new();
 
-    // Кэш статических подписей сетки.
+    // Cache of static grid labels.
     private double _labelCacheWidth = -1, _labelCacheHeight = -1, _labelCacheDpi = -1;
     private List<(FormattedText Text, Point Pos)>? _labelCache;
 
@@ -92,9 +92,9 @@ public sealed class EqualizerCurve : FrameworkElement
     }
 
     /// <summary>
-    /// FrameworkElement без фона невидим для hit-теста WPF: колесо, клики и
-    /// наведение по пустым областям графика не доходили до контрола. Возвращаем
-    /// себя для любой точки — весь график единая интерактивная поверхность.
+    /// A FrameworkElement without a background is invisible to WPF hit-testing: wheel,
+    /// clicks and hover over empty curve areas never reached the control. Return ourselves
+    /// for any point — the whole plot is one interactive surface.
     /// </summary>
     protected override HitTestResult? HitTestCore(PointHitTestParameters parameters)
         => new PointHitTestResult(this, parameters.HitPoint);
@@ -106,9 +106,9 @@ public sealed class EqualizerCurve : FrameworkElement
         c.InvalidateVisual();
     }
 
-    // Наблюдение за коллекцией полос: пресеты/сброс меняют сам набор (Clear/Add),
-    // без подписки на CollectionChanged контрол не узнаёт об этом и график
-    // «замерзает» с пустой кривой.
+    // Band collection observation: presets/reset change the set itself (Clear/Add);
+    // without a CollectionChanged subscription the control never learns of it and the
+    // curve "freezes" empty.
     private INotifyCollectionChanged? _observedCollection;
     private readonly HashSet<INotifyPropertyChanged> _observedBands = new();
 
@@ -132,7 +132,7 @@ public sealed class EqualizerCurve : FrameworkElement
 
     private void OnBandsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Любое структурное изменение — пересканируем подписки и перерисуем.
+        // Any structural change — rescan subscriptions and redraw.
         _observedBands.Clear();
         HookAll(Bands);
         InvalidateVisual();
@@ -148,7 +148,7 @@ public sealed class EqualizerCurve : FrameworkElement
 
     private void OnBandChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
 
-    // ===== Координаты =====
+    // ===== Coordinates =====
 
     private Rect PlotRect
     {
@@ -172,7 +172,7 @@ public sealed class EqualizerCurve : FrameworkElement
     private static double YToGain(double y, Rect r)
         => Math.Clamp(MaxDb - (y - r.Y) / r.Height * (MaxDb - MinDb), MinDb, MaxDb);
 
-    /// <summary>Позиция узла: срезы живут на линии 0 дБ (у них нет усиления).</summary>
+    /// <summary>Node position: cuts live on the 0 dB line (they have no gain).</summary>
     private double NodeGain(EqualizerBand b) => b.Type == EqualizerBandType.Bell ? b.Gain : 0;
 
     private int HitTest(Point p)
@@ -188,7 +188,7 @@ public sealed class EqualizerCurve : FrameworkElement
         return -1;
     }
 
-    // ===== Отрисовка =====
+    // ===== Rendering =====
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -196,7 +196,7 @@ public sealed class EqualizerCurve : FrameworkElement
         dc.DrawRectangle(bg, null, new Rect(0, 0, ActualWidth, ActualHeight));
 
         var r = PlotRect;
-        // Заметная сетка: полупрозрачные белые линии на тёмной теме.
+        // Visible grid: semi-transparent white lines on the dark theme.
         var zeroPen = new Pen(new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)), 1);
         var faintPen = new Pen(new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)), 0.7);
         zeroPen.Freeze();
@@ -210,7 +210,7 @@ public sealed class EqualizerCurve : FrameworkElement
         foreach (var (text, pos) in _labelCache!)
             dc.DrawText(text, pos);
 
-        // Линии сетки: вертикали по частотам, горизонтали по дБ, ноль — ярче.
+        // Grid lines: verticals by frequency, horizontals by dB, zero is brighter.
         foreach (var f in GridFreqs)
         {
             var x = FreqToX(f, r);
@@ -224,7 +224,7 @@ public sealed class EqualizerCurve : FrameworkElement
         }
         dc.DrawLine(zeroPen, new Point(r.Left, GainToY(0, r)), new Point(r.Right, GainToY(0, r)));
 
-        // Суммарная АЧХ: сумма полос в дБ (стандарт для визуализации EQ).
+        // Summed frequency response: bands summed in dB (the standard for EQ visualization).
         var points = new Point[CurveSteps + 1];
         for (int i = 0; i <= CurveSteps; i++)
         {
@@ -237,7 +237,7 @@ public sealed class EqualizerCurve : FrameworkElement
             points[i] = new Point(FreqToX(freq, r), GainToY(db, r));
         }
 
-        // Полупрозрачная заливка между кривой и нулевой линией (как в Pro-Q).
+        // Semi-transparent fill between the curve and the zero line (as in Pro-Q).
         var fillGeo = new StreamGeometry();
         using (var ctx = fillGeo.Open())
         {
@@ -265,7 +265,7 @@ public sealed class EqualizerCurve : FrameworkElement
         curvePen.Freeze();
         dc.DrawGeometry(null, curvePen, geo);
 
-        // Узлы + тонкие линии к нулю. Bell — нумерованный круг, срезы — треугольники.
+        // Nodes + thin lines to zero. Bell is a numbered circle, cuts are triangles.
         for (int i = 0; i < (Bands?.Count ?? 0); i++)
         {
             if (Bands![i] is not EqualizerBand b) continue;
@@ -276,11 +276,11 @@ public sealed class EqualizerCurve : FrameworkElement
             switch (b.Type)
             {
                 case EqualizerBandType.LowCut:
-                    // НЧ-срез: режет всё левее узла — треугольник вправо.
+                    // Low cut: cuts everything left of the node — triangle points right.
                     dc.DrawGeometry(accent, NodePen(nodeStroke, active), Triangle(c, +1));
                     break;
                 case EqualizerBandType.HighCut:
-                    // ВЧ-срез: режет всё правее узла — треугольник влево.
+                    // High cut: cuts everything right of the node — triangle points left.
                     dc.DrawGeometry(accent, NodePen(nodeStroke, active), Triangle(c, -1));
                     break;
                 default:
@@ -293,7 +293,7 @@ public sealed class EqualizerCurve : FrameworkElement
                 }
             }
 
-            // Соло «слушать гармонику» — пунктирное кольцо вокруг узла.
+            // "Listen to harmonic" solo — dashed ring around the node.
             if (b.IsSolo)
             {
                 var soloPen = new Pen(Brushes.White, 1.6) { DashStyle = DashStyles.Dash };
@@ -302,7 +302,7 @@ public sealed class EqualizerCurve : FrameworkElement
             }
         }
 
-        // Подсказка над захваченным/наведённым узлом.
+        // Tooltip above the dragged/hovered node.
         var hi = _dragIndex >= 0 ? _dragIndex : _hoverIndex;
         if (hi >= 0 && hi < (Bands?.Count ?? 0) && Bands![hi] is EqualizerBand hb)
         {
@@ -342,7 +342,7 @@ public sealed class EqualizerCurve : FrameworkElement
         return geo;
     }
 
-    // Во время драга узел рисуется из локальных значений (анти-лаг).
+    // While dragging, the node is drawn from local values (anti-lag).
     private double EffectiveFreq(EqualizerBand b) => ReferenceEquals(b, DraggedBand) && _dragIndex >= 0 ? _dragFreq : b.Frequency;
     private double EffectiveGain(EqualizerBand b) => ReferenceEquals(b, DraggedBand) && _dragIndex >= 0 ? _dragGain : NodeGain(b);
     private int EffectiveSlope(EqualizerBand b) => b.SlopeDbOct;
@@ -377,7 +377,7 @@ public sealed class EqualizerCurve : FrameworkElement
         }
     }
 
-    /// <summary>Магнитуда фильтра полосы в дБ на частоте freq.</summary>
+    /// <summary>Band filter magnitude in dB at frequency freq.</summary>
     private static double BandResponseDb(double freq, double centerHz, double gainDb,
         EqualizerBandType type, int slopeDbOct, double q)
     {
@@ -386,9 +386,9 @@ public sealed class EqualizerCurve : FrameworkElement
             case EqualizerBandType.LowCut:
             case EqualizerBandType.HighCut:
             {
-                // Каскад N/12 одинаковых биквадов: в дБ ответ умножается на N.
-                // Хвост 6 дБ/окт (крутизна 18/30) — секция первого порядка.
-                // LowCut — это ФВЧ (убирает низы), HighCut — ФНЧ: не перепутать.
+                // Cascade of N/12 identical biquads: in dB the response multiplies by N.
+                // A 6 dB/oct tail (slopes 18/30) — a first-order section.
+                // LowCut is an HPF (removes lows), HighCut is an LPF: don't mix them up.
                 var stages = Math.Max(1, slopeDbOct / 12);
                 var kind = type == EqualizerBandType.HighCut ? BiquadKind.LowPass : BiquadKind.HighPass;
                 var db = stages * BiquadMagnitudeDb(freq, centerHz, kind, 0);
@@ -406,8 +406,8 @@ public sealed class EqualizerCurve : FrameworkElement
 
     private enum BiquadKind { Peaking, LowPass, HighPass }
 
-    /// <summary>Ответ секции первого порядка (6 дБ/окт), которой аудиодвижок добирает
-    /// дробную крутизну 18/30: аналоговый ФНЧ/ФВЧ — минус/плюс 3 дБ на частоте среза.</summary>
+    /// <summary>Response of the first-order section (6 dB/oct) the audio engine uses to reach
+    /// fractional slopes 18/30: analog LPF/HPF — minus/plus 3 dB at the cutoff frequency.</summary>
     private static double FirstOrderMagnitudeDb(double freq, double centerHz, bool highPass)
     {
         var x = freq / centerHz;
@@ -416,7 +416,7 @@ public sealed class EqualizerCurve : FrameworkElement
             : -5 * Math.Log10(1 + x * x);
     }
 
-    /// <summary>Ответ одного биквада: peaking (с усилением и Q) либо Butterworth HP/LP.</summary>
+    /// <summary>Response of one biquad: peaking (with gain and Q) or Butterworth HP/LP.</summary>
     private static double BiquadMagnitudeDb(double freq, double centerHz, BiquadKind kind, double gainDb, double q = 1.41)
     {
         var w0 = 2 * Math.PI * centerHz / ReferenceSampleRate;
@@ -426,7 +426,7 @@ public sealed class EqualizerCurve : FrameworkElement
         {
             case BiquadKind.HighPass:
             {
-                // RBJ high-pass, Butterworth Q = 0.7071 (тот же, что в Audio HighPassFilter).
+                // RBJ high-pass, Butterworth Q = 0.7071 (same as the audio HighPassFilter).
                 var alpha = Math.Sin(w0) / (2 * 0.7071);
                 var cosw0 = Math.Cos(w0);
                 b0 = (1 + cosw0) / 2; b1 = -(1 + cosw0); b2 = (1 + cosw0) / 2;
@@ -462,7 +462,7 @@ public sealed class EqualizerCurve : FrameworkElement
 
     private FormattedText Fmt(string text, double size, Brush brush, DpiScale dpi)
     {
-        // FrameworkElement не имеет FontFamily — берём шрифт приложения из ресурсов.
+        // FrameworkElement has no FontFamily — take the app font from resources.
         var family = TryFindResource("AppFont") as FontFamily ?? SystemFonts.MessageFontFamily;
         return new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             new Typeface(family, FontStyles.Normal, FontWeights.Medium, FontStretches.Normal),
@@ -472,7 +472,7 @@ public sealed class EqualizerCurve : FrameworkElement
     private static string FreqLabel(double f)
         => f >= 1000 ? $"{f / 1000:0.#} kHz" : $"{f:0} Hz";
 
-    // ===== Взаимодействие =====
+    // ===== Interaction =====
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
@@ -483,8 +483,8 @@ public sealed class EqualizerCurve : FrameworkElement
         {
             if (_altScale)
             {
-                // Alt: масштаб ВСЕЙ кривой — усиления Bell-полос умножаются на
-                // фактор от вертикального сдвига мыши (сжать/растянуть, как в Pro-Q).
+                // Alt: scale the WHOLE curve — Bell band gains are multiplied by a factor
+                // from the vertical mouse shift (compress/stretch, as in Pro-Q).
                 var shiftDb = YToGain(p.Y, r) - YToGain(_dragStartY, r);
                 _scaleFactor = Math.Pow(10, shiftDb / 20);
                 PushModelThrottled();
@@ -495,16 +495,16 @@ public sealed class EqualizerCurve : FrameworkElement
             var newFreq = XToFreq(p.X, r);
             var newGain = YToGain(p.Y, r);
 
-            // Shift: зафиксировать ось по первому заметному сдвигу.
+            // Shift: lock the axis on the first noticeable shift.
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _lockAxis == 0)
                 _lockAxis = Math.Abs(p.X - _dragStartPoint.X) >= Math.Abs(p.Y - _dragStartPoint.Y) ? 1 : 2;
             else if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
                 _lockAxis = 0;
 
-            if (_lockAxis == 1) newGain = _dragGain;          // только частота
-            else if (_lockAxis == 2) newFreq = _dragFreq;     // только усиление
+            if (_lockAxis == 1) newGain = _dragGain;          // frequency only
+            else if (_lockAxis == 2) newFreq = _dragFreq;     // gain only
 
-            // У срезов усиления нет: узел живёт на линии 0 дБ.
+            // Cuts have no gain: the node lives on the 0 dB line.
             _dragFreq = newFreq;
             _dragGain = DraggedBand is { Type: not EqualizerBandType.Bell } ? 0 : newGain;
             PushModelThrottled();
@@ -521,9 +521,7 @@ public sealed class EqualizerCurve : FrameworkElement
         }
     }
 
-    // У срезов усиления нет: узел живёт на линии 0 дБ.
-
-    /// <summary>Записать локальное состояние драга в модель/движок не чаще ~30 Гц.</summary>
+    /// <summary>Push the local drag state to the model/engine at most ~30 Hz.</summary>
     private void PushModelThrottled()
     {
         if (_pushThrottle.IsRunning && _pushThrottle.ElapsedMilliseconds < EnginePushIntervalMs) return;
@@ -564,7 +562,7 @@ public sealed class EqualizerCurve : FrameworkElement
         var p = e.GetPosition(this);
         var hit = HitTest(p);
 
-        // Двойной клик по существующему узлу — удалить (кроме только что созданного).
+        // Double-click on an existing node — remove it (except one just created).
         if (e.ClickCount == 2 && hit >= 0)
         {
             var justCreated = hit == _lastCreatedIndex && Environment.TickCount64 - _lastCreatedTicks < 500;
@@ -576,15 +574,15 @@ public sealed class EqualizerCurve : FrameworkElement
 
         if (hit < 0)
         {
-            // Механика Pro-Q: одиночный клик по пустому графику ставит узел в точке
-            // клика и сразу начинает его перетаскивать (тем же жестом).
+            // Pro-Q mechanics: a single click on empty curve space places a node at the
+            // click point and immediately starts dragging it (same gesture).
             var countBefore = Bands?.Count ?? 0;
             AddNodeRequested?.Invoke(this, (Math.Round(XToFreq(p.X, PlotRect), 1), Math.Round(YToGain(p.Y, PlotRect), 1)));
             var countAfter = Bands?.Count ?? 0;
             hit = countAfter - 1;
             if (countAfter <= countBefore || hit < 0)
             {
-                // Ничего не добавилось (лимит полос).
+                // Nothing was added (band limit).
                 e.Handled = true;
                 return;
             }
@@ -628,7 +626,7 @@ public sealed class EqualizerCurve : FrameworkElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         if (_dragIndex < 0) return;
-        CommitDragToModel(); // финальные значения точно попадают в модель/движок
+        CommitDragToModel(); // final values reliably reach the model/engine
         _dragIndex = -1;
         _altScale = false;
         _lockAxis = 0;
@@ -637,10 +635,9 @@ public sealed class EqualizerCurve : FrameworkElement
     }
 
     /// <summary>
-    /// Колесо при редактировании — обрабатывается в ПРЕДВАРИТЕЛЬНОЙ фазе, чтобы
-    /// гарантированно не скроллить страницу под графиком:
-    /// над Bell-узлом — усиление; Ctrl+колесо — ширина (Q); над срезом — крутизна
-    /// 12/18/24/30/36/48 дБ/окт; над пустым графиком — сжать/растянуть всю кривую.
+    /// The wheel is handled in the PREVIEW phase to guarantee the page under the curve
+    /// never scrolls: over a Bell node — gain; Ctrl+wheel — width (Q); over a cut —
+    /// slope 12/18/24/30/36/48 dB/oct; over empty curve — compress/stretch the whole curve.
     /// </summary>
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {
@@ -652,8 +649,7 @@ public sealed class EqualizerCurve : FrameworkElement
         {
             if (b.Type == EqualizerBandType.Bell)
             {
-                // Как в Pro-Q: колесо над точкой — ширина подъёма (Q),
-                // Ctrl+колесо — усиление.
+                // As in Pro-Q: wheel over a node — bump width (Q), Ctrl+wheel — gain.
                 if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                     b.Gain = Math.Clamp(b.Gain + notch * 0.5, MinDb, MaxDb);
                 else
@@ -664,7 +660,7 @@ public sealed class EqualizerCurve : FrameworkElement
             return;
         }
 
-        // Масштаб всей кривой: усиления Bell-полос умножаются на фактор.
+        // Scale the whole curve: Bell band gains are multiplied by the factor.
         var factor = Math.Pow(10, notch * 0.5 / 20);
         if (Bands == null) return;
         foreach (var item in Bands)
@@ -672,12 +668,12 @@ public sealed class EqualizerCurve : FrameworkElement
                 band.Gain = Math.Clamp(Math.Round(band.Gain * factor, 1), MinDb, MaxDb);
     }
 
-    // Шаг 6 дБ/окт: 12/18/24/30/36/48. Дробные двенадцатки (18/30) в аудиодвижке
-    // собираются как каскад биквадов + секция первого порядка (см. BuildBand).
+    // 6 dB/oct steps: 12/18/24/30/36/48. Fractional twelves (18/30) are assembled in the
+    // audio engine as a biquad cascade + first-order section (see BuildBand).
     private static void CycleSlope(EqualizerBand b)
         => b.SlopeDbOct = b.SlopeDbOct switch { 12 => 18, 18 => 24, 24 => 30, 30 => 36, 36 => 48, _ => 12 };
 
-    /// <summary>ПКМ по узлу — меню: тип полосы, соло «слушать гармонику», удаление.</summary>
+    /// <summary>Right-click on a node — menu: band type, "listen to harmonic" solo, delete.</summary>
     protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)
     {
         var hit = HitTest(e.GetPosition(this));

@@ -10,9 +10,11 @@ using System.Threading.Tasks;
 using BatPlayer.Database;
 using BatPlayer.Services;
 
+using BatPlayer.Localization;
+
 namespace BatPlayer.Services.SoundCloud;
 
-/// <summary>Ошибка API SoundCloud после всех повторов (401/403 с новым client_id, 5xx и т.п.).</summary>
+/// <summary>SoundCloud API error after all retries (401/403 with a fresh client_id, 5xx, etc.).</summary>
 public sealed class SoundCloudApiException : Exception
 {
     public int StatusCode { get; }
@@ -22,45 +24,45 @@ public sealed class SoundCloudApiException : Exception
 }
 
 /// <summary>
-/// Клиент неофициального web-API SoundCloud (api-v2.soundcloud.com).
-/// Авторизация — cookies веб-сессии (sc_auth.json), полученные через окно входа (WebView2).
-/// Скачивание аудио НЕ реализовано: только метаданные, стриминг (прямая mp3-ссылка) и матчинг.
-/// Сеть — общий статический слой SoundCloudHttp: direct с фолбэком на прокси (см. его доку).
-/// Cookies/client_id в логи не попадают — в исключения и лог пишутся только коды ответов и URL без токенов.
+/// Client for the unofficial SoundCloud web API (api-v2.soundcloud.com).
+/// Auth via web-session cookies (sc_auth.json) obtained through the login window (WebView2).
+/// Audio download is not implemented here: metadata, streaming (direct mp3 link) and matching only.
+/// Network via the shared static SoundCloudHttp layer: direct with proxy fallback (see its doc).
+/// Cookies/client_id are never logged — only response codes and token-free URLs reach logs/exceptions.
 /// </summary>
 public sealed class SoundCloudService
 {
     public const string AuthFileName = "sc_auth.json";
     private const string ApiBase = "https://api-v2.soundcloud.com";
-    // mime AAC-транскодингов — "audio/mp4; codecs=\"mp4a.40.2\"": сравниваем по префиксу.
+    // AAC transcoding mime is "audio/mp4; codecs=\"mp4a.40.2\"": compare by prefix.
     private const string AacMimeType = "audio/mp4";
     private const int PageSize = 200;
-    // Защита от зацикливания пейджинга при сбойном next_href (~50 страниц × 200 = 10k лайков).
+    // Paging loop guard against a broken next_href (~50 pages × 200 = 10k likes).
     private const int MaxLikePages = 50;
 
-    // Без UA SoundCloud отдаёт упрощённую страницу/403 для html-запросов.
-    // internal: проставляется фабрикой SoundCloudHttp на общих HttpClient.
+    // Without a UA SoundCloud serves a simplified page/403 for html requests.
+    // internal: set by the SoundCloudHttp factory on the shared HttpClients.
     internal const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
     private static readonly JsonSerializerOptions JsonOpts = new();
 
-    // Параллелизм батч-закачки обложек (см. SyncArtworksAsync).
+    // Artwork batch download parallelism (see SyncArtworksAsync).
     private const int ArtworkDownloadParallelism = 4;
 
     private readonly SoundCloudAuthStore _auth;
     private readonly SoundCloudClientIdProvider _clientIds;
     private readonly SoundCloudArtworkCache _artworks = new();
 
-    /// <summary>Скачивания обложек «по требованию»: дедупликация параллельных запросов
-    /// одного трека (лоадер видимых карточек и батч-синк), без накопления завершённых задач.</summary>
+    /// <summary>On-demand artwork downloads: deduplicates parallel requests for one track
+    /// (visible-card loader and batch sync); completed tasks are not retained.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<string?>> _artworkDownloads = new();
 
-    /// <summary>Путь кэш-файла обложки трека (карточки биндят именно его).</summary>
+    /// <summary>Artwork cache file path for a track (cards bind to exactly this).</summary>
     public string GetArtworkCachePath(string scId) => _artworks.GetCacheFilePath(scId);
 
-    /// <summary>Обложка в кэше по требованию (видимая карточка): скачать, если файла ещё нет.
-    /// Параллельные запросы одного scId ждут одно скачивание. Путь или null (ошибка/нет URL).</summary>
+    /// <summary>On-demand artwork cache path (visible card): download if the file is missing.
+    /// Parallel requests for one scId share a single download. Path or null (error/no URL).</summary>
     public Task<string?> EnsureArtworkPathAsync(string scId, string? artworkUrl, CancellationToken ct)
         => _artworkDownloads.GetOrAdd(scId, _ => Task.Run(() => DownloadArtworkAsyncCore(scId, artworkUrl)));
 
@@ -68,45 +70,42 @@ public sealed class SoundCloudService
     {
         try
         {
-            // Без внешнего ct: общий таск для нескольких просящих, отмена внешнего
-            // звонящего не должна портить результат остальным.
+            // No external ct: the task is shared by several requesters; cancelling one
+            // caller must not spoil the result for the others.
             return await _artworks.EnsureDownloadedAsync(scId, artworkUrl, CancellationToken.None);
         }
         finally
         {
-            // Завершённые (в т.ч. упавшие) задачи не храним: следующий запрос либо
-            // найдёт файл в кэше, либо честно попробует скачать заново.
+            // Completed (incl. failed) tasks are not kept: the next request either finds
+            // the file in cache or honestly retries the download.
             _artworkDownloads.TryRemove(scId, out _);
         }
     }
 
-    /// <summary>Прогресс синхронизации лайков: (обработано, всего-оценка).</summary>
+    /// <summary>Likes sync progress: (done, total estimate).</summary>
     public event EventHandler<(int done, int total)>? SyncProgress;
 
-    /// <summary>Официальное подключение (pairing-код): когда подключено, стримы трека
-    /// резолвятся ТОЛЬКО через него — миксовать с неофициальным api-v2 не нужно.</summary>
+    /// <summary>Official connection (pairing code): when connected, track streams resolve
+    /// ONLY through it — no need to mix with the unofficial api-v2.</summary>
     private readonly SoundCloudOfficialApi? _officialApi;
 
-    /// <summary>Подключён ли официальный SoundCloud API (OAuth-токен pairing-подключения).</summary>
+    /// <summary>Whether the official SoundCloud API is connected (OAuth token of the pairing connection).</summary>
     public bool OfficialApiConnected => _officialApi?.IsConnected == true;
 
-    /// <summary>Официальный API живой: подключён И не отдал 403 «disallowed» (блокировка
-    /// клиента целиком — тогда от него не будет ни одного стрима, и фолбэки не тормозим).</summary>
-    public bool OfficialApiUsable => OfficialApiConnected && _officialApi?.IsDisallowed != true;
 
-    // ===== Предохранитель веб-сессии =====
-    // api-v2 ответил 401 после рефреша client_id: oauth_token из cookies истёк.
-    // Для обычных треков это невидимо (media-резолв работает анонимно), но
-    // MONETIZE-треки (AD_SUPPORTED) отдают на media-эндпоинты 404 без живой
-    // сессии — без диагностики они выглядят как «DRM/недоступен».
+    // ===== Web-session fuse =====
+    // A 401 from api-v2 after a client_id refresh means the oauth_token cookie expired.
+    // Regular tracks are unaffected (media resolve works anonymously), but MONETIZE
+    // (AD_SUPPORTED) tracks answer 404 from media endpoints without a live session —
+    // without this flag they look like "DRM/unavailable".
     private volatile bool _webSessionExpired;
 
-    /// <summary>Веб-сессия (cookies) истекла: последний /me (или другой авторизованный
-    /// api-v2 запрос) ответил 401. Сбрасывается успешным /me и сохранением новых cookies.</summary>
+    /// <summary>Web session (cookies) expired: the last /me (or other authorized api-v2
+    /// request) answered 401. Cleared by a successful /me and saving new cookies.</summary>
     public bool IsWebSessionExpired => _webSessionExpired;
 
-    /// <summary>Cookies сессии сохранены заново (вход/переподключение аккаунта):
-    /// слушатели сбрасывают кэши, зависящие от сессии (чёрный список провалов резолва).</summary>
+    /// <summary>Session cookies re-saved (login/account reconnect): listeners reset
+    /// session-dependent caches (the resolve-failure blacklist).</summary>
     public event EventHandler? SessionChanged;
 
     private void MarkWebSessionExpired()
@@ -118,9 +117,9 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Жива ли веб-сессия: GET /me. true — жива; false — истекла (401 после рефреша
-    /// client_id); null — неопределённо (сети нет / прочий код) — диагноз не ставим,
-    /// чтобы сетевой сбой не выглядел как «переподключитесь».
+    /// Is the web session alive: GET /me. true — alive; false — expired (401 after a
+    /// client_id refresh); null — undetermined (network down / other code) — no diagnosis,
+    /// so a network failure doesn't read as "please reconnect".
     /// </summary>
     public async Task<bool?> VerifyWebSessionAsync(CancellationToken ct)
     {
@@ -143,7 +142,7 @@ public sealed class SoundCloudService
         catch (OperationCanceledException) { throw; }
         catch
         {
-            return null; // сетевой сбой — не ставим диагноз «сессия истекла»
+            return null; // network failure — no "session expired" diagnosis
         }
     }
 
@@ -153,28 +152,28 @@ public sealed class SoundCloudService
         _officialApi = officialApi;
         _auth = new SoundCloudAuthStore(authFilePath);
 
-        // Единый сетевой слой (direct/прокси/антиблокировка) для нас и SoundCloudClientIdProvider;
-        // на смене настроек — перечитываем SoundCloudProxy и пересоздаём выбор транспорта.
-        SoundCloudHttp.ZapretEnabled = settings?.Current.SoundCloudZapretEnabled ?? true;
+        // Shared network layer (direct/proxy/anti-blocking) for us and SoundCloudClientIdProvider;
+        // on a settings change, re-read SoundCloudProxy and rebuild the transport choice.
+        SoundCloudHttp.DpiBypassEnabled = settings?.Current.DpiBypassEnabled ?? true;
         SoundCloudHttp.ApplyUserSetting(settings?.Current.SoundCloudProxy);
-        // event нельзя комбинировать с ?. (CS0070: чтение события извне объявляющего типа).
+        // events can't be combined with ?. (CS0070: reading an event outside its declaring type).
         if (settings != null)
             settings.SettingsChanged += (_, _) =>
             {
-                SoundCloudHttp.ZapretEnabled = settings.Current.SoundCloudZapretEnabled;
+                SoundCloudHttp.DpiBypassEnabled = settings.Current.DpiBypassEnabled;
                 SoundCloudHttp.ApplyUserSetting(settings.Current.SoundCloudProxy);
             };
 
         _clientIds = new SoundCloudClientIdProvider(_auth);
     }
 
-    /// <summary>Есть ли файл веб-сессии (не проверяет её валидность).</summary>
+    /// <summary>Whether the web-session file exists (validity not checked).</summary>
     public bool HasAuthFile => _auth.Exists;
 
-    // ============================ Сессия ============================
+    // ============================ Session ============================
 
     /// <summary>
-    /// Проверка сессии: GET /me. 200 → пользователь; иначе null (не подключено / cookies протухли).
+    /// Session check: GET /me. 200 → user; otherwise null (not connected / stale cookies).
     /// </summary>
     public async Task<ScMeResponse?> GetMeAsync(CancellationToken ct)
     {
@@ -192,14 +191,14 @@ public sealed class SoundCloudService
         }
     }
 
-    // ========================= Синхронизация ========================
+    // ========================= Sync ========================
 
     /// <summary>
-    /// Синхронизация лайков: GET /users/{userId}/likes (limit=200), пагинация по next_href —
-    /// это полный URL с курсором по времени лайка (НЕ offset-число), следуем до его отсутствия.
-    /// Элементы collection[].playlist пропускаются (в DTO они приходят с Track == null).
-    /// UserId берётся из кэша sc_auth.json или резолвится через /me (см. GetUserIdAsync).
-    /// Возвращает число сохранённых треков. Бросает SoundCloudApiException — VM показывает ошибку.
+    /// Likes sync: GET /users/{userId}/likes (limit=200), paginating via next_href — a full
+    /// URL with a like-time cursor (NOT an offset number), followed until absent.
+    /// collection[].playlist items are skipped (Track == null in the DTO).
+    /// UserId comes from the sc_auth.json cache or is resolved via /me (see GetUserIdAsync).
+    /// Returns the number of saved tracks. Throws SoundCloudApiException — the VM shows the error.
     /// </summary>
     public async Task<int> SyncLikesAsync(SoundCloudLikesRepository repository, CancellationToken ct)
     {
@@ -207,7 +206,7 @@ public sealed class SoundCloudService
         var syncedAt = DateTime.UtcNow.ToString("o");
         int done = 0;
 
-        // Первый запрос — по id пользователя; дальше следуем next_href из ответа.
+        // First request by user id; then follow next_href from the response.
         string? nextUrl = $"{ApiBase}/users/{Uri.EscapeDataString(userId)}/likes?limit={PageSize}";
         for (int page = 0; page < MaxLikePages && nextUrl != null; page++)
         {
@@ -223,12 +222,12 @@ public sealed class SoundCloudService
                 await repository.UpsertBatchAsync(rows);
 
             done += rows.Count;
-            // total неизвестен до конца пейджинга: оценка done + страница, если есть продолжение.
+            // total is unknown until paging ends: estimate done + one page if continuing.
             SyncProgress?.Invoke(this, (done, done + (response.NextHref != null ? PageSize : 0)));
 
-            // client_id в next_href уже есть; AppendClientId идемпотентен.
+            // next_href already carries client_id; AppendClientId is idempotent.
             nextUrl = string.IsNullOrEmpty(response.NextHref) ? null : response.NextHref;
-            if (response.Collection.Count == 0) break; // страховка от сбойного ответа без элементов
+            if (response.Collection.Count == 0) break; // guard against a broken empty response
         }
 
         if (nextUrl != null)
@@ -236,20 +235,20 @@ public sealed class SoundCloudService
 
         SetLastSyncedUtc(DateTime.UtcNow);
 
-        // Обложки — отдельный батч ПОСЛЕ основного апсерта лайков: сами лайки уже сохранены,
-        // сбой обложек завершённый синк не роняет. Paths пишутся в artwork_local_path,
-        // карточки биндят локальный файл (i1.sndcdn.com напрямую недоступен).
+        // Artwork is a separate batch AFTER the main like upsert: likes are already saved,
+        // so an artwork failure doesn't kill the finished sync. Paths go to artwork_local_path;
+        // cards bind the local file (i1.sndcdn.com is unreachable directly).
         await SyncArtworksAsync(repository, ct);
 
         return done;
     }
 
     /// <summary>
-    /// Пакетная закачка обложек всех лайков в artworks_cache/{scId}.jpg (см. SoundCloudArtworkCache):
-    /// до <see cref="ArtworkDownloadParallelism"/> параллельных скачиваний, пропуск уже скачанных
-    /// и лайков без artwork_url. Ошибки одного файла — лог + пропуск. Результаты в БД
-    /// (artwork_local_path) пишутся последовательно — у репозитория одно SqliteConnection.
-    /// Покрывает и бэкфилл: лайки старых синков без локальной обложки докачиваются.
+    /// Batch-downloads artwork for all likes into artworks_cache/{scId}.jpg (see SoundCloudArtworkCache):
+    /// up to <see cref="ArtworkDownloadParallelism"/> parallel downloads, skipping already-downloaded
+    /// items and likes without artwork_url. Per-file errors: logged and skipped. Results go to
+    /// the DB (artwork_local_path) sequentially — the repository has a single SqliteConnection.
+    /// Also backfills: likes from older syncs without a local artwork are downloaded.
     /// </summary>
     private async Task SyncArtworksAsync(SoundCloudLikesRepository repository, CancellationToken ct)
     {
@@ -266,9 +265,8 @@ public sealed class SoundCloudService
                 await gate.WaitAsync(ct);
                 try
                 {
-                    // Через общий дедуп: карточка, видимая сейчас, могла уже начать
-                    // скачивание этой же обложки — параллельные записи в один .part
-                    // не допускаем.
+                    // Via the shared dedup: a currently visible card may have already started
+                    // downloading the same artwork — parallel writes to one .part are not allowed.
                     var path = await EnsureArtworkPathAsync(row.ScId, row.ArtworkUrl, ct);
                     return (row.ScId, Path: path, Existing: row.ArtworkLocalPath);
                 }
@@ -290,14 +288,14 @@ public sealed class SoundCloudService
         }
         catch (Exception ex)
         {
-            // Обложки — вспомогательная часть синка: сетевой сбой не должен бить по лайкам.
+            // Artwork is auxiliary to the sync: a network failure must not hurt the likes.
             Logger.Error(ex, "SoundCloud artwork batch download failed");
         }
     }
 
     /// <summary>
-    /// UserId подключённого пользователя: из кэша sc_auth.json (поле UserId); если пусто —
-    /// GET /me, id сохраняется в auth-файл для следующих синхронизаций.
+    /// UserId of the connected user: from the sc_auth.json cache (UserId field); if empty —
+    /// GET /me, and the id is saved to the auth file for future syncs.
     /// </summary>
     private async Task<string> GetUserIdAsync(CancellationToken ct)
     {
@@ -314,7 +312,7 @@ public sealed class SoundCloudService
         return file.UserId;
     }
 
-    /// <summary>Дата последней успешной синхронизации (из sc_auth.json), null — ещё не синхронизировали.</summary>
+    /// <summary>Last successful sync date (from sc_auth.json), null — never synced.</summary>
     public DateTime? GetLastSyncedUtc()
     {
         var raw = _auth.Load().LastSyncedAtUtc;
@@ -329,10 +327,10 @@ public sealed class SoundCloudService
         _auth.Save(file);
     }
 
-    // ============================ Стрим ==============================
+    // ============================ Stream ==============================
 
     /// <summary>
-    /// Полная информация о треке по id (нужно для карточек, загруженных из БД без transcodings).
+    /// Full track info by id (needed for cards loaded from the DB without transcodings).
     /// </summary>
     public async Task<ScTrack?> GetTrackAsync(string scId, CancellationToken ct)
     {
@@ -342,9 +340,9 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Похожие треки SoundCloud (GET /tracks/{id}/related) — «сцена» трека по графу
-    /// SoundCloud, пул E «Моей волны». null — сеть/ошибка/не-200 (рефреш client_id
-    /// при 401/403 внутри SendApiAsync). Сетевой сбой не роняет генерацию волны.
+    /// SoundCloud related tracks (GET /tracks/{id}/related) — the track's "scene" per the
+    /// SoundCloud graph, pool E of My Wave. null — network/error/non-200 (client_id refresh
+    /// on 401/403 happens inside SendApiAsync). A network failure doesn't break wave generation.
     /// </summary>
     public async Task<List<ScTrack>?> GetRelatedTracksAsync(string scId, int limit, CancellationToken ct)
     {
@@ -369,9 +367,9 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Разрешает прямую mp3-ссылку для стриминга: progressive transcoding →
+    /// Resolves a direct mp3 link for streaming: progressive transcoding →
     /// GET {transcoding.url}?client_id=... → JSON {"url": "..."}.
-    /// null — progressive нет или CDN ответил не-200: используйте DownloadHlsMp3Async.
+    /// null — no progressive or the CDN answered non-200: use DownloadHlsMp3Async.
     /// </summary>
     public async Task<string?> GetPlayableStreamAsync(ScTrack track, CancellationToken ct)
     {
@@ -381,9 +379,9 @@ public sealed class SoundCloudService
         return await ResolveTranscodingAsync(transcodingUrl, ct);
     }
 
-    /// <summary>GET {transcoding.url}?client_id → JSON {"url": "..."}. 401/403/404 — один
-    /// рефреш client_id и повтор (протухший id у media-эндпоинта отдаёт и 401, и 404);
-    /// не-200 → null (лог).</summary>
+    /// <summary>GET {transcoding.url}?client_id → JSON {"url": "..."}. 401/403/404 — one
+    /// client_id refresh and retry (a stale id answers both 401 and 404 at media endpoints);
+    /// non-200 → null (logged).</summary>
     private async Task<string?> ResolveTranscodingAsync(string transcodingUrl, CancellationToken ct)
     {
         var clientId = await _clientIds.GetClientIdAsync(forceRefresh: false, ct);
@@ -391,8 +389,8 @@ public sealed class SoundCloudService
         var (status, json) = await SendWithAuthAsync(url, ct);
         if (status == 401 || status == 403 || status == 404)
         {
-            // client_id мог протухнуть: один раз обновляем и повторяем — но только
-            // если id реально сменился; запрос с тем же id всегда даст тот же ответ.
+            // client_id may have gone stale: refresh once and retry — but only if the id
+            // actually changed; the same id always yields the same answer.
             var fresh = await _clientIds.GetClientIdAsync(forceRefresh: true, ct);
             if (!string.IsNullOrEmpty(fresh) && fresh != clientId)
             {
@@ -418,29 +416,27 @@ public sealed class SoundCloudService
         }
     }
 
-    /// <summary>Официальный SoundCloud API: GET /tracks/{urn}/streams (OAuth-токен
-    /// pairing-подключения, рефреш при 401 — в SoundCloudOfficialApi) → официальный
-    /// AAC HLS-плейлист — работает для ВСЕГО, что доступно аккаунту (вкл. Go+), и не
-    /// зависит от неофициального api-v2 (который периодически отвечает 404 на
-    /// медиа-эндпоинты). Склейка и патч длительности — та же механика, что у
-    /// неофициального AAC-пути.
-    /// expectedDurationMs — длительность трека из метаданных: если официальный стрим
-    /// заметно короче, это 30-секундный сниппет (нет прав на полную версию) — не играем
-    /// отрывок под полными метаданными.
-    /// null — официальное подключение отсутствует / стримов нет / сбой сети.</summary>
+    /// <summary>Official SoundCloud API: GET /tracks/{urn}/streams (OAuth token of the
+    /// pairing connection, refreshed on 401 — in SoundCloudOfficialApi) → official AAC
+    /// HLS playlist — works for EVERYTHING the account can access (incl. Go+) and does not
+    /// depend on the unofficial api-v2 (which periodically 404s media endpoints). Assembly
+    /// and duration patching use the same mechanics as the unofficial AAC path.
+    /// expectedDurationMs — track duration from metadata: if the official stream is much
+    /// shorter, it is a 30-second snippet (no full-version rights) — never play a snippet
+    /// under full metadata.
+    /// null — no official connection / no streams / network failure.</summary>
     public async Task<byte[]?> DownloadOfficialAacAsync(string scId, long expectedDurationMs, CancellationToken ct)
     {
         if (_officialApi == null || string.IsNullOrEmpty(scId)) return null;
-        // API заблокирован для клиента целиком: запрос на каждый трек только тормозит
-        // резолв (то же 403 гарантирован) — сразу к неофициальному каскаду. Раз в
-        // полчаса пробный запрос всё же уходит (ShouldSkipStreamsProbe) — на случай
-        // разблокировки.
+        // The API is blocked for the client entirely: a request per track only slows resolution
+        // (the same 403 is guaranteed) — go straight to the unofficial cascade. Once every
+        // half hour a probe request still goes out (ShouldSkipStreamsProbe), in case of unblocking.
         if (_officialApi.ShouldSkipStreamsProbe) return null;
 
         var urls = await _officialApi.GetStreamUrlsAsync(scId, ct);
         if (urls == null) return null;
 
-        // 1) Официальный AAC (hls_aac_160 — лучший вариант).
+        // 1) Official AAC (hls_aac_160 — best option).
         if (urls.HlsAac160 != null)
         {
             var aac = await DownloadOfficialAacPlaylistAsync(urls.HlsAac160, scId, expectedDurationMs, ct);
@@ -452,7 +448,7 @@ public sealed class SoundCloudService
             Logger.Warn("SoundCloud official AAC failed — falling back to official MP3");
         }
 
-        // 2) MP3-фолбэк: официальный HLS mp3-плейлист, сегменты self-contained mp3.
+        // 2) MP3 fallback: official HLS mp3 playlist, segments are self-contained mp3.
         if (urls.HlsMp3128 == null) return null;
         var (mp3Status, mp3PlaylistBody) = await OfficialGetAsync(urls.HlsMp3128, ct);
         if (mp3Status != 200) return null;
@@ -494,9 +490,9 @@ public sealed class SoundCloudService
         return mp3Output.ToArray();
     }
 
-    /// <summary>Стрим официального API заметно короче метаданных → это preview-сниппет
-    /// (прав на полную версию нет). Играем только полные версии: отрывок под полными
-    /// метаданными карточки пользователь воспринимает как «звук не тот».</summary>
+    /// <summary>An official stream much shorter than the metadata is a preview snippet
+    /// (no full-version rights). Only full versions are played: a snippet under the card's
+    /// full metadata reads as "wrong sound".</summary>
     private static bool IsSnippet(double actualMs, long expectedDurationMs, string scId)
     {
         if (actualMs <= 0 || expectedDurationMs <= 0) return false;
@@ -508,7 +504,7 @@ public sealed class SoundCloudService
 
     private async Task<(int status, string body)> OfficialGetAsync(string url, CancellationToken ct)
     {
-        // Токен на каждый запрос: здесь могли обновить его при 401 на /streams.
+        // Token per request: it may have been refreshed here after a 401 on /streams.
         var token = await _officialApi!.GetAccessTokenAsync(ct);
         if (string.IsNullOrEmpty(token)) return (401, "");
 
@@ -527,9 +523,9 @@ public sealed class SoundCloudService
         }
     }
 
-    /// <summary>Официальный AAC-плейлист: fetch (2 уровня вложенности) + init-сегмент +
-    /// параллельные сегменты + патч длительности fMP4. Сниппет (см. IsSnippet) → null.
-    /// null — сбой на любом шаге.</summary>
+    /// <summary>Official AAC playlist: fetch (2 nesting levels) + init segment +
+    /// parallel segments + fMP4 duration patch. Snippet (see IsSnippet) → null.
+    /// null — failure at any step.</summary>
     private async Task<byte[]?> DownloadOfficialAacPlaylistAsync(
         string aacUrl, string scId, long expectedDurationMs, CancellationToken ct)
     {
@@ -619,15 +615,10 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// HLS-фолбэк: SC перевёл выдачу на HLS — progressive-транскодинг у части треков
-    /// отсутствует или его CDN-резолв отдаёт HTTP 404. Берём hls-вариант с mp3-сегментами
-    /// (mime audio/mpeg), качаем плейлист и склеиваем сегменты в один mp3 (сегменты
-    /// self-contained, склейка валидна). null — HLS нет / скачать не удалось.
-    /// </summary>    /// <summary>
-    /// HLS-фолбэк: SC перевёл выдачу на HLS — progressive-транскодинг у части треков
-    /// отсутствует или его CDN-резолв отдаёт HTTP 404. Берём hls-вариант с mp3-сегментами
-    /// (mime audio/mpeg), качаем плейлист и склеиваем сегменты в один mp3 (сегменты
-    /// self-contained, склейка валидна). null — HLS нет / скачать не удалось.
+    /// HLS fallback: SC moved delivery to HLS — some tracks lack progressive transcoding or
+    /// its CDN resolve returns HTTP 404. Take the hls variant with mp3 segments (mime
+    /// audio/mpeg), fetch the playlist and stitch the segments into one mp3 (segments are
+    /// self-contained, so stitching is valid). null — no HLS / download failed.
     /// </summary>
     public async Task<byte[]?> DownloadHlsMp3Async(ScTrack track, CancellationToken ct)
     {
@@ -647,8 +638,8 @@ public sealed class SoundCloudService
             return null;
         }
 
-        // Сегменты качаем с ограниченным параллелизмом, собираем строго по порядку:
-        // один битый сегмент рушит склейку — отдаём null (трек останется неиграбельным).
+        // Segments download with bounded parallelism and are assembled strictly in order:
+        // one bad segment breaks the stitch — return null (the track stays unplayable).
         var parts = new byte[segments.Count][];
         var gate = new SemaphoreSlim(HlsSegmentParallelism);
         var errors = 0;
@@ -678,12 +669,12 @@ public sealed class SoundCloudService
         return output.ToArray();
     }
 
-    /// <summary>Параллелизм скачивания HLS-сегментов.</summary>
+    /// <summary>HLS segment download parallelism.</summary>
     private const int HlsSegmentParallelism = 4;
 
     /// <summary>
-    /// URL-ы сегментов плейлиста:_media-плейлист отдаёт их сразу; мастер
-    /// (#EXT-X-STREAM-INF) — один уровень вложенности (берём первый вариант).
+    /// Segment URLs of the playlist: the media playlist lists them directly; a master
+    /// (#EXT-X-STREAM-INF) has one nesting level (take the first variant).
     /// </summary>
     private async Task<List<string>> FetchHlsSegmentUrlsAsync(string playlistUrl, CancellationToken ct)
     {
@@ -700,15 +691,15 @@ public sealed class SoundCloudService
             var urls = ParseHlsPlaylist(body, new Uri(playlistUrl));
             if (urls.Count == 0) return urls;
             if (!body.Contains("#EXT-X-STREAM-INF", StringComparison.OrdinalIgnoreCase))
-                return urls; // media-плейлист
+                return urls; // media playlist
 
-            playlistUrl = urls[0]; // мастер-плейлист: спускаемся к media
+            playlistUrl = urls[0]; // master playlist: descend to media
         }
 
         return new List<string>();
     }
 
-    /// <summary>Строки-сегменты m3u8: не-комментарии, относительные резолвятся по базе.</summary>
+    /// <summary>m3u8 segment lines: non-comment lines, relative ones resolved against the base.</summary>
     internal static List<string> ParseHlsPlaylist(string m3u8, Uri baseUri)
     {
         var result = new List<string>();
@@ -722,18 +713,17 @@ public sealed class SoundCloudService
             }
             catch (UriFormatException)
             {
-                // битая строка — пропускаем
+                // broken line — skip
             }
         }
         return result;
     }
 
     /// <summary>
-    /// Скачивание сегмента с ПОВТОРАМИ: DPI-блокировки дропают соединения
-    /// вероятностно (часть запросов проходит), поэтому оборванный/зависший сегмент
-    /// перезапрашивается до N раз — загрузка в итоге доходит целиком, а не умирает
-    /// от одного обрыва. Прогресс между попытками не сохраняется: сегмент мал
-    /// (~100-300 КБ), дешевле перекачать.
+    /// Segment download WITH RETRIES: DPI blocking drops connections probabilistically
+    /// (some requests get through), so a dropped/hung segment is retried up to N times —
+    /// the download eventually completes instead of dying on one drop. No progress is kept
+    /// between attempts: a segment is small (~100-300 KB), refetching is cheaper.
     /// </summary>
     private const int SegmentRetryAttempts = 6;
 
@@ -749,7 +739,7 @@ public sealed class SoundCloudService
                 {
                     if (status != 200 || stream == null)
                     {
-                        // Невалидный ответ (404/403) — повторять бессмысленно: сегмента нет.
+                        // Invalid response (404/403) — retrying is pointless: no segment.
                         return null;
                     }
                     using var ms = new MemoryStream();
@@ -759,7 +749,7 @@ public sealed class SoundCloudService
             }
             catch (Exception ex) when (attempt < SegmentRetryAttempts && !ct.IsCancellationRequested)
             {
-                // Обрыв/зависание тела (stall-таймаут) или сетевой сбой — повтор.
+                // Body drop/hang (stall timeout) or network failure — retry.
                 Logger.Info($"SoundCloud segment retry {attempt}/{SegmentRetryAttempts - 1} ({ex.InnerException?.Message ?? ex.Message})");
                 await Task.Delay(300 * attempt, ct).ConfigureAwait(false);
             }
@@ -769,9 +759,9 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Выбор HLS-транскодинга AAC (mime audio/mp4): предпочитаем quality "sq"
-    /// (AAC 160 kbps — то, что играет веб-плеер SoundCloud), иначе первый попавшийся
-    /// AAC ("lq" — 96 kbps). null — AAC-транскодинга нет (старые ответы API, opus/mp3 only).
+    /// Picks the AAC HLS transcoding (mime audio/mp4): prefers quality "sq"
+    /// (AAC 160 kbps — what the SoundCloud web player plays), otherwise the first AAC
+    /// found ("lq" — 96 kbps). null — no AAC transcoding (old API answers, opus/mp3 only).
     /// </summary>
     internal static string? PickHlsAacUrl(ScTrack track)
     {
@@ -791,10 +781,10 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// AAC-вариант трека — то же качество, что у веб-плеера (HLS audio/mp4, обычно 160 kbps
-    /// против 128 у progressive mp3): качаем init-сегмент и сегменты плейлиста, склеиваем в один
-    /// fMP4 и проставляем общую длительность (см. Fmp4DurationPatcher — без неё Media Foundation
-    /// не знает TotalTime, таймлайн и перемотка не работают). null — AAC нет / скачать не удалось.
+    /// The track's AAC variant — same quality as the web player (HLS audio/mp4, usually
+    /// 160 kbps vs 128 for progressive mp3): download the init segment and playlist segments,
+    /// stitch into one fMP4 and set the total duration (see Fmp4DurationPatcher — without it
+    /// Media Foundation has no TotalTime and the timeline/seeking break). null — no AAC / download failed.
     /// </summary>
     public async Task<byte[]?> DownloadHlsAacAsync(ScTrack track, CancellationToken ct)
     {
@@ -812,7 +802,7 @@ public sealed class SoundCloudService
             return null;
         }
 
-        // Init-сегмент обязателен (ftyp+moov: без него склейка не откроется ни одним ридером).
+        // Init segment is mandatory (ftyp+moov: without it no reader opens the stitch).
         byte[]? initBytes = null;
         if (playlist.InitUrl != null)
         {
@@ -824,8 +814,8 @@ public sealed class SoundCloudService
             }
         }
 
-        // Сегменты качаем с ограниченным параллелизмом, собираем строго по порядку:
-        // один битый сегмент рушит склейку — отдаём null (каскад уйдёт в mp3-варианты).
+        // Segments download with bounded parallelism and are assembled strictly in order:
+        // one bad segment breaks the stitch — return null (the cascade falls back to mp3 variants).
         var parts = new byte[playlist.Segments.Count][];
         var gate = new SemaphoreSlim(HlsSegmentParallelism);
         var errors = 0;
@@ -849,7 +839,7 @@ public sealed class SoundCloudService
             return null;
         }
 
-        // Длительность: сумма EXTINF точнее метаданных; если плейлист её не дал — track.DurationMs.
+        // Duration: the EXTINF sum is more precise than metadata; fall back to track.DurationMs.
         var durationMs = playlist.TotalSeconds > 0
             ? (long)(playlist.TotalSeconds * 1000)
             : track.DurationMs;
@@ -864,8 +854,9 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Тело media-плейлиста HLS: мастер (#EXT-X-STREAM-INF) — один уровень вложенности
-    /// (берём первый вариант), media-плейлист парсим на init-сегмент, сегменты и длительность.
+    /// Fetches the HLS media playlist body: a master (#EXT-X-STREAM-INF) has one nesting
+    /// level (take the first variant); the media playlist is parsed into init segment,
+    /// segments and duration.
     /// </summary>
     private async Task<HlsAacPlaylist?> FetchHlsMediaPlaylistAsync(string playlistUrl, CancellationToken ct)
     {
@@ -890,12 +881,12 @@ public sealed class SoundCloudService
         return null;
     }
 
-    /// <summary>Разобранный media-плейлист AAC HLS.</summary>
+    /// <summary>Parsed AAC HLS media playlist.</summary>
     internal sealed record HlsAacPlaylist(string? InitUrl, List<string> Segments, double TotalSeconds);
 
     /// <summary>
-    /// media-плейлист: EXT-X-MAP:URI — init-сегмент; EXTINF:<dur>, перед строкой-сегментом —
-    /// длительность сегмента (суммируем в TotalSeconds); относительные URL резолвятся по базе.
+    /// Media playlist: EXT-X-MAP:URI is the init segment; EXTINF:&lt;dur&gt; before a segment
+    /// line is its duration (summed into TotalSeconds); relative URLs resolve against the base.
     /// </summary>
     internal static HlsAacPlaylist ParseHlsAacPlaylist(string m3u8, Uri baseUri)
     {
@@ -915,7 +906,7 @@ public sealed class SoundCloudService
                 if (!string.IsNullOrEmpty(value))
                 {
                     try { init = new Uri(baseUri, value).ToString(); }
-                    catch (UriFormatException) { /* битый URI — играем без init (не откроется, отдаст null выше) */ }
+                    catch (UriFormatException) { /* broken URI — play without init (won't open; null returned above) */ }
                 }
             }
             else if (line.StartsWith("#EXTINF:", StringComparison.OrdinalIgnoreCase))
@@ -938,7 +929,7 @@ public sealed class SoundCloudService
                 }
                 catch (UriFormatException)
                 {
-                    // битая строка — пропускаем
+                    // broken line — skip
                 }
                 pendingDuration = null;
             }
@@ -947,7 +938,7 @@ public sealed class SoundCloudService
         return new HlsAacPlaylist(init, segments, totalSeconds);
     }
 
-    /// <summary>Значение в кавычках атрибута тега HLS (#EXT-X-MAP:URI="...").</summary>
+    /// <summary>Quoted value of an HLS tag attribute (#EXT-X-MAP:URI="...").</summary>
     private static string? ExtractQuoted(string line)
     {
         var open = line.IndexOf('"');
@@ -957,8 +948,8 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Выбор HLS-транскодинга: prefers mp3-сегменты (mime audio/mpeg — склейка валидна),
-    /// иначе любой hls (opus-склейку плеер не откроет — вернётся null на сегментах).
+    /// Picks an HLS transcoding: prefers mp3 segments (mime audio/mpeg — stitching is valid),
+    /// otherwise any hls (the player can't open opus stitching — null on segments).
     /// </summary>
     internal static string? PickHlsMp3Url(ScTrack track)
     {
@@ -976,23 +967,23 @@ public sealed class SoundCloudService
         return anyHls;
     }
 
-    // ========================= Авторизация ==========================
+    // ========================= Auth ==========================
 
-    /// <summary>Сохранить cookies веб-сессии (вызывается окном входа после детекта oauth_token).</summary>
+    /// <summary>Saves web-session cookies (called by the login window after detecting oauth_token).</summary>
     public void SaveSessionCookies(string cookieHeader)
     {
         var file = _auth.Load();
         file.Cookies = cookieHeader;
         _auth.Save(file);
-        // Новая сессия: предыдущий диагноз «истекла» больше не действует, а кэши
-        // (чёрный список провалов резолва) должны пересчитаться — сигнал слушателям.
+        // New session: the previous "expired" diagnosis no longer holds, and session-dependent
+        // caches (the resolve-failure blacklist) must be recomputed — signal listeners.
         _webSessionExpired = false;
         SessionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Отключение аккаунта: удалить sc_auth.json. Таблицу лайков чистит вызывающий код.
-    /// Архив аккаунтов (sc_accounts.json.accounts) НЕ трогается — «Сменить аккаунт» может
-    /// вернуть сохранённую сессию без повторного входа.</summary>
+    /// <summary>Disconnect: delete sc_auth.json. The likes table is cleared by the caller.
+    /// The account archive (sc_accounts.json.accounts) is NOT touched — "switch account" may
+    /// restore a saved session without re-login.</summary>
     public void Disconnect()
     {
         _auth.Delete();
@@ -1000,14 +991,14 @@ public sealed class SoundCloudService
     }
 
 
-    /// <summary>Cookie-строка из sc_auth.json (только для внутреннего использования и тестов).</summary>
+    /// <summary>Cookie string from sc_auth.json (internal use and tests only).</summary>
     internal string? GetCookies() => _auth.Load().Cookies;
 
-    // ====================== Сетевые примитивы =======================
+    // ====================== Network primitives =======================
 
     /// <summary>
-    /// API-запрос с cookies + client_id. При 401/403 один раз обновляет client_id и повторяет.
-    /// Возвращает (код, тело). Токены в логи не пишутся.
+    /// API request with cookies + client_id. On 401/403, refreshes client_id once and retries.
+    /// Returns (status, body). Tokens are never logged.
     /// </summary>
     private async Task<(int status, string body)> SendApiAsync(string url, bool forceRefreshClientId, CancellationToken ct)
     {
@@ -1024,7 +1015,7 @@ public sealed class SoundCloudService
                 ?? throw new SoundCloudApiException("client_id refresh failed", status));
             (status, body) = await SendWithAuthAsync(urlWithId, ct);
         }
-        // 401 после рефреша client_id — не «протухший id»: истёк oauth_token веб-сессии.
+        // 401 after a client_id refresh is not a stale id: the web session's oauth_token expired.
         if (status == 401)
             MarkWebSessionExpired();
         return (status, body);
@@ -1032,7 +1023,7 @@ public sealed class SoundCloudService
 
     private async Task<(int status, string body)> SendWithAuthAsync(string url, CancellationToken ct)
     {
-        // cookies читаем на каждый запрос (как раньше); в лог они не пишутся.
+        // cookies are read per request (as before); never logged.
         var cookies = _auth.Load().Cookies;
         var oauthToken = ExtractOAuthToken(cookies);
         return await SoundCloudHttp.SendWithFailoverAsync(() =>
@@ -1040,8 +1031,8 @@ public sealed class SoundCloudService
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             if (!string.IsNullOrEmpty(cookies))
                 request.Headers.TryAddWithoutValidation("Cookie", cookies);
-            // oauth_token из cookies дублируем заголовком Authorization — часть api-v2
-            // эндпоинтов (в т.ч. /me и /users/{id}/likes) отвечают по нему надёжнее.
+            // The oauth_token from cookies is duplicated as an Authorization header — some
+            // api-v2 endpoints (incl. /me and /users/{id}/likes) answer more reliably with it.
             if (oauthToken != null)
                 request.Headers.Authorization = new AuthenticationHeaderValue("OAuth", oauthToken);
             return request;
@@ -1049,8 +1040,8 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// oauth_token из cookie-строки (пара "oauth_token=&lt;value&gt;"). null — не найден/пустой.
-    /// Значение никуда не логируется — используется только для заголовка Authorization.
+    /// oauth_token from a cookie string (the "oauth_token=&lt;value&gt;" pair). null — not found/empty.
+    /// The value is never logged — used only for the Authorization header.
     /// </summary>
     internal static string? ExtractOAuthToken(string? cookieHeader)
     {
@@ -1074,25 +1065,25 @@ public sealed class SoundCloudService
         return url + (url.Contains('?') ? "&" : "?") + "client_id=" + Uri.EscapeDataString(clientId);
     }
 
-    /// <summary>Путь media-URL без query (client_id и прочие токены в лог не пишутся).</summary>
+    /// <summary>Media-URL path without query (client_id and other tokens are never logged).</summary>
     internal static string MediaPath(string url)
     {
         var queryIndex = url.IndexOf('?');
         return queryIndex < 0 ? url : url[..queryIndex];
     }
 
-    /// <summary>Есть ли у трека зашифрованные FairPlay-транскодинги (cbc/ctr-encrypted-hls,
-    /// ключи skd://). Если при этом стандартные progressive/hls отвергнуты media-эндпоинтом —
-    /// трек защищён DRM (SoundCloud переводит MONETIZE-треки на FairPlay) и не «оживёт».</summary>
+    /// <summary>Whether the track has encrypted FairPlay transcodings (cbc/ctr-encrypted-hls,
+    /// skd:// keys). If the standard progressive/hls were also rejected by the media endpoint,
+    /// the track is DRM-protected (SoundCloud moves MONETIZE tracks to FairPlay) and won't "come alive".</summary>
     public static bool HasEncryptedTranscodings(ScTrack track)
         => track.Media?.Transcodings.Any(t =>
             t.Format?.Protocol?.Contains("encrypted", StringComparison.OrdinalIgnoreCase) == true) == true;
 
-    // ==================== Играбельная копия DRM-трека ==================
+    // ==================== Playable copy of a DRM track ==================
 
-    /// <summary>Слова в названии копии, после которых это не та версия трека
-    /// (замедления/ускорения, ремиксы, инструменталы, каверы). Слово не применяется,
-    /// если оно есть в названии оригинала (трек-ремикс ищет ремикс).</summary>
+    /// <summary>Title words that mark a copy as a different version (slowed/sped up,
+    /// remixes, instrumentals, covers). A word is not applied if it appears in the
+    /// original's title (a track-remix searches for remixes).</summary>
     internal static readonly string[] BadReuploadWords =
     {
         "slowed", "sped up", "speed up", "reverb", "nightcore", "8d",
@@ -1102,14 +1093,13 @@ public sealed class SoundCloudService
     };
 
     /// <summary>
-    /// Поиск играбельной копии трека на SoundCloud (перекачанной другими
-    /// пользователями): DRM-оригиналы (AD_SUPPORTED) играют только через Widevine,
-    /// а копии обычно залиты как обычные треки. GET /search/tracks по
-    /// «исполнитель + название», фильтры: не оригинал, стримабельный, не SNIPPET/BLOCK,
-    /// не AD_SUPPORTED, все слова названия на месте, нет live/remix-маркеров,
-    /// длительность в пределах ±10 с, артист упомянут. Возвращает до limit кандидатов
-    /// по возрастанию расхождения длительности (полные метаданные кандидата — через
-    /// GetTrackAsync, там же финальная проверка). Пустой список — уверенных копий нет.
+    /// Finds a playable copy of a track on SoundCloud (re-uploaded by other users): DRM
+    /// originals (AD_SUPPORTED) play only via Widevine, while copies are usually uploaded as
+    /// regular tracks. GET /search/tracks by "artist + title", filters: not the original,
+    /// streamable, not SNIPPET/BLOCK, not AD_SUPPORTED, all title words present, no
+    /// live/remix markers, duration within ±10s, artist mentioned. Returns up to limit
+    /// candidates ordered by duration deviation (full candidate metadata via GetTrackAsync,
+    /// which does the final check). Empty list — no confident copies.
     /// </summary>
     public async Task<List<(long Id, string Title)>> SearchReuploadCandidatesAsync(
         string artist, string title, long? durationMs, string excludeScId,
@@ -1143,7 +1133,7 @@ public sealed class SoundCloudService
         return result;
     }
 
-    /// <summary>Разбор выдачи /search/tracks и отбор уверенных копий (тестируемое).</summary>
+    /// <summary>Parses /search/tracks output and picks confident copies (testable).</summary>
     internal static List<(long Id, string Title, double Score)> RankReuploadCandidates(
         string searchJson, string title, string artist, long? durationMs, string excludeScId)
     {
@@ -1163,37 +1153,37 @@ public sealed class SoundCloudService
         var cleanTitle = StripBrackets(title);
         var titleTokens = TokenizeWords(cleanTitle);
         var artistTokens = TokenizeWords(artist);
-        // Маркер «сам трек такой»: слово в названии оригинала не бракует кандидата.
+        // Marker "the original is like that itself": a word in the original's title doesn't reject a candidate.
         var scLow = (artist + " " + title).ToLowerInvariant();
         var badWords = BadReuploadWords.Where(w => scLow.Contains(w) == false).ToArray();
 
         foreach (var t in response.Collection)
         {
             if (t == null || t.Id == 0) continue;
-            if (t.Id.ToString() == excludeScId) continue;                      // сам оригинал
+            if (t.Id.ToString() == excludeScId) continue;                      // the original itself
             if (t.Streamable != true) continue;
-            if (t.Policy is "SNIPPET" or "BLOCK") continue;                    // Go+/гео
-            // Копия с той же рекламной моделью упрётся в тот же DRM — не кандидат.
+            if (t.Policy is "SNIPPET" or "BLOCK") continue;                    // Go+/geo
+            // A copy with the same ad model hits the same DRM — not a candidate.
             if (string.Equals(t.MonetizationModel, "AD_SUPPORTED", StringComparison.OrdinalIgnoreCase)) continue;
 
             var candidateTitle = t.Title ?? string.Empty;
             var low = candidateTitle.ToLowerInvariant();
             if (titleTokens.Count > 0 && titleTokens.Any(w => low.Contains(w) == false))
-                continue;                                                      // название не то
+                continue;                                                      // wrong title
             if (badWords.Any(w => low.Contains(w)))
                 continue;                                                      // slowed/remix/…
             if (durationMs is { } target && t.DurationMs is { } candDur && Math.Abs(candDur - target) > 10_000)
-                continue;                                                      // версия не та по длине
+                continue;                                                      // wrong length
 
             if (artistTokens.Count > 0)
             {
                 var hay = (low + " " + (t.User?.Username ?? "") + " " + (t.FullName ?? "")).ToLowerInvariant();
                 if (artistTokens.Count(a => hay.Contains(a)) * 2 < artistTokens.Count)
-                    continue;                                                  // артист не упомянут
+                    continue;                                                  // artist not mentioned
             }
 
-            // Ранг: ближе длительность + бонус популярности копии (массовые перекачки
-            // надёжнее одиночных).
+            // Rank: closer duration + popularity bonus of the copy (mass re-uploads
+            // are more reliable than singletons).
             var durDist = durationMs is { } tg && t.DurationMs is { } cd ? Math.Abs(cd - tg) : 0L;
             var score = durDist - Math.Log10(Math.Max(t.PlaybackCount ?? 0, 10)) * 1000;
             ranked.Add((t.Id, candidateTitle, score));
@@ -1202,8 +1192,8 @@ public sealed class SoundCloudService
         return ranked.OrderBy(x => x.Score).ToList();
     }
 
-    /// <summary>Убирает скобочные хвосты: «jiggy (feat. xaviersobased)» → «jiggy» —
-    /// feat/prod-части только мешают поиску.</summary>
+    /// <summary>Strips bracket tails: "jiggy (feat. xaviersobased)" → "jiggy" —
+    /// feat/prod parts only hurt the search.</summary>
     internal static string StripBrackets(string title)
     {
         var cleaned = System.Text.RegularExpressions.Regex
@@ -1212,7 +1202,7 @@ public sealed class SoundCloudService
         return cleaned.Length > 0 ? cleaned : (title ?? string.Empty).Trim();
     }
 
-    /// <summary>Значимые слова в нижнем регистре (буквы/цифры, длина ≥ 2).</summary>
+    /// <summary>Meaningful words in lowercase (letters/digits, length ≥ 2).</summary>
     private static List<string> TokenizeWords(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return new List<string>();
@@ -1223,7 +1213,7 @@ public sealed class SoundCloudService
             .ToList();
     }
 
-    // ==================== Разбор ответов (тестируемое) ==============
+    // ==================== Response parsing (testable) ==============
 
     internal static ScLikesResponse? ParseLikesJson(string json)
     {
@@ -1251,20 +1241,20 @@ public sealed class SoundCloudService
         }
     }
 
-    /// <summary>collection → строки БД; playlist'ы и треки без id пропускаются.</summary>
+    /// <summary>collection → DB rows; playlists and tracks without id are skipped.</summary>
     internal static List<SoundCloudLikeRow> ExtractLikeRows(ScLikesResponse response, string syncedAt)
     {
         var rows = new List<SoundCloudLikeRow>();
         foreach (var item in response.Collection)
         {
             var track = item.Track;
-            if (track == null || track.Id == 0) continue; // playlist и мусор
+            if (track == null || track.Id == 0) continue; // playlist and junk
 
             rows.Add(new SoundCloudLikeRow
             {
                 ScId = track.Id.ToString(),
                 Title = track.Title ?? string.Empty,
-                // username предпочтительнее full_name (у профилей имя бывает пустым).
+                // username is preferred over full_name (profile names are sometimes empty).
                 Artist = !string.IsNullOrWhiteSpace(track.User?.Username)
                     ? track.User!.Username
                     : (!string.IsNullOrWhiteSpace(track.User?.FullName)
@@ -1274,7 +1264,7 @@ public sealed class SoundCloudService
                 ArtworkUrl = BuildArtworkUrl(track.ArtworkUrl) ?? string.Empty,
                 PermalinkUrl = track.PermalinkUrl ?? string.Empty,
                 Streamable = track.Streamable,
-                // created_at у обёртки — дата ЛАЙКА; fallback на дату загрузки трека.
+                // the wrapper's created_at is the LIKE date; falls back to the track's upload date.
                 LikedAt = item.CreatedAt ?? track.CreatedAt,
                 SyncedAt = syncedAt
             });
@@ -1282,7 +1272,7 @@ public sealed class SoundCloudService
         return rows;
     }
 
-    /// <summary>Обложка в большом размере: '-large' → '-t500x500' (SoundCloud отдаёт large по умолчанию).</summary>
+    /// <summary>Large artwork: '-large' → '-t500x500' (SoundCloud serves large by default).</summary>
     internal static string? BuildArtworkUrl(string? artworkUrl)
     {
         if (string.IsNullOrEmpty(artworkUrl)) return artworkUrl;
@@ -1292,8 +1282,8 @@ public sealed class SoundCloudService
     }
 
     /// <summary>
-    /// Выбор progressive-транскодинга (mp3 одним файлом). Отсутствует у
-    /// HLS-only треков — для них есть DownloadHlsMp3Async.
+    /// Picks the progressive transcoding (single-file mp3). Missing on HLS-only
+    /// tracks — DownloadHlsMp3Async handles those.
     /// </summary>
     internal static string? PickProgressiveUrl(ScTrack track)
     {

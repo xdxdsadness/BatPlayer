@@ -10,7 +10,7 @@ using BatPlayer.Services;
 
 namespace BatPlayer.Services.Vk;
 
-/// <summary>Ошибка VK-слоя после всех повторов. Code — код ошибки (0 — транспорт/парсинг, 5 — сессия).</summary>
+/// <summary>VK-layer error after all retries. Code — error code (0 — transport/parsing, 5 — session).</summary>
 public sealed class VkApiException : Exception
 {
     public int ErrorCode { get; }
@@ -19,100 +19,101 @@ public sealed class VkApiException : Exception
 }
 
 /// <summary>
-/// Клиент VK Music. Авторизация — COOKIES ВЕБ-СЕССИИ vk.com/vk.ru (тот же принцип, что у
-/// SoundCloud-интеграции): окно входа собирает cookies из WebView2, они лежат в vk_auth.json,
-/// а каталог берётся внутренним веб-эндпоинтом al_audio.php (act=load_section) — тем же,
-/// которым пользуется веб-плеер VK.
+/// VK Music client. Auth uses WEB-SESSION COOKIES of vk.com/vk.ru (same approach as the
+/// SoundCloud integration): the login window collects cookies from WebView2, they are
+/// stored in vk_auth.json, and the catalog comes from the internal al_audio.php web
+/// endpoint (act=load_section) — the one the VK web player itself uses.
 ///
-/// Почему не OAuth: audio.get через сторонний токен мёртв — VK отдаёт коды 3/8 для всех
-/// сторонних приложений (включая Kate Mobile), каталог по токену недоступен.
+/// Why not OAuth: audio.get via third-party tokens is dead — VK returns codes 3/8 for
+/// all third-party apps (including Kate Mobile); the token-based catalog is unavailable.
 ///
-/// Скачивание файлов НЕ реализовано: только каталог (метаданные + временные ссылки),
-/// стриминг через дисковый кэш (VkStreamCache) и матчинг с локальной библиотекой.
-/// Сеть — прямой слой <see cref="VkHttp"/>: direct первым, системный прокси как фолбэк.
-/// Cookies в логи не попадают — логируются только метод, коды ответов и число элементов.
+/// File downloads are NOT implemented: catalog only (metadata + temporary URLs),
+/// streaming via the disk cache (VkStreamCache), and matching with the local library.
+/// Network goes through <see cref="VkHttp"/>: direct first, system proxy as fallback.
+/// Cookies never reach the logs — only method, response codes and item counts are logged.
 /// </summary>
 public sealed class VkService
 {
     public const string AuthFileName = "vk_auth.json";
 
     /// <summary>
-    /// Расчётный размер страницы пагинации load_section. VK отдаёт раздел «relevance» целиком
-    /// одним ответом и offset поддерживает не всегда; константа нужна guard'у пагинации,
-    /// когда в payload виден счётчик больше собранного.
+    /// Expected page size of load_section pagination. VK returns the "relevance" section
+    /// in one response and does not always support offset; the constant backs the pagination
+    /// guard when the payload shows a counter larger than what was collected.
     /// </summary>
     public const int PageSize = 1000;
 
-    /// <summary>Защита от зацикливания пагинации load_section (10 × 1000 = 10k треков).</summary>
+    /// <summary>Guard against load_section pagination loops (10 × 1000 = 10k tracks).</summary>
     public const int MaxAudioPages = 10;
 
-    /// <summary>Сколько живёт разрешённая mp3-ссылка в памяти до повторной выборки каталога.</summary>
+    /// <summary>How long a resolved mp3 URL lives in memory before the catalog is re-fetched.</summary>
     private static readonly TimeSpan StreamUrlTtl = TimeSpan.FromMinutes(20);
 
-    /// <summary>Минимальный интервал между полными обновлениями кэша ссылок (после неудачного резолва).</summary>
+    /// <summary>Minimum interval between full URL-cache refreshes (after a failed resolve).</summary>
     private static readonly TimeSpan UrlRefreshCooldown = TimeSpan.FromSeconds(30);
 
-    /// <summary>Актуальный домен VK (веб-эндпоинт каталога).</summary>
+    /// <summary>Current VK domain (catalog web endpoint).</summary>
     internal const string WebAudioUrlRu = "https://vk.ru/al_audio.php";
 
-    /// <summary>Исторический домен — фолбэк, если .ru не ответил как al_audio.</summary>
+    /// <summary>Legacy domain — fallback when .ru does not answer as al_audio.</summary>
     internal const string WebAudioUrlCom = "https://vk.com/al_audio.php";
 
-    /// <summary>Referer, который ждёт веб-эндпоинт (страница аудио).</summary>
+    /// <summary>Referer expected by the web endpoint (the audio page).</summary>
     internal const string WebAudioReferer = "https://vk.ru/audio";
 
-    /// <summary>Обычная мобильная страница входа VK (окно входа открывает её первой).</summary>
+    /// <summary>Regular VK mobile login page (the login window opens it first).</summary>
     internal const string LoginUrl = "https://m.vk.com/login";
 
-    /// <summary>UA для al_audio.php и CDN обложек; internal — проставляется фабрикой VkHttp.</summary>
+    /// <summary>UA for al_audio.php and the artwork CDN; internal — set by the VkHttp factory.</summary>
     /// <remarks>
-    /// Использован UA официального мобильного приложения VK для Android для обхода
-    /// блокировки сторонних клиентов. VK проверяет UA и может отдавать голосовое
-    /// сообщение вместо музыки при детектировании браузера.
+    /// Uses the official VK Android app UA to bypass third-party client blocking.
+    /// VK checks the UA and may serve a voice message instead of music when it detects
+    /// a browser.
     /// </remarks>
     internal const string UserAgent =
         "VKAndroidApp/7.52-14788 (Android 13; SDK 33; arm64-v8a; Samsung SM-G998B; ru; 2400x1080)";
 
-    /// <summary>Параллелизм батч-закачки обложек (см. SyncArtworksAsync).</summary>
+    /// <summary>Parallelism of the artwork batch download (see SyncArtworksAsync).</summary>
     private const int ArtworkDownloadParallelism = 4;
 
     private readonly VkAuthService _auth;
     private readonly VkArtworkCache _artworks = new();
 
-    /// <summary>vk_id → временная mp3-ссылка (из последнего load_section). URL в БД не пишется.</summary>
+    /// <summary>vk_id → temporary mp3 URL (from the last load_section). URLs are not written to the DB.</summary>
     private readonly Dictionary<string, (string Url, DateTime FetchedUtc)> _urlCache = new(StringComparer.Ordinal);
 
-    /// <summary>Замок кэша ссылок (заполняется из синка, читается из резолвера плеера).</summary>
+    /// <summary>URL cache lock (filled by the sync, read by the player resolver).</summary>
     private readonly object _urlLock = new();
 
-    /// <summary>Полная выборка каталога (обновление ссылок) не должна идти параллельно.</summary>
+    /// <summary>Full catalog fetches (URL refreshes) must not run in parallel.</summary>
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
     private DateTime _lastUrlRefreshUtc = DateTime.MinValue;
 
-    /// <summary>Прогресс синхронизации: (обработано, всего-оценка).</summary>
+    /// <summary>Sync progress: (done, estimated total).</summary>
     public event EventHandler<(int done, int total)>? SyncProgress;
 
     public VkService(string authFilePath) => _auth = new VkAuthService(authFilePath);
 
-    /// <summary>Есть ли файл сессии (не проверяет его валидность).</summary>
+    /// <summary>Whether the session file exists (validity is not checked).</summary>
     public bool HasAuthFile => _auth.Exists;
 
     /// <summary>
-    /// Подключён ли аккаунт: файл сессии есть И в нём непустая cookie-строка.
-    /// Сетевая проверка не выполняется — протухшая сессия выяснится при первом запросе.
+    /// Whether the account is connected: the session file exists AND holds a non-empty
+    /// cookie string. No network check is performed — an expired session surfaces on the
+    /// first request.
     /// </summary>
     public bool HasWebSession => !string.IsNullOrWhiteSpace(_auth.Load().CookieHeader);
 
-    /// <summary>id пользователя VK из файла сессии ("" — неизвестен); для статуса в настройках.</summary>
+    /// <summary>VK user id from the session file ("" — unknown); for the settings status.</summary>
     public string GetUserId() => _auth.Load().UserId ?? string.Empty;
 
-    // ============================ Сессия ============================
+    // ============================ Session ============================
 
     /// <summary>
-    /// Сохранить cookies веб-сессии после успешного входа (вызывается окном входа).
-    /// Сами cookies никуда не логируются. AccessToken в файле не трогаем — поле
-    /// оставлено для совместимости со старыми файлами.
+    /// Saves web session cookies after a successful sign-in (called by the login window).
+    /// Cookies are never logged. AccessToken in the file is left untouched — the field
+    /// exists for compatibility with older files.
     /// </summary>
     public void SaveSessionCookies(string cookieHeader, string? userId)
     {
@@ -124,9 +125,9 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Пометить сессию недействительной (VK вернул страницу логина): cookie-строка
-    /// очищается, UserId остаётся (пригодится при повторном входе). Файл не удаляется —
-    /// кнопка Connect открывает окно входа заново.
+    /// Marks the session invalid (VK returned a login page): the cookie string is cleared,
+    /// UserId is kept (useful on re-login). The file is not deleted — the Connect button
+    /// reopens the login window.
     /// </summary>
     public void InvalidateSession()
     {
@@ -136,14 +137,14 @@ public sealed class VkService
         Logger.Warn("VK web session invalidated — sign in again");
     }
 
-    /// <summary>Отключение аккаунта: удалить vk_auth.json и кэш ссылок. Таблицу чистит вызывающий код.</summary>
+    /// <summary>Disconnect: delete vk_auth.json and the URL cache. The caller clears the table.</summary>
     public void Disconnect()
     {
         _auth.Delete();
         lock (_urlLock) _urlCache.Clear();
     }
 
-    /// <summary>Дата последней успешной синхронизации (из vk_auth.json), null — ещё не синхронизировали.</summary>
+    /// <summary>Date of the last successful sync (from vk_auth.json); null — never synced.</summary>
     public DateTime? GetLastSyncedUtc()
     {
         var raw = _auth.Load().LastSyncedAtUtc;
@@ -158,13 +159,13 @@ public sealed class VkService
         _auth.Save(file);
     }
 
-    // ======================= Синхронизация =========================
+    // ======================= Synchronization =========================
 
     /// <summary>
-    /// Синхронизация музыки: выборка каталога веб-эндпоинтом al_audio.php
-    /// (act=load_section) с cookies веб-сессии. Возвращает число сохранённых треков.
-    /// Бросает <see cref="VkApiException"/> (код 5 — сессия протухла) — VM показывает
-    /// понятное сообщение.
+    /// Music sync: fetches the catalog via the al_audio.php web endpoint
+    /// (act=load_section) with web session cookies. Returns the number of saved tracks.
+    /// Throws <see cref="VkApiException"/> (code 5 — session expired); the VM shows a
+    /// clear message.
     /// </summary>
     public async Task<int> SyncAudioAsync(VkTracksRepository repository, CancellationToken ct)
     {
@@ -173,10 +174,9 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Полная выборка каталога (load_section по страницам guard'а). С репозиторием —
-    /// сохраняет метаданные, пишет дату синка и докачивает обложки; без репозитория
-    /// (обновление ссылок) — только наполняет кэш mp3-ссылок. В обоих случаях обновляет
-    /// _urlCache и _lastUrlRefreshUtc.
+    /// Full catalog fetch (load_section, up to the page guard). With a repository — saves
+    /// metadata, records the sync date and downloads artworks; without one (URL refresh) —
+    /// only fills the mp3 URL cache. Both paths update _urlCache and _lastUrlRefreshUtc.
     /// </summary>
     private async Task<List<VkTrackRow>> FetchAudioWebAsync(VkTracksRepository? repository, CancellationToken ct)
     {
@@ -206,8 +206,8 @@ public sealed class VkService
             var (errorCode, tuples) = PositionalAudioParser.ParseRecentSection(body);
             if (errorCode != 0)
             {
-                // Челлендж авторизации аудио: сессия сбрасывается — повторный вход
-                // через окно (с прогревом vk.ru/audio) восстановит доступ.
+                // Audio auth challenge: the session is reset — signing in again through
+                // the window (with vk.ru/audio warm-up) restores access.
                 InvalidateSession();
                 throw new VkApiException($"al_audio.php returned error {errorCode}", errorCode);
             }
@@ -226,7 +226,7 @@ public sealed class VkService
             if (repository != null)
                 SyncProgress?.Invoke(this, (all.Count, all.Count + (tuples.Count == MaxSectionSize ? MaxSectionSize : 0)));
 
-            // Пагинация: секции отдают по 50; пока страница полная — запрашиваем дальше.
+            // Pagination: sections return 50 items each; keep fetching while the page is full.
             if (tuples.Count < MaxSectionSize) break;
             offset += tuples.Count;
         }
@@ -242,10 +242,10 @@ public sealed class VkService
         return all;
     }
 
-    /// <summary>Страница секции «recent» отдаёт ровно столько кортежей.</summary>
+    /// <summary>The "recent" section page returns exactly this many tuples.</summary>
     private const int MaxSectionSize = 50;
 
-    /// <summary>Строки каталога из кортежей секции recent.</summary>
+    /// <summary>Catalog rows from the recent-section tuples.</summary>
     internal static List<VkTrackRow> ExtractRecentRows(IEnumerable<RecentAudioTuple> tuples, string syncedAt)
     {
         var rows = new List<VkTrackRow>();
@@ -271,9 +271,9 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Следующий offset или null — страница была последней. Явный nextOffset из payload
-    /// (если VK его прислал и он сдвигает вперёд) приоритетнее расчёта по total; расчёт
-    /// следующего offset — та же чистая функция <see cref="NextAudioOffset"/>. Внутренний — покрыт юнит-тестами.
+    /// Next offset, or null — the page was the last. An explicit nextOffset from the payload
+    /// (when VK sends it and it moves forward) takes priority over the total-based calculation;
+    /// the next offset is computed by the same pure function <see cref="NextAudioOffset"/> (unit-tested).
     /// </summary>
     internal static int? NextWebOffset(int currentOffset, AlAudioPayload payload)
     {
@@ -284,11 +284,11 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Следующий offset пагинации load_section или null — страница была последней.
-    /// Чистая функция (покрыта юнит-тестами):
-    ///   • пустая страница — конец;
-    ///   • короткая страница (меньше запрашиваемого размера) — конец;
-    ///   • накопленное число элементов достигло заявленного total — конец.
+    /// Next load_section pagination offset, or null — the page was the last.
+    /// Pure function (unit-tested):
+    ///   • empty page — end;
+    ///   • short page (less than the requested size) — end;
+    ///   • accumulated item count reached the reported total — end.
     /// </summary>
     internal static int? NextAudioOffset(int currentOffset, int fetchedItems, int reportedTotal, int pageSize)
     {
@@ -299,10 +299,10 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Пакетная закачка обложек всех VK-треков в artworks_cache/vk_{vk_id}.jpg (см.
-    /// <see cref="VkArtworkCache"/>): до <see cref="ArtworkDownloadParallelism"/> параллельных
-    /// скачиваний, пропуск уже скачанных и треков без artwork_url. Ошибки одного файла —
-    /// лог + пропуск. Результаты в БД пишутся последовательно (у репозитория одно соединение).
+    /// Batch download of all VK track artworks to artworks_cache/vk_{vk_id}.jpg (see
+    /// <see cref="VkArtworkCache"/>): up to <see cref="ArtworkDownloadParallelism"/> parallel
+    /// downloads, skipping already downloaded files and tracks without artwork_url. Per-file
+    /// errors are logged and skipped. DB results are written sequentially (one connection).
     /// </summary>
     private async Task SyncArtworksAsync(VkTracksRepository repository, CancellationToken ct)
     {
@@ -340,22 +340,22 @@ public sealed class VkService
         }
         catch (Exception ex)
         {
-            // Обложки — вспомогательная часть синка: сетевой сбой не должен бить по метаданным.
+            // Artworks are auxiliary to the sync: a network failure must not affect the metadata.
             Logger.Error(ex, "VK artwork batch download failed");
         }
     }
 
-    /// <summary>Префикс файлов обложек VK в общем каталоге artworks_cache (sc_id — цифры).</summary>
+    /// <summary>Prefix of VK artwork files in the shared artworks_cache directory.</summary>
     internal const string ArtworkIdPrefix = "vk_";
 
-    // ============================ Стрим ==============================
+    // ============================ Streaming ==========================
 
     /// <summary>
-    /// Прямая mp3-ссылка трека для стриминга. Ссылки из load_section временные и в БД не
-    /// сохраняются: держим их в памяти сессии (TTL), а если ссылка протухла/сессия новая —
-    /// один раз перечитываем каталог и пробуем снова; последняя инстанция — точечный
-    /// reload_audio по конкретному треку (каталог type=recent покрывает не весь список).
-    /// null — ссылку получить не удалось (нет сессии, трек недоступен).
+    /// Direct mp3 URL of a track for streaming. URLs from load_section are temporary and
+    /// not saved to the DB: they are kept in session memory (TTL); if a URL expired or the
+    /// session is new — the catalog is re-fetched once and tried again; the last resort is
+    /// a targeted reload_audio for the specific track (the type=recent catalog is incomplete).
+    /// null — the URL could not be obtained (no session, track unavailable).
     /// </summary>
     public async Task<string?> GetPlayableStreamAsync(VkTrackRow? track, CancellationToken ct)
     {
@@ -370,27 +370,27 @@ public sealed class VkService
         catch (VkApiException ex)
         {
             Logger.Error($"VK stream URL refresh failed (error code {ex.ErrorCode})");
-            // Полная выборка не удалась (сеть/челлендж) — пробуем точечный reload_audio.
+            // Full fetch failed (network/challenge) — fall back to targeted reload_audio.
             return await ResolveReloadAudioAsync(track, ct);
         }
 
         if (TryGetFreshUrl(track.VkId, out url)) return url;
 
-        // Трека нет в свежих секциях каталога (импортирован давно, вне первых страниц)
-        // или его хэш не декодируется — точечный reload_audio по конкретному id.
+        // The track is missing from fresh catalog sections (imported long ago, beyond the
+        // first pages) or its hash does not decode — targeted reload_audio by its id.
         return await ResolveReloadAudioAsync(track, ct);
     }
 
-    /// <summary>Точки отказа reload_audio: повторная попытка не раньше TTL — недоступный
-    /// трек не должен долбить VK на каждый клик.</summary>
+    /// <summary>reload_audio failure tracking: retry no earlier than the TTL — an unavailable
+    /// track must not hammer VK on every click.</summary>
     private static readonly TimeSpan ReloadFailureTtl = TimeSpan.FromMinutes(5);
     private readonly Dictionary<string, DateTime> _reloadFailures = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Точечное разрешение ссылки одного трека: POST al_audio.php act=reload_audio
-    /// ids={owner}_{id} — тот вызов, которым веб-плеер догружает URL при клике.
-    /// Ответ — тот же позиционный формат; StreamUrl вытаскивает lenient-парсер.
-    /// null — VK не дал ссылку (недоступен/удалён) или недавняя попытка уже провалилась.
+    /// Resolves the URL of a single track: POST al_audio.php act=reload_audio
+    /// ids={owner}_{id} — the call the web player uses to fetch the URL on click.
+    /// The response is the same positional format; StreamUrl is extracted by the lenient parser.
+    /// null — VK gave no URL (unavailable/deleted) or a recent attempt already failed.
     /// </summary>
     private async Task<string?> ResolveReloadAudioAsync(VkTrackRow track, CancellationToken ct)
     {
@@ -417,14 +417,14 @@ public sealed class VkService
         }
         catch (VkApiException ex)
         {
-            // Сессия сброшена/челлендж — резолвер не должен ронять воспроизведение.
+            // Session reset/challenge — the resolver must not break playback.
             Logger.Error($"VK reload_audio failed for {track.VkId} (error code {ex.ErrorCode})");
             lock (_urlLock) _reloadFailures[track.VkId] = DateTime.UtcNow;
             return null;
         }
     }
 
-    /// <summary>Сеть reload_audio + разбор. Внутренняя — тестируемая часть отдельно.</summary>
+    /// <summary>reload_audio network call + parsing. Internal so the testable part is separate.</summary>
     private async Task<string?> FetchReloadAudioUrlAsync(VkTrackRow track, CancellationToken ct)
     {
         var file = _auth.Load();
@@ -442,10 +442,10 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// URL из ответа reload_audio: точное совпадение vk_id; если разобрался ровно один
-    /// трек — берём его (запрос был по одному id, раскладка id/owner_id могла сместиться).
-    /// Ссылка audio_api_unavailable.mp3?extra=... декодируется тем же путём, что и хэши
-    /// секции каталога; неиграбельные ответы дают null.
+    /// URL from the reload_audio response: exact vk_id match; if exactly one track parsed —
+    /// take it (the request was for one id; the id/owner_id layout may have shifted).
+    /// An audio_api_unavailable.mp3?extra=... URL is decoded the same way as the catalog
+    /// section hashes; unplayable responses yield null.
     /// </summary>
     internal static string? ExtractReloadAudioUrl(AlAudioPayload payload, VkTrackRow track, string userId)
     {
@@ -463,7 +463,7 @@ public sealed class VkService
 
         if (url.Contains("audio_api_unavailable.mp3", StringComparison.Ordinal))
         {
-            // Декоду нужен viewer_id как число; нет id — ссылку не собрать.
+            // The decoder needs viewer_id as a number; without it the URL cannot be built.
             if (!long.TryParse(userId, out var vkUserId) || vkUserId == 0) return null;
             url = VkAudioUrlDecoder.Decode(url, vkUserId);
         }
@@ -471,7 +471,7 @@ public sealed class VkService
         return string.IsNullOrEmpty(url) || !url.StartsWith("http", StringComparison.Ordinal) ? null : url;
     }
 
-    /// <summary>Обновление кэша ссылок полной выборкой каталога (не чаще cooldown'а).</summary>
+    /// <summary>Refreshes the URL cache with a full catalog fetch (no more often than the cooldown).</summary>
     private async Task RefreshStreamUrlsAsync(CancellationToken ct)
     {
         await _refreshGate.WaitAsync(ct);
@@ -502,7 +502,7 @@ public sealed class VkService
         return false;
     }
 
-    /// <summary>Запомнить временные ссылки страницы каталога (неиграбельные пропускаем).</summary>
+    /// <summary>Caches the temporary URLs of a catalog page (unplayable ones are skipped).</summary>
     private void CacheStreamUrls(IEnumerable<RecentAudioTuple> tuples)
     {
         var now = DateTime.UtcNow;
@@ -516,7 +516,7 @@ public sealed class VkService
             {
                 if (string.IsNullOrEmpty(tuple.UrlHash)) continue;
                 
-                // reload_audio API не реализован — строим unavailable.mp3 и декодируем
+                // The reload_audio API is not implemented — build unavailable.mp3 and decode
                 var unavailableUrl = $"https://vk.ru/mp3/audio_api_unavailable.mp3?extra={tuple.UrlHash}";
                 var streamUrl = VkAudioUrlDecoder.Decode(unavailableUrl, vkUserId);
                 
@@ -529,12 +529,12 @@ public sealed class VkService
         }
     }
 
-    // ====================== Сетевые примитивы =======================
+    // ====================== Network primitives =======================
 
     /// <summary>
-    /// POST al_audio.php: сначала vk.ru, при невнятном ответе — исторический vk.com.
-    /// Ответ отдаётся как есть: разбор (в т.ч. детект страницы логина) — у вызывающего.
-    /// Cookies идут заголовком и в логи не пишутся.
+    /// POST al_audio.php: vk.ru first, legacy vk.com on an unclear response.
+    /// The body is returned as is: parsing (including login-page detection) is up to the caller.
+    /// Cookies travel in the header and are never logged.
     /// </summary>
     private static async Task<(int Status, string Body)> PostSectionAsync(
         string cookieHeader, string userId, int offset, CancellationToken ct)
@@ -548,7 +548,7 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// Один POST load_section. Тело формы — как у веб-плеера VK:
+    /// A single load_section POST. Form body matches the VK web player:
     /// act=load_section&amp;al=1&amp;claim=0&amp;offset=N&amp;owner_id=UID&amp;type=recent&amp;utf8=1.
     /// </summary>
     private static async Task<(int Status, string Body)> PostAlAudioOnceAsync(
@@ -569,11 +569,11 @@ public sealed class VkService
                     ["utf8"] = "1"
                 })
             };
-            // Cookie-строка сессии — единственная авторизация запроса (в лог не попадает).
+            // The session cookie string is the request's only auth (never logged).
             request.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
             request.Headers.TryAddWithoutValidation("X-Requested-With", "com.vkontakte.android");
             request.Headers.TryAddWithoutValidation("Referer", WebAudioReferer);
-            // Дополнительные заголовки для имитации мобильного приложения VK
+            // Extra headers mimicking the VK mobile app
             request.Headers.TryAddWithoutValidation("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
             request.Headers.TryAddWithoutValidation("Accept", "*/*");
             return request;
@@ -581,8 +581,8 @@ public sealed class VkService
     }
 
     /// <summary>
-    /// POST al_audio.php act=reload_audio — точечный догруз URL конкретного трека
-    /// (тот же вызов, что делает веб-плеер при клике). Форма: act=reload_audio&amp;al=1&amp;ids=…
+    /// POST al_audio.php act=reload_audio — targeted URL fetch for one track
+    /// (the same call the web player makes on click). Form: act=reload_audio&amp;al=1&amp;ids=…
     /// </summary>
     private static async Task<string> PostReloadAudioAsync(
         string cookieHeader, string ids, CancellationToken ct)
@@ -616,14 +616,14 @@ public sealed class VkService
         return string.Empty;
     }
 
-    /// <summary>Код ошибки означает отсутствие доступа к аудио (сообщение — VkAudioPermissionDenied).</summary>
+    /// <summary>The error code means audio access is denied (message — VkAudioPermissionDenied).</summary>
     public static bool IsAudioPermissionError(int errorCode) => errorCode is 15 or 26 or 201;
 
-    // ==================== Разбор ответов (тестируемое) ==============
+    // ==================== Response parsing (tested) =================
 
     /// <summary>
-    /// Разобранные треки → строки БД. Скрытые/удалённые записи (без url — IsPlayable=false)
-    /// в каталог не пишутся. duration в payload — секунды; vk_id — "{owner_id}_{id}".
+    /// Parsed tracks → DB rows. Hidden/deleted entries (no url — IsPlayable=false) are not
+    /// written to the catalog. duration in the payload is in seconds; vk_id = "{owner_id}_{id}".
     /// </summary>
     internal static List<VkTrackRow> ExtractRows(IEnumerable<ParsedWebAudio> tracks, string syncedAt)
     {
@@ -645,15 +645,15 @@ public sealed class VkService
         return rows;
     }
 
-    /// <summary>vk_id = "{owner_id}_{id}" (id трека уникален только в паре с владельцем).</summary>
+    /// <summary>vk_id = "{owner_id}_{id}" (a track id is unique only together with its owner).</summary>
     internal static string BuildVkId(long ownerId, long id) => $"{ownerId}_{id}";
 
-    // ===================== userId веб-сессии ========================
+    // ===================== Web session userId ========================
 
     private static readonly System.Text.RegularExpressions.Regex[] UserIdPatterns =
     [
-        // Порядок приоритета: встроенные конфиги страницы содержат id зрителя,
-        // ссылки на профили — последняя надежда (могут вести на другого пользователя).
+        // Priority order: embedded page configs contain the viewer id;
+        // profile links are the last resort (they may point to another user).
         new("\"uid\":(\\d+)", System.Text.RegularExpressions.RegexOptions.Compiled),
         new("\"viewer_id\":(\\d+)", System.Text.RegularExpressions.RegexOptions.Compiled),
         new("viewer_id=(\\d+)", System.Text.RegularExpressions.RegexOptions.Compiled),
@@ -662,9 +662,9 @@ public sealed class VkService
     ];
 
     /// <summary>
-    /// id пользователя из HTML-страницы VK (feed/boot-данные/профильные ссылки) или null.
-    /// Чистая функция — покрыта юнит-тестами. Окно входа вызывает её для HTML, снятого
-    /// с WebView2 (ExecuteScriptAsync) и скачанного HttpClient'ом с cookies сессии.
+    /// User id from a VK HTML page (feed/boot data/profile links), or null.
+    /// Pure function — unit-tested. The login window calls it for HTML captured from
+    /// WebView2 (ExecuteScriptAsync) and downloaded via HttpClient with session cookies.
     /// </summary>
     internal static string? ExtractUserIdFromHtml(string? html)
     {

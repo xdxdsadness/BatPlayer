@@ -7,21 +7,23 @@ using System.Threading.Tasks;
 using BatPlayer.Services;
 using BatPlayer.Services.SoundCloud;
 
+using BatPlayer.Localization;
+
 namespace BatPlayer.Services.SoundCloud;
 
-/// <summary>Пара URL стриминга официального API (AAC 160 — лучший, MP3 128 — фолбэк).
-/// preview_mp3_128_url (30-секундный сниппет) сознательно не используется: играть отрывок
-/// под полными метаданными — то самое «название то, а звук не тот».</summary>
+/// <summary>Official API streaming URL pair (AAC 160 — best, MP3 128 — fallback).
+/// preview_mp3_128_url (the 30-second snippet) is deliberately unused: playing a snippet
+/// under full metadata is exactly "right title, wrong sound".</summary>
 public sealed record ScApiStreamUrls(string? HlsAac160, string? HlsMp3128)
 {
     public bool HasAny => HlsAac160 != null || HlsMp3128 != null;
 }
 
 /// <summary>
-/// Клиент официального api.soundcloud.com: стримы трека (официальные, работают для
-/// всего, что доступно аккаунту — вкл. Go+), related-треки (рекомендации SC),
-/// лайки. Токен — через SoundCloudOfficialAuth с авто-рефрешом при 401/истечении.
-/// Сеть — общий статический слой SoundCloudHttp (direct с фолбэком на прокси).
+/// Official api.soundcloud.com client: track streams (official, work for anything the
+/// account can access, incl. Go+), related tracks (SC recommendations), likes.
+/// Token via SoundCloudOfficialAuth with auto-refresh on 401/expiry.
+/// Network via the shared static SoundCloudHttp layer (direct with proxy fallback).
 /// </summary>
 public sealed class SoundCloudOfficialApi
 {
@@ -29,42 +31,42 @@ public sealed class SoundCloudOfficialApi
 
     private readonly SoundCloudOfficialAuth _auth;
 
-    /// <summary>API запретил доступ приложению целиком (403 "Access to this API has
-    /// been disallowed" на /streams): подключение формально есть, но ни один трек
-    /// официальных стримов не получит, пока клиент не разблокируют. 200 — сбрасывает.</summary>
+    /// <summary>The API disallowed this app entirely (403 "Access to this API has
+    /// been disallowed" on /streams): formally connected, but no track will get
+    /// official streams until the client is unblocked. A 200 clears it.</summary>
     private volatile bool _disallowed;
     private DateTime _disallowedAtUtc;
 
-    /// <summary>Как часто после блокировки можно снова пробовать официальный стрим:
-    /// если SoundCloud разблокирует клиента, флаг снимется первым же пробным 200.</summary>
+    /// <summary>How often to re-probe official streams after a block: if SoundCloud
+    /// unblocks the client, the flag is cleared by the first probing 200.</summary>
     private static readonly TimeSpan DisallowedReprobeInterval = TimeSpan.FromMinutes(30);
 
     public SoundCloudOfficialApi(SoundCloudOfficialAuth auth) => _auth = auth;
 
-    /// <summary>true — api.soundcloud.com отдал 403 «disallowed»: официальный источник
-    /// мёртв для этой сессии (проверяется по телу ответа, не по каждому 403 — отказ
-    /// конкретного трека/права тоже приходит как 403).</summary>
+    /// <summary>true — api.soundcloud.com returned a 403 "disallowed": the official source
+    /// is dead for this session (detected via the response body, not every 403 — a
+    /// per-track/permission denial also arrives as 403).</summary>
     public bool IsDisallowed => _disallowed;
 
-    /// <summary>Пропустить попытку официальных стримов: API заблокирован и с последнего
-    /// пробного запроса прошло меньше интервала. По прошествии интервала запрос опять
-    /// уходит — разблокировка подхватится автоматически.</summary>
+    /// <summary>Skip official-stream attempts: the API is blocked and less than the interval
+    /// has passed since the last probe. After the interval the request goes out again —
+    /// unblocking is picked up automatically.</summary>
     public bool ShouldSkipStreamsProbe
         => _disallowed && DateTime.UtcNow - _disallowedAtUtc < DisallowedReprobeInterval;
 
     public bool IsConnected => !string.IsNullOrEmpty(_auth.Load().AccessToken);
 
-    /// <summary>Живой access_token для скачивания плейлистов официального API
-    /// (склейкой HLS занимается SoundCloudService). null — не подключено.</summary>
+    /// <summary>Live access_token for fetching official API playlists
+    /// (SoundCloudService assembles the HLS). null — not connected.</summary>
     public Task<string?> GetAccessTokenAsync(CancellationToken ct = default)
         => _auth.GetValidAccessTokenAsync(ct);
 
-    /// <summary>URN из scId: scId — это числовой id трека SC ("123456").</summary>
+    /// <summary>URN from scId: scId is the numeric SC track id ("123456").</summary>
     private static string TrackUrn(string scId) => $"soundcloud:tracks:{scId}";
 
-    /// <summary>GET /tracks/{urn}/streams — официальные URL (AAC 160 и MP3 128).
-    /// При 401 один раз обновляет access_token (refresh-грант) и повторяет.
-    /// null — не подключено/нет права/трек недоступен (диагностика — в лог).</summary>
+    /// <summary>GET /tracks/{urn}/streams — official URLs (AAC 160 and MP3 128).
+    /// On 401, refreshes the access_token once (refresh grant) and retries.
+    /// null — not connected / no rights / track unavailable (details in the log).</summary>
     public async Task<ScApiStreamUrls?> GetStreamUrlsAsync(string scId, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(scId) || !IsConnected) return null;
@@ -73,15 +75,15 @@ public sealed class SoundCloudOfficialApi
             $"{ApiBase}/tracks/{TrackUrn(scId)}/streams", forceRefresh: false, ct);
         if (status == 401)
         {
-            // Access_token протух (живёт ~час): рефреш и один повтор.
+            // Access_token expired (lives ~1h): refresh and one retry.
             Logger.Info("SoundCloud official streams 401 — refreshing access token");
             (status, body) = await SendAuthorizedAsync(
                 $"{ApiBase}/tracks/{TrackUrn(scId)}/streams", forceRefresh: true, ct);
         }
         if (status != 200)
         {
-            // 403 с «disallowed» в теле — блокировка самого клиента API (все треки),
-            // а не отказ в правах на конкретный трек: запоминаем для фолбэк-логики.
+            // A 403 with "disallowed" in the body blocks the API client itself (all tracks),
+            // not a per-track permission denial: remember it for the fallback logic.
             if (status == 403 && body.Contains("disallowed", StringComparison.OrdinalIgnoreCase))
             {
                 if (!_disallowed)
@@ -101,16 +103,16 @@ public sealed class SoundCloudOfficialApi
                 ? v.GetString() : null;
         var urls = new ScApiStreamUrls(Get("hls_aac_160_url"), Get("hls_mp3_128_url"));
         var preview = Get("preview_mp3_128_url");
-        // Диагностика «не играют»: если пришли только preview-стримы — аккаунт/приложение
-        // не имеет прав на полную версию (Go+ / региональные ограничения), это не сбой сети.
+        // "Won't play" diagnostics: preview-only streams mean the account/app
+        // lacks full-version rights (Go+ / regional restrictions), not a network failure.
         if (!urls.HasAny)
             Logger.Warn($"SoundCloud official streams: full URLs absent " +
                         $"(preview={preview != null}, scId={scId}) — no playback rights");
         return urls;
     }
 
-    /// <summary>GET /tracks/{urn}/related — related-треки (рекомендации SC).
-    /// Возвращает до limit треков, доступных для стриминга аккаунту.</summary>
+    /// <summary>GET /tracks/{urn}/related — related tracks (SC recommendations).
+    /// Returns up to limit tracks the account can stream.</summary>
     public async Task<List<ScTrack>?> GetRelatedTracksAsync(string scId, int limit, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(scId) || !IsConnected) return null;
@@ -145,7 +147,7 @@ public sealed class SoundCloudOfficialApi
             list.Add(new ScTrack
             {
                 Id = id,
-                Title = title ?? "(без названия)",
+                Title = title ?? Loc.Get("UntitledTrack"),
                 User = new ScUser { Username = artist ?? "" },
                 DurationMs = durationMs ?? 0,
                 ArtworkUrl = artwork,
@@ -156,8 +158,8 @@ public sealed class SoundCloudOfficialApi
         return list;
     }
 
-    /// <summary>GET /me/likes/tracks — официальные лайки аккаунта (вместо парсинга
-    /// неофициального эндпоинта, который периодически ломал JSON).</summary>
+    /// <summary>GET /me/likes/tracks — the account's official likes (instead of parsing
+    /// the unofficial endpoint, whose JSON periodically broke).</summary>
     public async Task<List<ScTrack>?> GetLikedTracksAsync(int limit, CancellationToken ct = default)
     {
         if (!IsConnected) return null;
@@ -189,7 +191,7 @@ public sealed class SoundCloudOfficialApi
             list.Add(new ScTrack
             {
                 Id = id,
-                Title = title ?? "(без названия)",
+                Title = title ?? Loc.Get("UntitledTrack"),
                 User = new ScUser { Username = artist ?? "" },
                 DurationMs = durationMs ?? 0,
                 ArtworkUrl = artwork,
@@ -200,12 +202,12 @@ public sealed class SoundCloudOfficialApi
         return list;
     }
 
-    // ========================= Сетевые примитивы ====================
+    // ========================= Network primitives ====================
 
     private static bool IsSuccess(int status) => status is >= 200 and < 300;
 
-    /// <summary>GET с Authorization: OAuth. 401 + forceRefresh — перед запросом обновить токен.
-    /// Тело — строка; сетевые повторы (direct↔прокси) делает SoundCloudHttp.</summary>
+    /// <summary>GET with Authorization: OAuth. 401 + forceRefresh — refresh the token before the request.
+    /// Body as a string; network retries (direct↔proxy) are handled by SoundCloudHttp.</summary>
     private async Task<(int Status, string Body)> SendAuthorizedAsync(
         string url, bool forceRefresh, CancellationToken ct)
     {

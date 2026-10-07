@@ -8,9 +8,9 @@ using System.Windows.Media.Animation;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Плавная прокрутка колеса мыши: перехватывает PreviewMouseWheel у ScrollViewer
-/// и анимирует вертикальное смещение вместо мгновенного прыжка на строку.
-/// Включается через attached-свойство в неявном стиле ScrollViewer.
+/// Smooth mouse-wheel scrolling: hooks PreviewMouseWheel on a ScrollViewer and animates
+/// the vertical offset instead of an instant per-line jump. Enabled via an attached
+/// property in the implicit ScrollViewer style.
 /// </summary>
 public static class SmoothScroll
 {
@@ -18,12 +18,12 @@ public static class SmoothScroll
         DependencyProperty.RegisterAttached("Enabled", typeof(bool), typeof(SmoothScroll),
             new PropertyMetadata(false, OnEnabledChanged));
 
-    // Анимируем это attached-свойство; каждый кадр подтягиваем реальный offset.
+    // This attached property is animated; each frame pulls the real offset along.
     private static readonly DependencyProperty AnimatedOffsetProperty =
         DependencyProperty.RegisterAttached("AnimatedOffset", typeof(double), typeof(SmoothScroll),
             new PropertyMetadata(0.0, OnAnimatedOffsetChanged));
 
-    // Кэш режима смещения конкретного ScrollViewer (пиксели/ items) — см. IsPixelOffsetMode.
+    // Cache of a ScrollViewer's offset mode (pixels/items) — see IsPixelOffsetMode.
     private static readonly DependencyProperty PixelModeCacheProperty =
         DependencyProperty.RegisterAttached("PixelModeCache", typeof(bool?), typeof(SmoothScroll),
             new PropertyMetadata(null));
@@ -43,10 +43,10 @@ public static class SmoothScroll
     }
 
     /// <summary>
-    /// Прогрев пути плавного скролла сразу после подключения поведения: первый глайд
-    /// страницы иначе JIT-ит анимационный конвейер и первый MeasureWindow со смещением —
-    /// пользователь ловил микро-фриз на ПЕРВОМ прокруте каждой страницы. Незаметный
-    /// глайд на 1px (1мс) делает это до первого реального колеса.
+    /// Warm up the smooth-scroll path right after the behavior attaches: otherwise the
+    /// first glide of a page JITs the animation pipeline and the first MeasureWindow with
+    /// an offset — the user caught a micro-freeze on the FIRST scroll of every page. An
+    /// imperceptible 1px glide (1ms) does it before the first real wheel.
     /// </summary>
     private static void WarmUpScrollPath(ScrollViewer sv)
     {
@@ -58,7 +58,7 @@ public static class SmoothScroll
                 sv.BeginAnimation(AnimatedOffsetProperty,
                     new DoubleAnimation(sv.VerticalOffset + 1, TimeSpan.FromMilliseconds(1)));
             }
-            catch { /* окно уже закрыто — неважно */ }
+            catch { /* window already closed — doesn't matter */ }
         }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
@@ -66,10 +66,10 @@ public static class SmoothScroll
         => ((ScrollViewer)d).ScrollToVerticalOffset((double)e.NewValue);
 
     /// <summary>
-    /// Режим смещения: пиксели (наш VirtualizingWrapPanel со своим IScrollInfo и
-    /// обычные ScrollViewer) или ITEMS (CanContentScroll у списков без пиксельного
-    /// IScrollInfo — например GridView-список треков плейлиста). Раньше шаг 192
-    /// уходил в item-режим как 192 СТРОКИ за щелчок — список улетал в конец.
+    /// Offset mode: pixels (our VirtualizingWrapPanel with its own IScrollInfo, and regular
+    /// ScrollViewers) or ITEMS (CanContentScroll on lists without a pixel IScrollInfo —
+    /// e.g. the playlist's GridView track list). Previously a step of 192 went into item
+    /// mode as 192 LINES per click — the list flew to the end.
     /// </summary>
     private static bool IsPixelOffsetMode(ScrollViewer sv)
     {
@@ -98,10 +98,10 @@ public static class SmoothScroll
         var sv = (ScrollViewer)sender;
         if (sv.ScrollableHeight <= 0) return;
 
-        // Длинный-плавный глайд: пере-реализация карточек каждый кадр (причина
-        // прежних коротких 320мс) больше не стоит ничего — панель не перемеряет
-        // валидные карточки, а BufferRows=2 реализует ряд загодя. Шаг прежний
-        // (192px), скорость ниже — прокрутка «скользит», а не дёргается.
+        // Long smooth glide: card re-realization every frame (the reason for the former
+        // short 320ms) no longer costs anything — the panel doesn't re-measure valid cards
+        // and BufferRows=2 realizes a row ahead. Same step (192px), lower speed —
+        // scrolling "glides" instead of jerking.
         var pixel = IsPixelOffsetMode(sv);
         double target;
         double glideMs;
@@ -113,7 +113,7 @@ public static class SmoothScroll
         }
         else
         {
-            // item-режим: 3 строки за щелчок (как дефолтный wheel у списков).
+            // item mode: 3 rows per click (like the default list wheel).
             target = Math.Clamp(sv.VerticalOffset - Math.Sign(e.Delta) * 3, 0, sv.ScrollableHeight);
             glideMs = 320;
         }

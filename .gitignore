@@ -12,16 +12,16 @@ dist/
 *.db-shm
 *.db-wal
 
-# Тяжёлые пользовательские фоны (гифки >100 МБ) — в git не входят
+# Heavy user-provided backgrounds (gifs >100 MB)
 Background/
 *.mp3
 
-# Runtime-артефакты zapret-хелпера
-src/BatPlayer/Tools/zapret/command.txt
-src/BatPlayer/Tools/zapret/status.txt
-# Сторонние бинарники инструментов — в git не входят (см. README: откуда скачать)
-src/BatPlayer/Tools/ffmpeg.exe
-src/BatPlayer/Tools/zapret/bin/
+# Runtime artifacts of the bypass helper
+src/BatPlayer/Tools/bypass/command.txt
+src/BatPlayer/Tools/bypass/status.txt
+
+# Third-party tool binaries are not tracked (see README for sources)
+src/BatPlayer/Tools/bypass/bin/
 *.exe
 installer/dist/
 

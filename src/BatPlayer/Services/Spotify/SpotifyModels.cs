@@ -3,14 +3,14 @@ using System.Text.Json.Serialization;
 
 namespace BatPlayer.Services.Spotify;
 
-/// <summary>Содержимое spotify_auth.json: OAuth-токены и профиль аккаунта.</summary>
+/// <summary>Contents of spotify_auth.json: OAuth tokens and account profile.</summary>
 public sealed class SpotifyAuthFile
 {
     public string? AccessToken { get; set; }
 
     public string? RefreshToken { get; set; }
 
-    /// <summary>Момент истечения access_token (ISO 8601, UTC).</summary>
+    /// <summary>access_token expiration (ISO 8601, UTC).</summary>
     public string? ExpiresAt { get; set; }
 
     public string? UserId { get; set; }
@@ -24,7 +24,7 @@ public sealed class SpotifyAuthFile
     public string? LastSyncedAtUtc { get; set; }
 }
 
-/// <summary>Ответ https://accounts.spotify.com/api/token.</summary>
+/// <summary>Response of https://accounts.spotify.com/api/token.</summary>
 public sealed class SpotifyTokenResponse
 {
     [JsonPropertyName("access_token")]
@@ -43,7 +43,7 @@ public sealed class SpotifyTokenResponse
     public string? RefreshToken { get; set; }
 }
 
-/// <summary>Страница /v1/me/tracks.</summary>
+/// <summary>One /v1/me/tracks page.</summary>
 public sealed class SpotifySavedTracksResponse
 {
     [JsonPropertyName("href")]
@@ -68,7 +68,7 @@ public sealed class SpotifySavedTracksResponse
     public int Total { get; set; }
 }
 
-/// <summary>Элемент saved track: дата добавления + сам трек.</summary>
+/// <summary>Saved-track item: added-at date plus the track.</summary>
 public sealed class SpotifySavedTrackItem
 {
     [JsonPropertyName("added_at")]
@@ -78,7 +78,7 @@ public sealed class SpotifySavedTrackItem
     public SpotifyTrack? Track { get; set; }
 }
 
-/// <summary>Трек /v1/me/tracks (используются только нужные поля).</summary>
+/// <summary>A /v1/me/tracks track (only the fields in use are mapped).</summary>
 public sealed class SpotifyTrack
 {
     [JsonPropertyName("id")]
@@ -93,8 +93,8 @@ public sealed class SpotifyTrack
     [JsonPropertyName("explicit")]
     public bool Explicit { get; set; }
 
-    /// <summary>Локальный файл пользователя в библиотеке Spotify: приходит без Id
-    /// и ломает подсчёт страниц — при синке пропускается.</summary>
+    /// <summary>User's local file in the Spotify library: arrives without an Id and
+    /// breaks page counting — skipped during sync.</summary>
     [JsonPropertyName("is_local")]
     public bool IsLocal { get; set; }
 
@@ -159,7 +159,7 @@ public sealed class SpotifyExternalUrls
     public string Spotify { get; set; } = string.Empty;
 }
 
-/// <summary>Профиль /v1/me — заполняется после первого подключения.</summary>
+/// <summary>/v1/me profile — filled after the first connect.</summary>
 public sealed class SpotifyUserProfile
 {
     [JsonPropertyName("id")]
@@ -172,7 +172,7 @@ public sealed class SpotifyUserProfile
     public string? Email { get; set; }
 }
 
-/// <summary>Ошибка Web API с HTTP-статусом (401/403 — токен отозван).</summary>
+/// <summary>Web API error with HTTP status (401/403 — token revoked).</summary>
 public sealed class SpotifyApiException : Exception
 {
     public int StatusCode { get; }

@@ -9,29 +9,29 @@ using BatPlayer.Models;
 
 namespace BatPlayer.Services;
 
-/// <summary>Итоговый срез статистики за период.</summary>
+/// <summary>Aggregated statistics snapshot for a period.</summary>
 public sealed class StatsResult
 {
-    /// <summary>Сколько РАЗНЫХ треков было прослушано.</summary>
+    /// <summary>How many DIFFERENT tracks were listened to.</summary>
     public int UniqueTracks { get; init; }
 
-    /// <summary>Сколько всего прослушиваний (включая повторы) за период.</summary>
+    /// <summary>Total number of listens (including repeats) for the period.</summary>
     public int Plays { get; init; }
 
-    /// <summary>Суммарное время прослушанной музыки, часы.</summary>
+    /// <summary>Total time of listened music, hours.</summary>
     public double Hours { get; init; }
 
-    /// <summary>Топ-5 исполнителей по числу прослушиваний.</summary>
+    /// <summary>Top-5 artists by play count.</summary>
     public List<(string Artist, int Plays)> TopArtists { get; init; } = new();
 
-    /// <summary>Топ-10 треков по числу прослушиваний.</summary>
+    /// <summary>Top-10 tracks by play count.</summary>
     public List<(string Title, string Artist, int Plays)> TopTracks { get; init; } = new();
 
-    /// <summary>Трек, который чаще всего ставили на повтор (null — нечего показывать).</summary>
+    /// <summary>Track most often put on repeat (null — nothing to show).</summary>
     public (string Title, string Artist, int Plays)? MostReplayed { get; init; }
 }
 
-/// <summary>Период статистики.</summary>
+/// <summary>Statistics period.</summary>
 public enum StatsPeriod
 {
     Day,
@@ -47,8 +47,8 @@ public sealed class HistoryService
 
     public HistoryService(SqliteConnection conn) => _conn = conn;
 
-    /// <summary>Записана новая прослушка: открытая страница «Недавно прослушанные»
-    /// перечитывает список (новый трек наверх, 50-й уходит) без повторного захода.</summary>
+    /// <summary>A new play was logged: an open "Recently played" page re-reads the
+    /// list (new track on top, the 50th drops off) without revisiting.</summary>
     public event Action? PlayLogged;
 
     public async Task RecordPlayAsync(long trackId)
@@ -69,13 +69,14 @@ public sealed class HistoryService
     }
 
     /// <summary>
-    /// Регистрация прослушки: для треков библиотеки обновляются агрегаты (history/tracks),
-    /// для ВСЕХ треков пишется строка в play_log со СНИМКОМ трека (+platform_id и
-    /// artwork_path: прослушки вне справочников — рекомендации «Моей волны», которых нет
-    /// среди лайков — восстанавливаются на «Недавно прослушанных» по снимку). Платформенные
-    /// runtime-карточки (SoundCloud/VK/Яндекс Музыка) имеют отрицательный Id и в таблице
-    /// tracks отсутствуют — вставка в history с FK падала (SQLite Error 19) и прерывала
-    /// запись прослушки, поэтому для них агрегаты пропускаются.
+    /// Records a listen: for library tracks the aggregates (history/tracks) are
+    /// updated; for ALL tracks a row is written to play_log with a SNAPSHOT of the
+    /// track (+platform_id and artwork_path: listens outside the catalog — "My wave"
+    /// recommendations not present among likes — are restored on "Recently played"
+    /// from the snapshot). Platform runtime cards (SoundCloud/VK/Yandex Music) have
+    /// negative Ids and are absent from the tracks table — the history insert with
+    /// FK used to fail (SQLite Error 19) and interrupt logging, so aggregates are
+    /// skipped for them.
     /// </summary>
     public async Task RecordPlayAsync(Track track)
     {
@@ -113,7 +114,7 @@ public sealed class HistoryService
             new { pos, id = trackId });
     }
 
-    // ============================ Статистика ============================
+    // ============================ Statistics ============================
 
     private static string SinceUtcIso(StatsPeriod period) => period switch
     {
@@ -125,15 +126,16 @@ public sealed class HistoryService
     };
 
     /// <summary>
-    /// Полный срез статистики за период. Агрегация в C# (не SQL), чтобы соавторов
-    /// разбирать по ArtistHelper.Split: строка "August, TikoTheCEO" даёт прослушку
-    /// ОБОИМ артистам, а регистронезависимый ключ склеивает "Kai Angel"/"kai angel"
-    /// и треки разных платформ.
-    /// Вся работа — на фоновом потоке через ОТДЕЛЬНОЕ read-only соединение:
-    /// async-методы Microsoft.Data.Sqlite на самом деле синхронны, и запрос +
-    /// агрегация play_log на общем UI-соединении подвешивали интерфейс на время
-    /// пересчёта (в т.ч. мешали тикам позиции плеера). Отдельное соединение ещё
-    /// и не спорит с записью прослушек на общем.
+    /// Full statistics snapshot for a period. Aggregation in C# (not SQL) so that
+    /// featured artists can be split via ArtistHelper.Split: a string like
+    /// "August, TikoTheCEO" counts as a play for BOTH artists, and the
+    /// case-insensitive key merges "Kai Angel"/"kai angel" across tracks from
+    /// different platforms.
+    /// All work runs on a background thread via a SEPARATE read-only connection:
+    /// Microsoft.Data.Sqlite async methods are actually synchronous, and the query
+    /// + play_log aggregation on the shared UI connection froze the UI during the
+    /// recompute (including blocking player position ticks). The separate
+    /// connection also avoids contention with listen writes on the shared one.
     /// </summary>
     public async Task<StatsResult> GetStatsAsync(StatsPeriod period)
     {
@@ -158,7 +160,7 @@ public sealed class HistoryService
         });
     }
 
-    /// <summary>Агрегация строк play_log в StatsResult (чистая функция — удобно тестировать).</summary>
+    /// <summary>Aggregates play_log rows into a StatsResult (pure function — easy to test).</summary>
     private static StatsResult ComputeStats(List<(string Title, string Artist, long DurationMs)> rows)
     {
         var plays = rows.Count;

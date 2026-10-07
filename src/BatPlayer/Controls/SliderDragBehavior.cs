@@ -10,28 +10,27 @@ using System.Windows.Media;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Позволяет зажать ЛКМ в любой точке полоски слайдера и тащить ползунок,
-/// не целясь точно в бегунок.
-/// Поведение:
-/// - клик в любой точке сразу прыгает ползунком в точку клика и (если задан
-///   SeekCommand) немедленно вызывает его — мгновенный отклик, без ожидания
-///   отпускания;
-/// - при перетаскивании Value обновляется локально (без seek на каждый пиксель),
-///   финальный SeekCommand вызывается по отпусканию;
-/// - OneWay-биндинг Value (позиция воспроизведения) на время перетаскивания
-///   отключается и восстанавливается по отпусканию / потере capture;
-/// - TwoWay-биндинг (громкость) НЕ отключается: локальные присваивания Value
-///   сами проталкиваются в источник (привязка при этом не рвётся), поэтому
-///   громкость меняется непрерывно уже в процессе движения.
+/// Lets the user press LMB anywhere on the slider track and drag the thumb without
+/// aiming exactly at it.
+/// Behavior:
+/// - a click anywhere jumps the thumb to the click point and (if SeekCommand is set)
+///   invokes it immediately — instant response, no waiting for release;
+/// - while dragging, Value updates locally (no seek per pixel); the final SeekCommand
+///   runs on release;
+/// - a OneWay Value binding (playback position) is detached while dragging and restored
+///   on release / capture loss;
+/// - a TwoWay binding (volume) is NOT detached: local Value assignments push through to
+///   the source themselves (the binding stays intact), so the volume changes continuously
+///   while moving.
 /// </summary>
 public static class SliderDragBehavior
 {
     private sealed class DragState
     {
         public bool Dragging;
-        public Binding? SavedBinding;  // биндинг Value, снятый при MouseDown (любой режим)
-        public bool BindingDetached;   // снимали ли мы биндинг фактически
-        public long LastSeekTick;      // троттлинг непрерывного seek при перетаскивании
+        public Binding? SavedBinding;  // Value binding saved at MouseDown (any mode)
+        public bool BindingDetached;   // whether we actually detached the binding
+        public long LastSeekTick;      // throttling continuous seek while dragging
     }
 
     private static readonly Dictionary<Slider, DragState> States = new();
@@ -61,9 +60,9 @@ public static class SliderDragBehavior
             slider.PreviewMouseMove += OnMouseMove;
             slider.PreviewMouseLeftButtonUp += OnMouseUp;
             slider.LostMouseCapture += OnLostMouseCapture;
-            // Bubbled-подписка с handledEventsToo: штатный Slider сам ставит бегунок
-            // в точку клика (IsMoveToPointEnabled) и помечает событие обработанным —
-            // нам нужно выполниться ПОСЛЕ него, когда Value уже равен точке клика.
+            // Bubbled subscription with handledEventsToo: the stock Slider moves the thumb
+            // to the click point itself (IsMoveToPointEnabled) and marks the event handled —
+            // we need to run AFTER it, when Value already equals the click point.
             slider.AddHandler(UIElement.MouseLeftButtonDownEvent,
                 new MouseButtonEventHandler(OnMouseDownBubbled), true);
         }
@@ -88,10 +87,9 @@ public static class SliderDragBehavior
 
         var st = State(slider);
 
-        // Захватываем ЛЮБОЙ активный биндинг Value. Снимаем только не-TwoWay
-        // (позиция воспроизведения): иначе он будет бороться с перетаскиванием.
-        // TwoWay (громкость) оставляем на месте — через него Value доходит
-        // до источника непрерывно, см. шапку класса.
+        // Capture ANY active Value binding. Detach only non-TwoWay ones (playback
+        // position): otherwise it would fight the dragging. TwoWay (volume) stays in
+        // place — Value reaches the source continuously through it, see the class header.
         st.SavedBinding = null;
         st.BindingDetached = false;
         if (slider.GetBindingExpression(RangeBase.ValueProperty) is { } bex)
@@ -100,24 +98,24 @@ public static class SliderDragBehavior
             if (bex.ParentBinding.Mode != BindingMode.TwoWay)
             {
                 st.BindingDetached = true;
-                var keep = slider.Value; // позиция до отвязки
+                var keep = slider.Value; // position before detaching
                 slider.ClearValue(RangeBase.ValueProperty);
-                // ClearValue сбрасывает Value в дефолт — возвращаем, чтобы бегунок
-                // не прыгал в ноль при клике прямо по нему (нативный move-to-point
-                // сработает только для кликов по дорожке).
+                // ClearValue resets Value to default — restore it so the thumb doesn't
+                // jump to zero on a click right on the thumb (native move-to-point only
+                // works for clicks on the track).
                 slider.Value = keep;
             }
         }
 
         st.Dragging = true;
         slider.CaptureMouse();
-        // e.Handled НЕ ставим: штатный Slider.OnMouseLeftButtonDown (move-to-point,
-        // IsMoveToPointEnabled) должен отработать и поставить бегунок в точку клика —
-        // наш seek выполнится в OnMouseDownBubbled уже по новому значению.
+        // Don't set e.Handled: the stock Slider.OnMouseLeftButtonDown (move-to-point,
+        // IsMoveToPointEnabled) must run and move the thumb to the click point —
+        // our seek runs in OnMouseDownBubbled on the new value.
     }
 
-    // Выполняется ПОСЛЕ штатного Slider.OnMouseLeftButtonDown: бегунок уже
-    // переместился в точку клика (IsMoveToPointEnabled) — теперь seek по факту.
+    // Runs AFTER the stock Slider.OnMouseLeftButtonDown: the thumb has already moved
+    // to the click point (IsMoveToPointEnabled) — now seek on fact.
     private static void OnMouseDownBubbled(object sender, MouseButtonEventArgs e)
     {
         var slider = (Slider)sender;
@@ -137,9 +135,9 @@ public static class SliderDragBehavior
 
         ApplyFromMouse(slider, e);
 
-        // Непрерывный seek при зажатой кнопке (как в Spotify/YouTube): пока тянем,
-        // позиция трека следует за курсором с троттлингом ~150 мс — финальный
-        // seek всё равно выполняется при отпускании.
+        // Continuous seek while the button is held (like Spotify/YouTube): while dragging,
+        // the track position follows the cursor throttled to ~150ms — the final seek
+        // runs on release anyway.
         var now = Environment.TickCount64;
         if (now - st.LastSeekTick < 150)
             return;
@@ -157,9 +155,9 @@ public static class SliderDragBehavior
         st.Dragging = false;
         if (slider.IsMouseCaptured) slider.ReleaseMouseCapture();
 
-        // Финальный seek по фактическому положению после перетаскивания.
-        // Порядок важен: сначала seek (VM оптимистично обновит Position),
-        // затем восстановление биндинга — тот подтянет уже новую позицию.
+        // Final seek at the actual position after dragging.
+        // Order matters: seek first (the VM optimistically updates Position),
+        // then restore the binding — it picks up the new position.
         GetSeekCommand(slider)?.Execute(ValueToPercent(slider));
 
         RestoreBinding(slider, st);
@@ -172,18 +170,17 @@ public static class SliderDragBehavior
         var st = State(slider);
         if (!st.Dragging) return;
 
-        // Захват мог перехватить СОБСТВЕННЫЙ Thumb слайдера (пользователь нажал
-        // прямо на бегунок: наш Preview-обработчик отработал раньше и захватил
-        // мышь слайдером, затем нативный Thumb забрал capture себе). Это часть
-        // нормального перетаскивания: drag продолжается (события всё равно
-        // проходят через Preview-обработчики слайдера на пути к Thumb), а вот
-        // преждевременное завершение здесь ломало таймлайн — биндинг
-        // возвращался, тики позиции отбрасывали бегунок назад каждые 250 мс,
-        // и финальный seek по отпусканию не выполнялся вовсе.
+        // The capture may have been taken by the slider's OWN Thumb (the user pressed
+        // right on the thumb: our Preview handler ran first and captured the mouse to
+        // the slider, then the native Thumb took capture for itself). This is part of
+        // normal dragging: the drag continues (events still pass through the slider's
+        // Preview handlers on the way to the Thumb), while finishing early here broke
+        // the timeline — the binding returned, position ticks threw the thumb back
+        // every 250ms, and the final seek on release never ran at all.
         if (Mouse.Captured is Thumb) return;
 
-        // Потеря capture (Alt+Tab, системное меню и т.п.): завершаем drag
-        // и возвращаем биндинг на место.
+        // Capture lost (Alt+Tab, system menu etc.): finish the drag
+        // and put the binding back.
         st.Dragging = false;
         RestoreBinding(slider, st);
     }
@@ -202,10 +199,10 @@ public static class SliderDragBehavior
 
     private static void ApplyFromMouse(Slider slider, MouseEventArgs e)
     {
-        // Позиция мыши — строго из ЖИВОГО устройства (Mouse.GetPosition), а не из
-        // аргументов события: у PreviewMouseButtonDown-аргументов позиция
-        // относительно PART_Track периодически приходила нулевой, из-за чего клик
-        // по таймлайну вычислял 0% и трек «начинался сначала».
+        // Mouse position strictly from the LIVE device (Mouse.GetPosition), not from the
+        // event args: the PreviewMouseButtonDown args' position relative to PART_Track
+        // periodically arrived as zero, so a timeline click computed 0% and the track
+        // "started over".
         if (slider.Template?.FindName("PART_Track", slider) is Track track)
         {
             var value = track.ValueFromPoint(Mouse.GetPosition(track));
@@ -216,13 +213,13 @@ public static class SliderDragBehavior
             }
         }
 
-        // Fallback, если шаблон ещё не применён / Track не найден: ручной расчёт.
+        // Fallback if the template isn't applied yet / Track not found: manual calculation.
         var p = Mouse.GetPosition(slider);
         bool vertical = slider.Orientation == Orientation.Vertical;
         double length = vertical ? slider.ActualHeight : slider.ActualWidth;
         double pos = vertical ? p.Y : p.X;
 
-        double inset = 7; // половина ширины бегунка
+        double inset = 7; // half the thumb width
         if (slider.Template?.FindName("PART_Track", slider) is Track tr &&
             tr.Thumb is { } thumb)
             inset = vertical ? thumb.ActualHeight / 2 : thumb.ActualWidth / 2;

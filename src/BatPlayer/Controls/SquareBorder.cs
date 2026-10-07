@@ -5,13 +5,13 @@ using System.Windows.Controls;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Border-квадрат: высота всегда равна ширине в measure-проходе. Замена связки
-/// Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}" на обложках
-/// карточек: тот биндинг давал КОРРЕКТНЫЙ квадрат только после arrange — карточка
-/// мерилась дважды (второй лишний проход компоновки на каждую заново реализованную
-/// виртуализирующей панелью карточку; при скролле новых карточок десятки в секунду).
-/// Здесь квадрат известен уже в measure: один проход, без биндингов.
-/// Бесконечная ширина (measure вне слота панели) — обычное поведение Border.
+/// Square Border: height always equals width in the measure pass. Replaces the
+/// Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}" binding on card
+/// covers: that binding produced a CORRECT square only after arrange — the card was
+/// measured twice (an extra layout pass for every card re-realized by the virtualizing
+/// panel; dozens of new cards per second while scrolling). Here the square is known
+/// already in measure: one pass, no bindings. Infinite width (measure outside a panel
+/// slot) falls back to regular Border behavior.
 /// </summary>
 public class SquareBorder : Border
 {
@@ -21,7 +21,7 @@ public class SquareBorder : Border
             return base.MeasureOverride(constraint);
 
         var width = constraint.Width;
-        // Хром (рамка+паддинг) съедает ширину: ребёнку отдаём внутренний квадрат.
+        // Chrome (border+padding) eats width: give the child the inner square.
         var horizontal = BorderThickness.Left + BorderThickness.Right + Padding.Left + Padding.Right;
         var vertical = BorderThickness.Top + BorderThickness.Bottom + Padding.Top + Padding.Bottom;
         base.MeasureOverride(new Size(Math.Max(0, width - horizontal), Math.Max(0, width - vertical)));

@@ -9,22 +9,18 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты чистых функций VK-слоя веб-сессии: разбор позиционного payload al_audio.php
-/// (PositionalAudioParser), маппинг в VkTrackRow, детект страницы логина (протухшая
-/// сессия), guard пагинации load_section, извлечение userId из HTML и файл авторизации
-/// vk_auth.json. Сеть не тестируется: живой логин/синк в юнит-тесты не входит.
+/// Tests for pure functions of the VK web-session layer: positional al_audio.php payload
+/// parsing, VkTrackRow mapping, login-page (expired session) detection, load_section
+/// pagination guard, userId extraction from HTML and the vk_auth.json file. No network.
 /// </summary>
 public class VkServiceTests
 {
-    // ===================== Позиционный payload al_audio =====================
+    // ===================== Positional al_audio payload =====================
 
-    // Фикстура повторяет структуру живого ответа al_audio.php (act=load_section):
-    // префикс <!json>, обёртка payload/data, треки — ПОЗИЦИОННЫЕ массивы:
-    //   [0]=audio id, [1]=owner_id, [2]=стрим-url, [3]=artist, [4]=title, [5]=duration,
-    //   далее служебные поля (флаги/строки), [13]-like — вложенный массив обложек.
-    // Второй трек — без вложенных обложек, но с картинкой на верхнем уровне (раскладки
-    // меняются). Третий трек — без url (скрыт/удалён). Служебный объект data несёт
-    // total/nextOffset. Внутри — декой-массивы, которые не должны сойти за треки.
+    // Fixture mirrors a live al_audio.php (act=load_section) response: <!json> prefix,
+    // payload/data wrapper, tracks as positional arrays ([2]=stream url, [3]=artist,
+    // [4]=title, [5]=duration). Second track has a top-level image instead of nested
+    // covers; third has no url. data carries total/nextOffset; decoy arrays inside.
     private const string AlAudioFixture = """
         <!json>{"payload":[{"code":0,"data":["load_section",[
           [456239017, 53992517, "https://psv4.vkuseraudio.net/s/v1/acq/a1/b1/t1.mp3?extra=abc",
@@ -48,7 +44,7 @@ public class VkServiceTests
         Assert.Equal(0, payload.ErrorCode);
         Assert.Equal(3, payload.ReportedTotal);
         Assert.Equal(0, payload.NextOffset);
-        // Трек без url (скрыт/удалён) отсеян ещё на этапе кандидата (нет http-строки).
+        // Track without url filtered out at the candidate stage (no http string).
         Assert.Equal(2, payload.Tracks.Count);
     }
 
@@ -59,14 +55,14 @@ public class VkServiceTests
 
         Assert.Equal(456239017, track.AudioId);
         Assert.Equal(53992517, track.OwnerId);
-        // vk_id = "{owner_id}_{id}" — тот же формат, что давал audio.get.
+        // vk_id = "{owner_id}_{id}" — the format audio.get produced.
         Assert.Equal("53992517_456239017", track.VkId);
-        // Первая не-http строка — artist, вторая — title (VK отдаёт artist раньше title).
+        // First non-http string is artist, second is title.
         Assert.Equal("Кино", track.Artist);
         Assert.Equal("Звезда по имени Солнце", track.Title);
-        // duration — первое целое после позиции title (секунды).
+        // duration is the first integer after title (seconds).
         Assert.Equal(232, track.DurationSec);
-        // Стрим — первый http не-картинка; обложка — вложенный .jpg (element[13]-like).
+        // Stream is the first non-image http string; artwork is the nested .jpg.
         Assert.Equal("https://psv4.vkuseraudio.net/s/v1/acq/a1/b1/t1.mp3?extra=abc", track.StreamUrl);
         Assert.Equal("https://sun9-1.userapi.com/c1/v1/a.jpg", track.ArtworkUrl);
         Assert.True(track.IsPlayable);
@@ -77,8 +73,8 @@ public class VkServiceTests
     {
         var track = ParseFixture().Tracks[1];
 
-        // Картинка на верхнем уровне НЕ считается стримом; .jpg-classification работает
-        // и без вложенных массивов обложек.
+        // Top-level image is not a stream; .jpg classification works without nested
+        // cover arrays too.
         Assert.Equal("https://sun9-2.userapi.com/c2/v2/cover.jpg", track.ArtworkUrl);
         Assert.Equal("https://psv4.vkuseraudio.net/s/v1/acq/a2/b2/t2.mp3?extra=def", track.StreamUrl);
         Assert.Equal("Gruppa krovi", track.Title);
@@ -88,8 +84,8 @@ public class VkServiceTests
     [Fact]
     public void ParseTrackElement_WithoutUrl_IsNotPlayable()
     {
-        // Скрытые/удалённые записи: массив валиден, но url пуст — IsPlayable=false
-        // (в каталог такие не попадают, см. ExtractRows).
+        // Hidden/removed entries: valid array but empty url — IsPlayable=false,
+        // never reaches the catalog (see ExtractRows).
         var track = ParseTrack("""[456239019, 53992517, "", "Кино", "Пачка сигарет", 262, 0, 0, "", 0, 0, 0, 0, 0, 0]""");
 
         Assert.NotNull(track);
@@ -101,7 +97,7 @@ public class VkServiceTests
     [Fact]
     public void ParseTrackElement_ImageOnlyHttpString_IsNotAStream()
     {
-        // Единственная http-строка — картинка: стримом её считать нельзя.
+        // Only http string is an image — cannot be a stream.
         var track = ParseTrack("""
             [456239020, 53992517, "https://sun9-3.userapi.com/x.jpg", "Кино", "Апрель", 200, 0, 0, "", 0, 0, 0, 0, 0, 0]
             """);
@@ -115,7 +111,7 @@ public class VkServiceTests
     [Fact]
     public void ParseTrackElement_SingleMergedString_SplitsArtistTitle()
     {
-        // Иногда VK склеивает "Artist - Title" — делим по первому " - ".
+        // VK sometimes merges "Artist - Title" — split on the first " - ".
         var track = ParseTrack("""[10, 20, "https://x/t.mp3", "Кино - Звезда", 232, 0, 0, 0, 0, 0, 0, 0]""");
 
         Assert.NotNull(track);
@@ -158,17 +154,17 @@ public class VkServiceTests
     [Fact]
     public void IsTrackCandidate_FiltersDecoys()
     {
-        // Слишком короткий массив; http-строка без длины 12; [0] не целое.
+        // Array too short; http string shorter than 12; [0] not an int.
         Assert.False(PositionalAudioParser.IsTrackCandidate(ToJsonElement("""["https://x/t.mp3"]""")));
         Assert.False(PositionalAudioParser.IsTrackCandidate(ToJsonElement("""[1,2,3,4]""")));
         Assert.False(PositionalAudioParser.IsTrackCandidate(
             ToJsonElement("""["no-int", 555, "https://x/t.mp3", "", "", "", "", "", "", "", "", "", ""]""")));
-        // Владелец-группа (отрицательный owner_id) — валидный трек.
+        // Group owner (negative owner_id) is a valid track.
         Assert.True(PositionalAudioParser.IsTrackCandidate(
             ToJsonElement("""[456, -999, "https://x/t.mp3", "a", "t", 100, 0, 0, 0, 0, 0, 0, 0]""")));
     }
 
-    // ===================== Детект страницы логина =====================
+    // ===================== Login page detection =====================
 
     [Fact]
     public void IsLoginHtml_LoginPages_AreDetected()
@@ -183,24 +179,24 @@ public class VkServiceTests
         Assert.False(PositionalAudioParser.IsLoginHtml(AlAudioFixture));
         Assert.False(PositionalAudioParser.IsLoginHtml(""));
         Assert.False(PositionalAudioParser.IsLoginHtml("   "));
-        Assert.False(PositionalAudioParser.IsLoginHtml("0")); // VK иногда отвечает голым "0"
+        Assert.False(PositionalAudioParser.IsLoginHtml("0")); // VK sometimes replies with a bare "0"
     }
 
-    // ===================== Маппинг в VkTrackRow =====================
+    // ===================== Mapping to VkTrackRow =====================
 
     [Fact]
     public void ExtractRows_MapsVkTrackRow()
     {
         var rows = VkService.ExtractRows(ParseFixture().Tracks, "2026-09-16T00:00:00.0000000Z");
 
-        // Неиграбельные (без url) записи в каталог не пишутся.
+        // Unplayable (no url) entries are not written to the catalog.
         Assert.Equal(2, rows.Count);
 
         var first = rows[0];
         Assert.Equal("53992517_456239017", first.VkId);
         Assert.Equal("Звезда по имени Солнце", first.Title);
         Assert.Equal("Кино", first.Artist);
-        // duration в payload — секунды, в БД храним миллисекунды.
+        // payload duration is seconds; DB stores milliseconds.
         Assert.Equal(232_000, first.DurationMs);
         Assert.Equal("https://sun9-1.userapi.com/c1/v1/a.jpg", first.ArtworkUrl);
         Assert.Equal("2026-09-16T00:00:00.0000000Z", first.SyncedAt);
@@ -215,12 +211,12 @@ public class VkServiceTests
     public void BuildVkId_CombinesOwnerAndId()
         => Assert.Equal("53992517_456239017", VkService.BuildVkId(53992517, 456239017));
 
-    // ===================== Пагинация load_section =====================
+    // ===================== load_section pagination =====================
 
     [Fact]
     public void NextAudioOffset_FullPage_Continues()
     {
-        // Получили полную страницу 1000 из 3500 — следующий offset 1000.
+        // Full page of 1000 out of 3500 — next offset 1000.
         Assert.Equal(1000, VkService.NextAudioOffset(0, VkService.PageSize, 3500, VkService.PageSize));
         Assert.Equal(2000, VkService.NextAudioOffset(1000, VkService.PageSize, 3500, VkService.PageSize));
     }
@@ -228,14 +224,14 @@ public class VkServiceTests
     [Fact]
     public void NextAudioOffset_ReachedReportedTotal_Stops()
     {
-        // 3500 из 3500 — конец, несмотря на полную страницу.
+        // 3500 of 3500 — end despite the full page.
         Assert.Null(VkService.NextAudioOffset(3000, 500, 3500, 1000));
     }
 
     [Fact]
     public void NextAudioOffset_ShortPage_Stops()
     {
-        // Страница короче запрошенной — последняя, даже если count не сошёлся.
+        // Page shorter than requested — last one, even if count disagrees.
         Assert.Null(VkService.NextAudioOffset(0, 999, 3500, 1000));
     }
 
@@ -246,7 +242,7 @@ public class VkServiceTests
     [Fact]
     public void NextAudioOffset_ZeroTotal_StopsOnShortPage()
     {
-        // total не пришёл/нулевой: решение по размеру страницы.
+        // Missing/zero total: decide by page size.
         Assert.Equal(1000, VkService.NextAudioOffset(0, 1000, 0, 1000));
         Assert.Null(VkService.NextAudioOffset(0, 400, 0, 1000));
     }
@@ -254,9 +250,9 @@ public class VkServiceTests
     [Fact]
     public void NextWebOffset_ExplicitNextForward_WinsOverCalculation()
     {
-        // Явный nextOffset из payload (вперёд по offset) приоритетен: обычно вся
-        // библиотека приходит одним load_section (короткая страница = стоп),
-        // но VK иногда сам подсказывает продолжение.
+        // Explicit forward nextOffset from the payload wins: usually the whole library
+        // arrives in one load_section (short page = stop), but VK sometimes hints
+        // continuation itself.
         var payload = new AlAudioPayload(new List<ParsedWebAudio>(), NextOffset: 500,
             ReportedTotal: 0, ErrorCode: 0, Parsed: true);
         Assert.Equal(500, VkService.NextWebOffset(0, payload));
@@ -265,7 +261,7 @@ public class VkServiceTests
     [Fact]
     public void NextWebOffset_ExplicitNextNotForward_FallsBackToCalculation()
     {
-        // nextOffset=0 (не сдвигает) — расчёт по total/размеру страницы: 2 < 1000 → конец.
+        // nextOffset=0 (no shift) — fall back to total/page-size math: 2 < 1000 → end.
         var payload = new AlAudioPayload(new List<ParsedWebAudio>(), NextOffset: 0,
             ReportedTotal: 2, ErrorCode: 0, Parsed: true);
         Assert.Null(VkService.NextWebOffset(0, payload));
@@ -274,7 +270,7 @@ public class VkServiceTests
     [Fact]
     public void NextWebOffset_NoExplicitNext_UsesNextAudioOffset()
     {
-        // Полная страница (1000 треков) при total 3500 → следующий offset 1000.
+        // Full page (1000 tracks) with total 3500 → next offset 1000.
         var fullPage = Enumerable.Repeat(
             new ParsedWebAudio { AudioId = 1, OwnerId = 1, StreamUrl = "https://x/t.mp3" }, 1000).ToList();
         var payload = new AlAudioPayload(fullPage, NextOffset: null,
@@ -285,11 +281,11 @@ public class VkServiceTests
     [Fact]
     public void MaxAudioPages_PaginationGuard_IsTen()
     {
-        // Guard зацикливания load_section: не больше 10 страниц.
+        // load_section loop guard: at most 10 pages.
         Assert.Equal(10, VkService.MaxAudioPages);
     }
 
-    // ===================== userId веб-сессии =====================
+    // ===================== Web-session userId =====================
 
     [Fact]
     public void ExtractUserIdFromHtml_BootDataUid_Wins()
@@ -303,7 +299,7 @@ public class VkServiceTests
     {
         Assert.Equal("12345", VkService.ExtractUserIdFromHtml("""{"viewer_id":12345}"""));
         Assert.Equal("12345", VkService.ExtractUserIdFromHtml("…viewer_id=12345&…"));
-        // Последняя надежда — ссылки на профиль.
+        // Last resort: profile links.
         Assert.Equal("777", VkService.ExtractUserIdFromHtml("""<a href="/id777">Me</a>"""));
     }
 
@@ -345,7 +341,7 @@ public class VkServiceTests
 
             var loaded = store.Load();
             Assert.Equal("remixsid=abc123; remixstid=xyz; remixuid=53992517", loaded.CookieHeader);
-            // AccessToken — историческое поле, читается для совместимости старых файлов.
+            // AccessToken is a legacy field, read for old-file compatibility.
             Assert.Equal("legacy-oauth-token", loaded.AccessToken);
             Assert.Equal("53992517", loaded.UserId);
             Assert.Equal("2026-09-16T10:00:00.0000000Z", loaded.SavedAt);
@@ -353,7 +349,7 @@ public class VkServiceTests
 
             store.Delete();
             Assert.False(store.Exists);
-            // Удаление несуществующего файла не падает.
+            // Deleting a missing file does not throw.
             store.Delete();
         }
         finally
@@ -390,7 +386,7 @@ public class VkServiceTests
         }
     }
 
-    // ===================== Хелперы =====================
+    // ===================== Helpers =====================
 
     private static JsonElement ToJsonElement(string json)
         => JsonDocument.Parse(json).RootElement.Clone();

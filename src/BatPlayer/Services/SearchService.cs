@@ -9,8 +9,8 @@ using BatPlayer.Models;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Быстрый полнотекстовый поиск по библиотеке. Использует LIKE с COLLATE NOCASE.
-/// Для десятков тысяч треков работает под 50ms.
+/// Fast full-text search over the library. Uses LIKE with COLLATE NOCASE.
+/// Handles tens of thousands of tracks in under 50ms.
 /// </summary>
 public sealed class SearchService
 {

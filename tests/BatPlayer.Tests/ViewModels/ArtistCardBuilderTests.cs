@@ -7,8 +7,8 @@ using Xunit;
 namespace BatPlayer.Tests.ViewModels;
 
 /// <summary>
-/// Группировка карточек «Исполнителей» из локальных треков + лайков SoundCloud
-/// (ArtistCardBuilder — чистая функция, вынесена из ArtistsViewModel).
+/// Grouping "Artists" cards from local tracks + SoundCloud likes
+/// (ArtistCardBuilder — pure function extracted from ArtistsViewModel).
 /// </summary>
 public class ArtistCardBuilderTests
 {
@@ -41,7 +41,7 @@ public class ArtistCardBuilderTests
 
         var card = Assert.Single(cards);
         Assert.Equal("neon fox", card.Key);
-        Assert.Equal("Neon Fox", card.DisplayName); // первое увиденное написание
+        Assert.Equal("Neon Fox", card.DisplayName); // first seen spelling
         Assert.Equal(2, card.TrackCount);
         Assert.False(card.HasSc);
     }
@@ -56,7 +56,7 @@ public class ArtistCardBuilderTests
 
         var card = Assert.Single(cards);
         Assert.Equal("neon fox", card.Key);
-        Assert.Equal(3, card.TrackCount); // 1 локальный + 2 лайка
+        Assert.Equal(3, card.TrackCount); // 1 local + 2 likes
         Assert.True(card.HasSc);
     }
 
@@ -78,7 +78,7 @@ public class ArtistCardBuilderTests
     [Fact]
     public void Cover_LocalPreferred_FallsBackToScArtwork()
     {
-        // У локальных треков обложки нет → берётся artwork лайка.
+        // Locals have no covers → the like's artwork is used.
         var cards = ArtistCardBuilder.Build(new[]
         {
             Local("Neon Fox", "Alpha"),
@@ -104,8 +104,8 @@ public class ArtistCardBuilderTests
     [Fact]
     public void UnknownArtists_GluedIntoOneGroup()
     {
-        // ""-ключ (пустые/legacy-имена) — одна карточка «Неизвестный исполнитель»,
-        // локальные и SC-лайки вместе.
+        // ""-key (empty/legacy names) — one "Unknown Artist" card,
+        // local tracks and SC likes together.
         var cards = ArtistCardBuilder.Build(new[]
         {
             Local("Неизвестный исполнитель", "A"),

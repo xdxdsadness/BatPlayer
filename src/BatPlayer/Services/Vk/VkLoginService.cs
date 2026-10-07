@@ -5,10 +5,10 @@ using BatPlayer.Views;
 namespace BatPlayer.Services.Vk;
 
 /// <summary>
-/// Открывает окно входа VK (WebView2) как модальный диалог. После успешного входа
-/// cookies веб-сессии уже сохранены окном через VkService.SaveSessionCookies — сервис
-/// возвращает true, вызывающий (настройки) обновляет статус. Пользователь закрыл окно
-/// не залогинившись — false.
+/// Opens the VK login window (WebView2) as a modal dialog. After a successful sign-in
+/// the web session cookies are already saved by the window via VkService.SaveSessionCookies —
+/// the service returns true and the caller (settings) updates the status. If the user
+/// closes the window without signing in — false.
 /// </summary>
 public sealed class VkLoginService
 {
@@ -16,13 +16,13 @@ public sealed class VkLoginService
 
     public VkLoginService(VkService vk) => _vk = vk;
 
-    /// <summary>true — вход выполнен, cookies веб-сессии сохранены в vk_auth.json.</summary>
+    /// <summary>true — signed in, web session cookies saved to vk_auth.json.</summary>
     public async Task<bool> LoginAsync(Window owner)
     {
         var window = new VkLoginWindow(_vk) { Owner = owner };
-        // ShowDialog блокирует UI-поток только своим окном — приложение продолжает жить.
+        // ShowDialog blocks the UI thread only for its own window — the app keeps running.
         var result = window.ShowDialog() == true;
-        await Task.CompletedTask; // async-сигнатура на будущее (ожидание подтверждения сессии)
+        await Task.CompletedTask; // async signature reserved (future session confirmation)
         return result;
     }
 }

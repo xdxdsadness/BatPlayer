@@ -14,9 +14,9 @@
         <cv:InverseIntToVisibilityConverter x:Key="InverseInt2Vis"/>
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
         <cv:SnapToRowsConverter x:Key="SnapRows"/>
-        <!-- true, если на карточке — играющий сейчас трек (смена Play/Pause) -->
+        <!-- True when the card is the currently playing track (Play/Pause switch) -->
         <cv:CurrentTrackPlayingConverter x:Key="IsCurrentTrackPlaying"/>
-        <!-- Бейдж платформы: Source трека совпадает с параметром -->
+        <!-- Platform badge: the track's Source matches the parameter -->
         <cv:StringEqualsToVisibilityConverter x:Key="PlatformSource2Vis"/>
     </UserControl.Resources>
 
@@ -79,16 +79,16 @@
             </Grid>
         </Border>
 
-        <!-- Track cards: сетка как в SoundCloud — 4 в ряд, крупная обложка, под ней название и исполнитель -->
+        <!-- Track cards: SoundCloud-like grid — 4 per row, large cover, title and artist below -->
         <Grid Grid.Row="2" x:Name="ListArea" Margin="24,0,16,4">
             <ListView controls:ScrollHeaderCollapse.Header="{Binding ElementName=PageHeader}" ScrollViewer.CanContentScroll="True" Background="Transparent" BorderThickness="0"
                       ItemsSource="{Binding Tracks}"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       VerticalContentAlignment="Stretch">
-                <!-- На время загрузки список свёрнут: виртуализация не генерирует
-                     контейнеры для старых карточек, при клике по бару нет тройной
-                     работы (создать старые → очистить → создать новые) — переход
-                     без лагов. Без скелетона и fade: чистое появление по готовности. -->
+                <!-- The list is collapsed while loading: virtualization does not generate
+                     containers for old cards, and clicking a bar avoids triple work
+                     (create old → clear → create new) — a lag-free transition.
+                     No skeleton or fade: a clean appearance once ready. -->
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
@@ -106,16 +106,16 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel>
-                            <!-- Квадратная обложка (1:1) на всю ширину карточки.
-                                 SquareBorder: квадрат уже в measure — без двойного
-                                 прохода компоновки self-биндинга Height=ActualWidth. -->
+                            <!-- Square cover (1:1) across the full card width.
+                                 SquareBorder: square already at measure — no double
+                                 layout pass from a self-binding Height=ActualWidth. -->
                             <controls:SquareBorder x:Name="CoverRoot" CornerRadius="8"
                                     Background="{DynamicResource SecondaryBrush}">
                                 <Grid>
-                                    <!-- Нет обложки: серый силуэт мыши — единый плейсхолдер
-                                         всех баров (CardBatPlaceholder, без вращения) -->
+                                    <!-- No cover: gray bat silhouette — the shared placeholder
+                                         of all bars (CardBatPlaceholder, no rotation) -->
                                     <Image Style="{StaticResource CardBatPlaceholder}"/>
-                                    <!-- Обложка. LazyCover: декод в фоне порциями по 8, при скролле грузятся только видимые -->
+                                    <!-- Cover. LazyCover: background decode in batches of 8; while scrolling only visible items load -->
                                     <Border CornerRadius="8" controls:LazyCover.Path="{Binding CoverCachePath}">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -139,8 +139,8 @@
                                         </Border.Background>
                                     </Border>
 
-                                    <!-- Полупрозрачный белый оверлей: при наведении ИЛИ когда играет этот трек.
-                                         Появление/исчезание — плавный fade 0.15 c, как на платформенных страницах. -->
+                                    <!-- Translucent white overlay: on hover OR while this track plays.
+                                         Fade in/out 0.15s, as on the platform pages. -->
                                     <Border x:Name="CoverHoverOverlay" CornerRadius="8"
                                             Background="#40FFFFFF" IsHitTestVisible="False">
                                         <Border.Style>
@@ -179,8 +179,8 @@
                                                                 </Storyboard>
                                                             </BeginStoryboard>
                                                         </DataTrigger.EnterActions>
-                                                        <!-- ExitActions обязателен: без него Enter-анимация «залипала» на
-                                                             opacity=1 при смене трека / пересборке списка (несколько заставок). -->
+                                                        <!-- ExitActions is required: without it the Enter animation stuck at
+                                                             opacity=1 on track change / list rebuild (multiple overlays). -->
                                                         <DataTrigger.ExitActions>
                                                             <BeginStoryboard>
                                                                 <Storyboard>
@@ -195,7 +195,7 @@
                                         </Border.Style>
                                     </Border>
 
-                                    <!-- Центральная кнопка Play (~32% ширины обложки, как на референсе) -->
+                                    <!-- Central Play button (~32% of the cover width, as in the reference) -->
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="0.34*"/>
@@ -308,7 +308,7 @@
 
                             </controls:SquareBorder>
 
-                            <!-- Строка 1: сердечко + название + бейдж SoundCloud (SC-лайки на Home) -->
+                            <!-- Row 1: heart + title + SoundCloud badge (SC likes on Home) -->
                             <Grid Margin="2,8,2,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -335,8 +335,8 @@
                                            Foreground="{DynamicResource TextPrimaryBrush}"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
-                                <!-- Бейдж платформы у runtime-карточек: логотип по Source
-                                     (soundcloud / vk / yandex); у локальных треков бейджа нет -->
+                                <!-- Platform badge on runtime cards: logo by Source
+                                     (soundcloud / vk / yandex); local tracks have no badge -->
                                 <Image Grid.Column="2" Width="16" Height="16" Stretch="Uniform"
                                         VerticalAlignment="Center" HorizontalAlignment="Right" Margin="6,0,0,0"
                                         Visibility="{Binding Path=Source, Converter={StaticResource PlatformSource2Vis}, ConverterParameter=soundcloud}" Source="{StaticResource SoundCloudLogoSmall}" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -348,8 +348,8 @@
                                         Visibility="{Binding Path=Source, Converter={StaticResource PlatformSource2Vis}, ConverterParameter=yandex}" Source="{StaticResource YandexMusicGlyphYellow}" RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
 
-                            <!-- Строка 2: исполнитель — клик по имени открывает профиль; hover: плавное белое свечение
-                                 (общий ArtistHoverTemplate из темы — тот же на всех страницах с карточками) -->
+                            <!-- Row 2: artist — clicking the name opens the profile; hover: smooth white glow
+                                 (shared ArtistHoverTemplate from the theme — the same on all card pages) -->
                             <Button HorizontalAlignment="Left" Cursor="Hand" Margin="2,3,2,0"
                                     Template="{StaticResource ArtistHoverTemplate}"
                                     Command="{Binding DataContext.OpenArtistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -368,11 +368,11 @@
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ContextMenu>
-                <!-- Style обязателен: implicit-стили (ContextMenu/MenuItem/Separator)
-                     не применяются внутри ContextMenu — её логическое дерево оторвано
-                     от окна. Без явных стилей меню рисуется дефолтным шаблоном WPF:
-                     другие углы, другие отступы, синий hover, «жирный» сепаратор
-                     с отступом 30px слева. -->
+                <!-- Explicit styles are required: implicit styles (ContextMenu/MenuItem/Separator)
+                     do not apply inside a ContextMenu — its logical tree is detached
+                     from the window. Without them the menu renders with the default WPF
+                     template: different corners, different indents, blue hover, a "bold"
+                     separator with a 30px left indent. -->
                 <ContextMenu Style="{StaticResource TrayContextMenuStyle}"
                              Background="{DynamicResource PanelElevatedBrush}"
                              Foreground="{DynamicResource TextPrimaryBrush}"
@@ -385,10 +385,10 @@
                               Header="{Binding [AddToQueue], Source={x:Static loc:Loc.T}}"
                               Command="{Binding AddToQueueCommand}"
                               CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                    <!-- Явный стиль обязателен: implicit-стили не применяются внутри
-                         ContextMenu (её логическое дерево оторвано от окна), и без
-                         стиля сепаратор рисуется дефолтным шаблоном WPF с отступом
-                         30px слева и «жирной» линией. -->
+                    <!-- Explicit style is required: implicit styles do not apply inside
+                         a ContextMenu (its logical tree is detached from the window), and
+                         without it the separator renders with the default WPF template —
+                         a 30px left indent and a "bold" line. -->
                     <Separator Style="{StaticResource MenuSeparatorStyle}"
                                Background="{DynamicResource BorderBrush}"/>
                     <MenuItem Style="{StaticResource {x:Type MenuItem}}" Header="{Binding [Favorite], Source={x:Static loc:Loc.T}}"
@@ -408,11 +408,11 @@
             </ListView>
         </Grid>
 
-        <!-- Empty state: показывается, когда загрузка завершена и треков нет (ShowEmptyState).
-             Иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до центра), текст растёт
-             вниз от центра: точка иконки одинакова во всех барах — при переключении
-             задний фон не «прыгает». Иконка — как у пункта навигации, с которого открыта
-             страница (Home/Favorites/RecentlyPlayed). -->
+        <!-- Empty state: shown when loading finished and there are no tracks (ShowEmptyState).
+             The icon is pinned to the CENTER of the page (bottom edge 16px above center),
+             text grows downward from center: the icon's anchor point is the same in all
+             bars — the background does not "jump" when switching. The icon matches the
+             nav item the page was opened from (Home/Favorites/RecentlyPlayed). -->
         <Border Grid.Row="2" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource Bool2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

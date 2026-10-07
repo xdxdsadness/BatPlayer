@@ -4,11 +4,11 @@
              xmlns:loc="clr-namespace:BatPlayer.Localization"
              xmlns:controls="clr-namespace:BatPlayer.Controls"
             >
-    <!-- Разметка как на остальных страницах: заголовок в шапке, контент ниже.
-         БЕЗ ScrollViewer: колесо на этой странице работает только с графиком,
-         страница не прокручивается — «уезжание» окон исключено физически. -->
-    <!-- IsSharedSizeScope: подписи и правые кнопки в строках «Пресет» и «Сохранить как»
-         делят колонки, поэтому оба поля получаются одинаковой ширины. -->
+    <!-- Layout like the other pages: heading in the header, content below.
+         NO ScrollViewer: the wheel works only with the graph on this page and the
+         page itself does not scroll. -->
+    <!-- IsSharedSizeScope: labels and right-side buttons in the "Preset" and
+         "Save as" rows share columns, so both fields get the same width. -->
     <Grid Grid.IsSharedSizeScope="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -17,16 +17,16 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Header — тот же отступ и размер, что на остальных вкладках -->
+        <!-- Header: same margin and size as on the other tabs -->
         <StackPanel Grid.Row="0" Margin="32,14,16,10">
             <TextBlock Text="{Binding [Equalizer], Source={x:Static loc:Loc.T}}" FontSize="20" FontWeight="Medium"/>
             <TextBlock Text="{Binding [EqSubtitle], Source={x:Static loc:Loc.T}}" FontSize="12" Margin="0,3,0,0"
                        Foreground="{DynamicResource TextSecondaryBrush}"/>
         </StackPanel>
 
-        <!-- Строка 1: пресет, вкл/выкл, сброс. Поле пресета фиксированной ширины:
-             на всю карту оно тянется на тысячи пикселей и выглядит пустым — имя
-             пресета длинным не бывает. Кнопки — сразу за полем, не у правого края. -->
+        <!-- Row 1: preset, on/off, reset. The preset box has a fixed width:
+             stretched across the card it spans thousands of pixels and looks empty —
+             preset names are never long. Buttons sit right after the box. -->
         <Border Grid.Row="1" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -54,7 +54,7 @@
             </Grid>
         </Border>
 
-        <!-- Строка 3: график — занимает всё доступное место -->
+        <!-- Row 3: the graph takes all remaining space -->
         <Border Grid.Row="3" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
             <Grid>
                 <Grid.RowDefinitions>
@@ -99,8 +99,8 @@
             </Grid>
         </Border>
 
-        <!-- Строка 2: сохранение и удаление своего пресета (сразу под выбором пресета).
-             Поле имени — той же фиксированной ширины, кнопки — сразу за полем -->
+        <!-- Row 2: save and delete the custom preset (right under the preset selector).
+             The name box has the same fixed width, buttons right after it -->
         <Border Grid.Row="2" Style="{StaticResource CardPanel}" Margin="24,0,16,12">
             <Grid>
                 <Grid.ColumnDefinitions>

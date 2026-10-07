@@ -36,11 +36,11 @@ public class SoundCloudArtworkCacheTests : IDisposable
     [Fact]
     public void GetCacheFilePath_PathTraversalId_IsSanitized()
     {
-        // id из БД не должен вывести путь наружу каталога кэша: всё, кроме [A-Za-z0-9_-], → '_'.
+        // A DB id must not escape the cache dir: anything outside [A-Za-z0-9_-] → '_'.
         var path = CreateCache().GetCacheFilePath("../../evil");
 
         Assert.StartsWith(_dir, path);
-        // "../.." = 6 символов → 6 подчёркиваний, затем "evil".
+        // "../.." = 6 chars → 6 underscores, then "evil".
         Assert.Equal(new string('_', 6) + "evil.jpg", Path.GetFileName(path));
     }
 
@@ -58,11 +58,11 @@ public class SoundCloudArtworkCacheTests : IDisposable
         var cache = CreateCache();
         var path = cache.GetCacheFilePath("42");
 
-        Assert.False(cache.IsCachedFile(path)); // файла нет
+        Assert.False(cache.IsCachedFile(path)); // file missing
 
         Directory.CreateDirectory(_dir);
         File.WriteAllText(path, string.Empty);
-        Assert.False(cache.IsCachedFile(path)); // нулевой файл — след оборванной записи
+        Assert.False(cache.IsCachedFile(path)); // zero-byte file — trace of an interrupted write
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class SoundCloudArtworkCacheTests : IDisposable
         var path = cache.GetCacheFilePath("42");
         await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
 
-        // URL здесь любой: файл уже в кэше, до сети дело не доходит.
+        // Any url works here: the file is already cached, no network hit.
         var result = await cache.EnsureDownloadedAsync("42", "https://i1.sndcdn.com/artworks-42-t500x500.jpg", CancellationToken.None);
 
         Assert.Equal(path, result);

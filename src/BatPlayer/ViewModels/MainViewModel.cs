@@ -22,7 +22,7 @@ using BatPlayer.Services.Spotify;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Главная ViewModel. Хранит текущую страницу, управляет навигацией, общими командами.
+/// Main ViewModel. Holds the current page, manages navigation and shared commands.
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
@@ -44,17 +44,16 @@ public partial class MainViewModel : ObservableObject
     private readonly SpotifyService _spotify;
     private readonly SpotifyTracksRepository _spotifyTracks;
 
-    // track-объекты API (transcodings) по sc_id за сессию: резолвер плеера не дёргает
-    // GET /tracks/{id} на каждый переход по SC-очереди.
+    // Per-session cache of API track objects (transcodings) by sc_id: the player
+    // resolver does not re-issue GET /tracks/{id} on every step through an SC queue.
     private readonly Dictionary<string, ScTrack> _scTrackApiCache = new();
 
-    // Негативный кэш резолва SC-треков: мёртвые транскодинги (DRM/гео/удалённые) не
-    // «оживают» за секунды. Повторные клики по той же карточке отдаём мгновенной
-    // ошибкой — без 5-6 HTTP-запросов и пары секунд ожидания на каждый клик.
-    // Храним МОМЕНТ ИСТЕЧЕНИЯ пометки: обычный отказ — 1 минута, DRM (FairPlay) — 6 часов.
+    // Negative cache of SC resolve failures: dead transcodings (DRM/geo/removed) do
+    // not "come back to life" within seconds. Repeated clicks on the same card get an
+    // instant error — without 5-6 HTTP requests and seconds of waiting per click.
+    // We store the EXPIRY MOMENT of the mark: a normal failure — 1 minute, DRM (FairPlay) — 6 hours.
     private readonly Dictionary<string, DateTime> _scResolveFailedAt = new();
     private static readonly TimeSpan ScResolveFailTtl = TimeSpan.FromMinutes(1);
-    private readonly YtFallbackService _ytFallback = new();
 
     public PlayerBarViewModel Player { get; }
     public LibraryViewModel Library { get; }
@@ -77,28 +76,28 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isSidebarCollapsed;
     [ObservableProperty] private bool _isNowPlayingOpen;
 
-    /// <summary>Текст поисковой строки в шапке окна. Единая на все страницы: на
-    /// страницах библиотеки уходит в Library.SearchText (глобальный поиск по локальным
-    /// трекам и платформенным метаданным), на остальных — в реализацию ISearchablePage
-    /// активной страницы (фильтр её карточек).</summary>
+    /// <summary>Text of the search bar in the window header. Shared by all pages: on
+    /// library pages it goes to Library.SearchText (global search over local tracks and
+    /// platform metadata), on the rest — to the active page's ISearchablePage
+    /// implementation (filtering its cards).</summary>
     [ObservableProperty] private string _searchText = string.Empty;
 
-    // Поколение поискового запроса: дебаунс ввода (см. OnSearchTextChanged).
+    // Search query generation: input debounce (see OnSearchTextChanged).
     private int _searchGeneration;
 
     partial void OnSearchTextChanged(string value)
     {
-        // Debounce 200ms + поколение: выполняется только поиск последнего ввода.
+        // Debounce 200ms + generation: only the last input's search runs.
         var generation = ++_searchGeneration;
         _ = Task.Delay(200).ContinueWith(_ =>
         {
-            if (generation != _searchGeneration) return; // ввод уже изменился
+            if (generation != _searchGeneration) return; // input already changed
             Application.Current?.Dispatcher.Invoke(() => RouteSearchToActivePage(SearchText));
         });
     }
 
-    /// <summary>Маршрут поискового запроса активной странице (при вводе и при смене страницы —
-    /// активный текст поиска переносится на каждую открываемую страницу).</summary>
+    /// <summary>Routes the search query to the active page (on typing and on page change —
+    /// the active search text is carried over to each opened page).</summary>
     private void RouteSearchToActivePage(string? query)
     {
         switch (ActivePage)
@@ -149,7 +148,7 @@ public partial class MainViewModel : ObservableObject
         Player     = new PlayerBarViewModel(audio, library, covers, ym);
         Library    = new LibraryViewModel(library, audio, covers, metadata, soundCloudLikes, vkTracks, ymTracks, spotifyTracks, ym, history);
         Artists    = new ArtistsViewModel(library, soundCloudLikes, vkTracks, ymTracks, spotifyTracks, OpenArtist);
-        // «Назад» из профиля — на страницу «Исполнители», через обычную навигацию.
+        // "Back" from the profile goes to the Artists page, via normal navigation.
         ArtistProfile = new ArtistProfileViewModel(library, audio, soundCloudLikes, vkTracks, ymTracks, spotifyTracks, () => Navigate("Artists"));
         Playlists  = new PlaylistViewModel(playlistService, library, audio);
         Settings   = new SettingsViewModel(settings, library, audio, soundCloud, soundCloudLogin, soundCloudLikes,
@@ -167,17 +166,17 @@ public partial class MainViewModel : ObservableObject
         Downloads  = new DownloadsViewModel(library, audio);
         Stats      = new StatsViewModel(history);
 
-        // Плотность сетки применяется живо: SettingsService уведомляет о каждой записи.
+        // Grid density applies live: SettingsService notifies on every write.
         settings.SettingsChanged += (_, _) => OnPropertyChanged(nameof(GridColumns));
 
-        // Плеер умеет открывать платформенные runtime-карточки (SoundCloud/VK/Яндекс Музыка;
-        // FilePath пуст): путь резолвится на каждом переходе (клик, Next/Previous) —
-        // см. ResolvePlatformTrackFileAsync.
+        // The player can open platform runtime cards (SoundCloud/VK/Yandex Music;
+        // FilePath is empty): the path is resolved on every transition (click, Next/Previous) —
+        // see ResolvePlatformTrackFileAsync.
         _audio.FilePathResolver = ResolvePlatformTrackFileAsync;
 
-        // Переподключение SoundCloud (новые cookies после входа): чёрный список
-        // провалов резолва устаревает — MONETIZE-треки, помеченные «мёртвыми» при
-        // протухшей сессии, должны ретраиться сразу, а не через час-шесть.
+        // SoundCloud reconnect (new cookies after login): the resolve-failure blacklist
+        // goes stale — MONETIZE tracks marked "dead" under an expired session must retry
+        // immediately, not an hour or six later.
         soundCloud.SessionChanged += (_, _) => _scResolveFailedAt.Clear();
 
         _audio.ErrorOccurred += (_, msg) =>
@@ -197,129 +196,31 @@ public partial class MainViewModel : ObservableObject
         Downloads.ErrorOccurred += (_, msg) =>
             ErrorMessage?.Invoke(this, msg);
 
-        // Прогресс обхода блокировки SoundCloud (перебор стратегий zapret) — индикатор
-        // в тайтл-баре: пользователь видит, ПОЧЕМУ SC-трек «задумался» и что обход жив.
-        Services.SoundCloud.SoundCloudZapret.UiStateChanged += OnZapretUiStateChanged;
-
-        // Стартовая страница задаётся ЯВНО: радио «Home» с IsChecked="True" из XAML свою
-        // команду при инициализации не исполняет, и без этого CurrentPage оставался null —
-        // приложение запускалось с ПУСТОЙ контентной областью до первого клика по сайдбару.
+        // The start page is set EXPLICITLY: the "Home" radio with IsChecked="True" from
+        // XAML does not execute its command on initialization, and without this
+        // CurrentPage stayed null — the app launched with an EMPTY content area
+        // until the first sidebar click.
         CurrentPage = Library;
-
-#if DEBUG
-        // Отладка вёрстки индикатора без реального перебора: BATPLAYER_DEBUG_BADGE=1
-        // показывает плашку «поиск стратегии» сразу после старта (prod не задевает).
-        if (Environment.GetEnvironmentVariable("BATPLAYER_DEBUG_BADGE") == "1")
-        {
-            IsBypassBusy = true;
-            BypassStatusText = Loc.Get("ZapretSearching");
-        }
-#endif
-    }
-
-    // ===== Индикатор обхода блокировки SoundCloud =====
-
-    /// <summary>Текст индикатора обхода в тайтл-баре; null — индикатор скрыт.</summary>
-    [ObservableProperty] private string? _bypassStatusText;
-
-    /// <summary>true, пока идёт перебор стратегий — индикатор крутит спиннер.</summary>
-    [ObservableProperty] private bool _isBypassBusy;
-
-    /// <summary>Отложенное скрытие индикатора после финального сообщения (найдено/не удалось).</summary>
-    private CancellationTokenSource? _bypassHideCts;
-
-    private void OnZapretUiStateChanged(Services.SoundCloud.SoundCloudZapret.ZapretUiState state)
-    {
-        // События летят из фонового цикла перебора — весь UI-стейт только в UI-потоке.
-        Application.Current?.Dispatcher.BeginInvoke(() => ApplyZapretUiState(state));
-    }
-
-    private void ApplyZapretUiState(Services.SoundCloud.SoundCloudZapret.ZapretUiState state)
-    {
-        CancelBypassHide();
-        switch (state.Phase)
-        {
-            case Services.SoundCloud.SoundCloudZapret.ZapretPhase.Starting:
-                IsBypassBusy = true;
-                BypassStatusText = Loc.Get("ZapretSearching");
-                break;
-            case Services.SoundCloud.SoundCloudZapret.ZapretPhase.TestingPreset:
-                IsBypassBusy = true;
-                BypassStatusText = string.Format(Loc.Get("ZapretStrategy"), state.PresetNumber, state.PresetCount);
-                break;
-            case Services.SoundCloud.SoundCloudZapret.ZapretPhase.Succeeded:
-                IsBypassBusy = false;
-                BypassStatusText = string.Format(Loc.Get("ZapretFound"), state.PresetName);
-                HideBypassAfter(TimeSpan.FromSeconds(6));
-                break;
-            case Services.SoundCloud.SoundCloudZapret.ZapretPhase.Failed:
-                IsBypassBusy = false;
-                BypassStatusText = Loc.Get("ZapretFailed");
-                HideBypassAfter(TimeSpan.FromSeconds(6));
-                break;
-            case Services.SoundCloud.SoundCloudZapret.ZapretPhase.HelperDeclined:
-                IsBypassBusy = false;
-                BypassStatusText = Loc.Get("ZapretNeedUac");
-                HideBypassAfter(TimeSpan.FromSeconds(6));
-                break;
-        }
-    }
-
-    private void HideBypassAfter(TimeSpan delay)
-    {
-        var cts = new CancellationTokenSource();
-        _bypassHideCts = cts;
-        _ = Task.Delay(delay, cts.Token).ContinueWith(t =>
-        {
-            if (t.IsCanceled) return;
-            Application.Current?.Dispatcher.BeginInvoke(() =>
-            {
-                if (!ReferenceEquals(_bypassHideCts, cts)) return;
-                BypassStatusText = null;
-                _bypassHideCts = null;
-            });
-        });
-    }
-
-    private void CancelBypassHide()
-    {
-        _bypassHideCts?.Cancel();
-        _bypassHideCts = null;
     }
 
     public event EventHandler<string>? ErrorMessage;
     public event EventHandler? RequestNowPlaying;
 
     /// <summary>
-    /// AudioService.FilePathResolver: локальный путь для трека с пустым FilePath.
-    /// Звук платформенных источников (SoundCloud/VK/Яндекс Музыка) резолвится одинаково:
-    /// 1) локальный матч (MatchHelper) — играем файл библиотеки офлайн;
-    /// 2) mp3 уже в дисковом кэше платформы — играем без сети;
-    /// 3) иначе стрим через API платформы и докачка в её кэш
-    ///    (SC: transcodings по sc_id; VK: временная ссылка al_audio;
-    ///     YM: download-info по ym_id).
-    /// null — получить файл не удалось (AudioService пропустит трек с логом).
+    /// AudioService.FilePathResolver: a local path for a track with an empty FilePath.
+    /// Audio of platform sources (SoundCloud/VK/Yandex Music) resolves the same way:
+    /// 1) local match (MatchHelper) — play the library file offline;
+    /// 2) mp3 already in the platform's disk cache — play without network;
+    /// 3) otherwise stream via the platform API and download into its cache
+    ///    (SC: transcodings by sc_id; VK: temporary link via al_audio;
+    ///     YM: download-info by ym_id).
+    /// null — the file could not be obtained (AudioService skips the track with a log).
     /// </summary>
     private async Task<string?> ResolvePlatformTrackFileAsync(Track track, CancellationToken ct)
     {
         if (track.Source == Track.SourceSoundCloud)
         {
-            var sc = await ResolveScTrackFileAsync(track, ct);
-            if (sc != null) return sc;
-
-            // SC не отдал файл (DRM FairPlay / policy / 404 / гео): фолбэк — YouTube
-            // и дальше играется локально; метаданные в UI остаются от SC.
-            // Условие: официальный API должен быть не просто «подключён», а РАБОТАТЬ.
-            // Раньше фолбэк глушился одним фактом подключения — и когда SoundCloud
-            // заблокировал клиента целиком (403 disallowed на всё), монетизированные/
-            // Go+-треки вставали намертво: официальный путь мёртв, а YouTube-фолбэк
-            // был запрещён («при живом официальном API звук — настоящий SC-стрим»).
-            // Каскад SC и так всегда первый: фолбэк добирает только то, что ВСЕ
-            // SC-источники отказались играть.
-            if (_settings.Current.YouTubeFallbackEnabled && !_soundCloud.OfficialApiUsable)
-                return await _ytFallback.ResolveMp3Async(
-                    track.Artist, track.Title, track.ScId, track.Duration, ct);
-            return null;
+            return await ResolveScTrackFileAsync(track, ct);
         }
         if (track.Source == Track.SourceVk) return await ResolveVkTrackFileAsync(track, ct);
         if (track.Source == Track.SourceYandex) return await ResolveYmTrackFileAsync(track, ct);
@@ -331,12 +232,12 @@ public partial class MainViewModel : ObservableObject
         if (string.IsNullOrEmpty(track.ScId)) return null;
         try
         {
-            // Недавно провалившийся резолв — мгновенная ошибка без походов в сеть.
+            // A recently failed resolve — instant error without network calls.
             if (_scResolveFailedAt.TryGetValue(track.ScId, out var expires)
                 && DateTime.UtcNow < expires)
                 return null;
 
-            // 1) Офлайн через локальную библиотеку (матч только по локальным трекам).
+            // 1) Offline via the local library (match against local tracks only).
             var localMatch = MatchHelper.FindLocalMatch(
                 await _library.GetAllTracksAsync(), track.Artist, track.Title);
             if (localMatch != null)
@@ -345,7 +246,7 @@ public partial class MainViewModel : ObservableObject
                 return localMatch.FilePath;
             }
 
-            // 2) Уже в кэше — сети не нужно (предпочитаем .m4a/AAC, если есть оба).
+            // 2) Already cached — no network needed (prefer .m4a/AAC when both exist).
             var cachedPath = _scCache.GetExistingCachePath(track.ScId);
             if (cachedPath != null)
             {
@@ -355,12 +256,12 @@ public partial class MainViewModel : ObservableObject
 
             var expectedDurationMs = (long)track.Duration.TotalMilliseconds;
 
-            // Каскад стриминга по набору транскодингов: AAC HLS → progressive mp3 →
-            // склейка mp3-HLS. Используется и для оригинала, и для найденной копии
-            // DRM-трека. Аудио всегда кэшируется под scId ОРИГИНАЛА (карточка одна).
-            // skipSlowFallbacks — для DRM-оригинала: у AD_SUPPORTED треков mp3-HLS
-            // транскодинг тоже 404ит (проверено), второй гарантированный 404-запрос
-            // только добавляет задержку перед поиском копии.
+            // Streaming cascade over the set of transcodings: AAC HLS → progressive mp3 →
+            // mp3-HLS stitching. Used for both the original and a found DRM-track copy.
+            // Audio is always cached under the ORIGINAL's scId (a single card).
+            // skipSlowFallbacks — for the DRM original: for AD_SUPPORTED tracks the
+            // mp3-HLS transcoding 404s too (verified); a second guaranteed 404 request
+            // only adds latency before the copy search.
             async Task<string?> ResolveFromTranscodingsAsync(ScTrack t, bool skipSlowFallbacks = false)
             {
                 var aac = await _soundCloud.DownloadHlsAacAsync(t, ct);
@@ -377,12 +278,12 @@ public partial class MainViewModel : ObservableObject
                 return await _scCache.SaveTrackBytesAsync(hls, track.ScId, ct);
             }
 
-            // 3) ОФИЦИАЛЬНЫЙ SoundCloud API — ПЕРВЫЙ источник (подключён pairing-кодом):
-            //    стримы работают для всего, что доступно аккаунту (вкл. Go+), не требуют
-            //    cookies веб-сессии и не зависят от 404 неофициального api-v2 на
-            //    медиа-эндпоинтах. Раньше официальный путь стоял ПОСЛЕ метаданных и
-            //    policy-проверки api-v2 — протухшие cookies и SNIPPET/BLOCK отсекали
-            //    треки до него («работают не все»).
+            // 3) OFFICIAL SoundCloud API — the FIRST source (connected via pairing code):
+            //    streams work for everything the account can access (incl. Go+), need no
+            //    web-session cookies, and do not depend on the unofficial api-v2 404 on
+            //    media endpoints. Previously the official path came AFTER metadata and
+            //    api-v2 policy checks — expired cookies and SNIPPET/BLOCK cut tracks
+            //    off before it ("not everything works").
             var officialAac = await _soundCloud.DownloadOfficialAacAsync(track.ScId, expectedDurationMs, ct);
             if (officialAac != null)
             {
@@ -392,10 +293,10 @@ public partial class MainViewModel : ObservableObject
                 return savedOfficial;
             }
 
-            // 4) Неофициальный каскад (cookies api-v2) — фолбэк, когда официальное
-            //    подключение отсутствует или не отдало стрим (сеть/сбой). Аудио и здесь
-            //    настоящее, с того же sc_id, чужих версий этот путь не подмешивает.
-            // Метаданные: transcodings по sc_id (кэш сессии или GET /tracks/{id}).
+            // 4) Unofficial cascade (api-v2 cookies) — fallback when the official
+            //    connection is missing or gave no stream (network/failure). The audio is
+            //    still genuine, from the same sc_id; this path never mixes in foreign versions.
+            // Metadata: transcodings by sc_id (session cache or GET /tracks/{id}).
             if (!_scTrackApiCache.TryGetValue(track.ScId, out var scTrack))
             {
                 scTrack = await _soundCloud.GetTrackAsync(track.ScId, ct);
@@ -408,15 +309,15 @@ public partial class MainViewModel : ObservableObject
                 return null;
             }
 
-            // Go+-трек (SNIPPET) или заблокированный в регионе (BLOCK): у оригинала
-            // транскодинги всегда 404/запрещены. НО перекачанные другими пользователями
-            // копии того же трека не наследуют региональных ограничений и играют нативно —
-            // ищем копию вместе с AD_SUPPORTED-кейсами ниже (reuploadAvailable = true).
+            // Go+ track (SNIPPET) or region-locked (BLOCK): the original's transcodings
+            // always 404/are forbidden. BUT re-uploaded copies by other users do not
+            // inherit regional restrictions and play natively — the copy is searched
+            // together with AD_SUPPORTED cases below (reuploadAvailable = true).
 
-            // 5) Каскад: AAC-транскодинг HLS (~160 kbps — качество веб-плеера) →
-            //    progressive mp3 → склейка mp3-HLS. null — сеть не дала/транскодингов нет.
-            //    У AD_SUPPORTED треков mp3-HLS гарантированно 404 (а AAC и так нет в
-            //    открытом виде) — не тратим запрос, копию ищем сразу после progressive.
+            // 5) Cascade: AAC HLS transcoding (~160 kbps — web-player quality) →
+            //    progressive mp3 → mp3-HLS stitching. null — network failure/no transcodings.
+            //    For AD_SUPPORTED tracks mp3-HLS is guaranteed 404 (and AAC is not
+            //    available openly) — skip the request and look for a copy right after progressive.
             var adSupported = string.Equals(scTrack.MonetizationModel, "AD_SUPPORTED", StringComparison.OrdinalIgnoreCase);
             var policyLocked = scTrack.Policy is "SNIPPET" or "BLOCK";
             var resolved = await ResolveFromTranscodingsAsync(scTrack, skipSlowFallbacks: adSupported || policyLocked);
@@ -426,19 +327,19 @@ public partial class MainViewModel : ObservableObject
                 return resolved;
             }
 
-            // 6) Провал каскада — диагностика по модели монетизации (проверено
-            //    перехватом трафика веб-плеера):
-            //    - AD_SUPPORTED: SoundCloud отдаёт такие треки ТОЛЬКО зашифрованным
-            //      CENC-стримом с лицензией Widevine (ctr/cbc-encrypted-hls →
+            // 6) Cascade failure — diagnostics by monetization model (verified by
+            //    intercepting web-player traffic):
+            //    - AD_SUPPORTED: SoundCloud serves such tracks ONLY as an encrypted
+            //      CENC stream with a Widevine license (ctr/cbc-encrypted-hls →
             //      playback.media-streaming.soundcloud.cloud + license.widevine).
-            //      Обычные transcodings 404ят у ВСЕХ — и анонимно, и залогиненным.
-            //      Штатный путь невозможен, НО на SC почти всегда есть перекачанные
-            //      другими пользователями копии того же трека — они обычно залиты
-            //      как обычные треки и играют нативно. Ищем и играем копию.
-            //      Быстрый путь: единственный шанс оригинала — progressive-резолв,
-            //      он уже был выше; для копий каскад полный (у них все варианты живы).
-            //    - Истекшая сессия (401 api-v2) у обычного трека: переподключение
-            //      аккаунта чинит — короткий TTL, чтобы ретрай случился сразу.
+            //      Regular transcodings 404 for EVERYONE — anonymous or logged in.
+            //      The standard path is impossible, BUT SC almost always has re-uploaded
+            //      copies of the same track by other users — usually uploaded as regular
+            //      tracks and playing natively. Find and play a copy.
+            //      Fast path: the original's only chance is the progressive resolve,
+            //      already tried above; copies go through the full cascade (all variants live).
+            //    - Expired session (401 api-v2) on a regular track: reconnecting the
+            //      account fixes it — short TTL so a retry happens right away.
             var sessionDead = _soundCloud.HasAuthFile && await _soundCloud.VerifyWebSessionAsync(ct) == false;
 
             if (adSupported || policyLocked)
@@ -448,8 +349,8 @@ public partial class MainViewModel : ObservableObject
                 foreach (var (altId, altTitle) in candidates)
                 {
                     var alt = await _soundCloud.GetTrackAsync(altId.ToString(), ct);
-                    // Перепроверка по полным метаданным: у выдачи поиска поля могут
-                    // быть шире/уже, а копия могла уйти в DRM после кэша поиска.
+                    // Re-check against full metadata: search-result fields may be
+                    // wider/narrower, and the copy may have gone DRM after the search cache.
                     if (alt == null || !alt.Streamable) continue;
                     if (string.Equals(alt.MonetizationModel, "AD_SUPPORTED", StringComparison.OrdinalIgnoreCase)) continue;
                     if (alt.Policy is "SNIPPET" or "BLOCK") continue;
@@ -486,13 +387,12 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // Резолв не должен ронять воспроизведение: AudioService пропустит трек.
+            // The resolve must not crash playback: AudioService will skip the track.
             Logger.Error(ex, "SoundCloud file resolve failed");
-            // Зависание/обрыв скачивания (DPI режет медиа-поток) — вероятностная
-            // блокировка: запускаем пакетную антиблокировку (winws) фоново; после её
-            // старта повторный клик играет.
+            // Partial downloads (DPI cutting the media stream) — probabilistic blocking:
+            // start the batched bypass in the background; after it starts, a second click plays.
             if (ex.Message.Contains("media stream stalled", StringComparison.Ordinal))
-                _ = Services.SoundCloud.SoundCloudZapret.EnsureStartedAsync(SoundCloudHttp.ZapretEnabled);
+                _ = BatPlayer.Services.DpiBypass.EnsureStartedAsync(SoundCloudHttp.DpiBypassEnabled);
             if (!string.IsNullOrEmpty(track.ScId))
                 _scResolveFailedAt[track.ScId] = DateTime.UtcNow + ScResolveFailTtl;
             return null;
@@ -500,25 +400,25 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Файл для VK-карточки: 1) локальный матч; 2) mp3 из кэша vk_cache;
-    /// 3) временная mp3-ссылка из al_audio (ссылки в БД не хранятся — разрешаются
-    /// через кэш ссылок в памяти сессии) и докачка в VkStreamCache.
+    /// File for a VK card: 1) local match; 2) mp3 from the vk_cache;
+    /// 3) temporary mp3 link from al_audio (links are not stored in the DB — resolved
+    /// via the in-memory session link cache) and download into VkStreamCache.
     /// </summary>
     private async Task<string?> ResolveVkTrackFileAsync(Track track, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(track.ScId)) return null; // ScId хранит vk_id при Source="vk"
+        if (string.IsNullOrEmpty(track.ScId)) return null; // ScId holds the vk_id when Source="vk"
         try
         {
-            // 1) Офлайн через локальную библиотеку (матч только по локальным трекам).
+            // 1) Offline via the local library (match against local tracks only).
             var localMatch = MatchHelper.FindLocalMatch(
                 await _library.GetAllTracksAsync(), track.Artist, track.Title);
             if (localMatch != null) return localMatch.FilePath;
 
-            // 2) Уже в кэше — сети не нужно.
+            // 2) Already cached — no network needed.
             if (_vkCache.IsTrackCached(track.ScId))
                 return _vkCache.GetCacheFilePath(track.ScId);
 
-            // 3) Стрим: строка из БД (метаданные) → временная ссылка → качаем в кэш.
+            // 3) Stream: DB row (metadata) → temporary link → download to cache.
             var vkTrack = await _vkTracks.GetByVkIdAsync(track.ScId);
             if (vkTrack == null)
             {
@@ -533,39 +433,39 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // Резолв не должен ронять воспроизведение: AudioService пропустит трек.
+            // The resolve must not crash playback: AudioService will skip the track.
             Logger.Error(ex, "VK file resolve failed");
             return null;
         }
     }
 
     /// <summary>
-    /// Файл для YM-карточки: 1) локальный матч; 2) mp3 из кэша ym_cache;
-    /// 3) временная mp3-ссылка из download-info (ссылки в БД не хранятся — разрешаются
-    /// через кэш ссылок в памяти сессии с TTL) и докачка в YmStreamCache;
-    /// что у SoundCloud-резолва; настройка YouTubeFallbackEnabled общая с SC): тарифная
-    /// недоступность/регион не должны обрывать волну и очередь страницы.
+    /// File for a YM card: 1) local match; 2) mp3 from the ym_cache;
+    /// 3) temporary mp3 link from download-info (links are not stored in the DB —
+    /// resolved via the in-memory session link cache with TTL) and download into
+    /// YmStreamCache.
     /// </summary>
     private async Task<string?> ResolveYmTrackFileAsync(Track track, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(track.ScId)) return null; // ScId хранит ym_id при Source="yandex"
+        if (string.IsNullOrEmpty(track.ScId)) return null; // ScId holds the ym_id when Source="yandex"
 
         string? resolved = null;
         try
         {
-            // 1) Офлайн через локальную библиотеку (матч только по локальным трекам).
+            // 1) Offline via the local library (match against local tracks only).
             var localMatch = MatchHelper.FindLocalMatch(
                 await _library.GetAllTracksAsync(), track.Artist, track.Title);
             if (localMatch != null) return localMatch.FilePath;
 
-            // 2) Уже в кэше — сети не нужно.
+            // 2) Already cached — no network needed.
             if (_ymCache.IsTrackCached(track.ScId))
                 return _ymCache.GetCacheFilePath(track.ScId);
 
-            // 3) Стрим: временная ссылка из download-info (кэш сессии или API) → играем
-            //    по ссылке сразу (AudioEngine открывает http через MediaFoundationReader —
-            //    стрим без ожидания), а файл докачивается в кэш фоном для офлайн-повторов.
-            //    Раньше playback ждал полной закачки трека — клик отвечал с задержкой в сек.
+            // 3) Stream: temporary link from download-info (session cache or API) → play
+            //    by the link right away (AudioEngine opens http via MediaFoundationReader —
+            //    streaming without waiting), while the file is downloaded to cache in the
+            //    background for offline replays. Previously playback waited for the full
+            //    track download — clicks answered with a second of delay.
             var streamUrl = await _ym.GetStreamUrlAsync(track.ScId, ct);
             if (streamUrl != null)
             {
@@ -575,7 +475,8 @@ public partial class MainViewModel : ObservableObject
         }
         catch (YmApiException ex)
         {
-            // 401/403 — сессия сброшена сервисом; остальным кодам та же политика
+            // 401/403 — the session was reset by the service; other codes get the same
+            // "do not crash playback" policy.
             Logger.Error(ex, $"Yandex Music file resolve failed (HTTP {ex.HttpCode})");
         }
         catch (OperationCanceledException)
@@ -584,21 +485,17 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // Резолв не должен ронять воспроизведение: AudioService пропустит трек.
+            // The resolve must not crash playback: AudioService will skip the track.
             Logger.Error(ex, "Yandex Music file resolve failed");
         }
 
-        // 4) Фолбэк: YM не отдал стрим — YouTube по «исполнитель + название».
-        if (resolved == null && _settings.Current.YouTubeFallbackEnabled)
-            return await _ytFallback.ResolveMp3Async(
-                track.Artist, track.Title, track.ScId, track.Duration, ct);
         return resolved;
     }
 
     /// <summary>
-    /// Фоновая докачка YM-трека в дисковый кэш: воспроизведение идёт по URL
-    /// (MediaFoundationReader), а файл нужен для офлайн-повторов, когда ссылка
-    /// протухнет. Ошибка только в лог — на воспроизведение не влияет.
+    /// Background download of a YM track into the disk cache: playback goes by URL
+    /// (MediaFoundationReader), and the file is needed for offline replays when the
+    /// link expires. Errors go to the log only — playback is unaffected.
     /// </summary>
     private async Task PrefetchYmCacheFileAsync(string streamUrl, string ymId)
     {
@@ -613,22 +510,22 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Отложенная загрузка активной страницы: новый переход отменяет
-    /// предыдущую. Без отмены серия быстрых кликов по пунктам меню взрывалась
-    /// пачкой отложенных загрузок через 440 мс — UI провисал уже ПОСЛЕ кликов.</summary>
+    /// <summary>Deferred load of the active page: a new navigation cancels the previous
+    /// one. Without cancellation a burst of quick menu clicks exploded into a batch of
+    /// deferred loads 440 ms later — the UI lagged AFTER the clicks.</summary>
     private CancellationTokenSource? _pageLoadCts;
 
     [RelayCommand]
     private void Navigate(string page)
     {
-        // Повторный клик по текущему пункту: страница уже показана, перезагрузка
-        // (полная пересборка списка) только тормозит — игнорируем. НО при старте
-        // ActivePage уже «Home» (дефолт), а CurrentPage ещё null — первый
-        // Navigate("Home") от радио с IsChecked="True" ОБЯЗАН создать страницу,
-        // иначе приложение запускается с пустой контентной областью.
+        // Repeat click on the current item: the page is already shown, a reload
+        // (full list rebuild) only slows things down — ignore. BUT at startup
+        // ActivePage is already "Home" (default) while CurrentPage is still null — the
+        // first Navigate("Home") from the IsChecked="True" radio MUST create the page,
+        // otherwise the app starts with an empty content area.
         if (ActivePage == page && CurrentPage != null) return;
 
-        // Гасим отложенную загрузку прежнего перехода.
+        // Cancel the previous transition's deferred load.
         _pageLoadCts?.Cancel();
         _pageLoadCts?.Dispose();
         _pageLoadCts = new CancellationTokenSource();
@@ -651,16 +548,16 @@ public partial class MainViewModel : ObservableObject
             "Statistics"   => Stats,
             _              => Library
         };
-        // Активный текст поиска переносится на новую страницу: платформенные сетки
-        // фильтруются тем же запросом, для страниц библиотеки он уходит в Library
-        // (LoadForCurrentSearchAsync ниже читает именно Library.SearchText).
+        // The active search text is carried to the new page: platform grids filter by
+        // the same query; for library pages it goes to Library
+        // (LoadForCurrentSearchAsync below reads Library.SearchText).
         RouteSearchToActivePage(SearchText);
-        // Страница SoundCloud: перечитать карточки из БД; первое открытие — авто-синк.
-        // Страница VK Music и страница Яндекс Музыки: то же самое.
-        // Страница «Загрузки»: пересобрать список скачанных треков из БД + кэша.
-        // Загрузка списков откладывается ДО КОНЦА анимации перехода (см.
-        // LoadAfterTransitionAsync): Clear/Add сотен карточек посреди fade/slide
-        // анимации роняли её кадры — переход выглядел лагающим.
+        // SoundCloud page: re-read cards from the DB; first open — auto-sync.
+        // VK Music page and Yandex Music page: the same.
+        // Downloads page: rebuild the downloaded-tracks list from the DB + cache.
+        // List loading is deferred UNTIL THE END of the transition animation (see
+        // LoadAfterTransitionAsync): Clear/Add of hundreds of cards mid fade/slide
+        // animation dropped its frames — the transition looked laggy.
         var dispatcher = Application.Current?.Dispatcher;
         if (page == "SoundCloud")
             LoadAfterTransitionAsync(dispatcher, ct, () => SoundCloud.OnNavigatedAsync());
@@ -678,24 +575,24 @@ public partial class MainViewModel : ObservableObject
             LoadAfterTransitionAsync(dispatcher, ct, () => Playlists.OnNavigatedAsync());
         else if (page == "Statistics")
             LoadAfterTransitionAsync(dispatcher, ct, () => Stats.OnNavigatedAsync());
-        // SetFilter — только для страниц-фильтров библиотеки: у «Artists» своя страница
-        // (грузится на старте и по LibraryChanged), и сбрасывать фильтр библиотеки
-        // при переходе на неё нельзя.
+        // SetFilter — only for library filter pages: "Artists" has its own page
+        // (loaded at startup and on LibraryChanged), and the library filter must
+        // not be reset when navigating to it.
         else if (page is "Library" or "Home" or "Recent" or "RecentlyPlayed" or "Favorites")
         {
-            // Скелетон и заголовок — сразу (PrepareFilter), сами треки — после анимации.
+            // Skeleton and header immediately (PrepareFilter), the tracks themselves after the animation.
             Library.PrepareFilter(page);
             LoadAfterTransitionAsync(dispatcher, ct, () => Library.LoadForCurrentSearchAsync());
         }
     }
 
     /// <summary>
-    /// Загрузка данных страницы при переходе: один кадр переключения отрисовывается
-    /// на Background-приоритете, затем грузим СРАЗУ, без выжидания анимации — списки
-    /// на время загрузки свёрнуты (IsLoading → Collapsed), Clear/Add больше не роняют
-    /// кадры fade (см. MainWindow.AnimatePageChange).
-    /// Отмена (ct): пользователь ушёл с страницы — загрузка не выполняется вовсе,
-    /// быстрые клики по меню не копят работу.
+    /// Page data load on navigation: one switch frame is rendered at Background priority,
+    /// then we load IMMEDIATELY, without waiting out the animation — lists are collapsed
+    /// during loading (IsLoading → Collapsed), so Clear/Add no longer drops fade frames
+    /// (see MainWindow.AnimatePageChange).
+    /// Cancellation (ct): the user left the page — no load at all, quick menu clicks
+    /// do not accumulate work.
     /// </summary>
     private async void LoadAfterTransitionAsync(Dispatcher? dispatcher, CancellationToken ct, Func<Task> load)
     {
@@ -720,19 +617,19 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Открывает профиль исполнителя по ключу (клик по карточке/имени).</summary>
+    /// <summary>Opens an artist profile by key (card/name click).</summary>
     [RelayCommand]
     private void OpenArtist(string artistKey)
     {
-        // Гасим отложенную загрузку прежнего перехода — как в Navigate.
+        // Cancel the previous transition's deferred load — as in Navigate.
         _pageLoadCts?.Cancel();
         _pageLoadCts?.Dispose();
         _pageLoadCts = new CancellationTokenSource();
         var ct = _pageLoadCts.Token;
 
-        // Заголовок и скелетон — сразу (PrepareArtist), сама перестройка списка —
-        // ПОСЛЕ анимации перехода, как у остальных страниц: Clear/Add карточек
-        // посреди fade/slide ронял её кадры (заметно на переходе SC → артист).
+        // Header and skeleton immediately (PrepareArtist); the list rebuild itself
+        // happens AFTER the transition animation, like other pages: Clear/Add of
+        // cards mid fade/slide dropped its frames (visible on SC → artist).
         ArtistProfile.PrepareArtist(artistKey ?? string.Empty);
         ActivePage = "ArtistProfile";
         CurrentPage = ArtistProfile;
@@ -760,9 +657,9 @@ public partial class MainViewModel : ObservableObject
         await _library.AddLibraryFolderAsync(dlg.FolderName);
     }
 
-    // ===== Компактная сетка (8 колонок вместо 4) и GIF-фон =====
+    // ===== Compact grid (8 columns instead of 4) and GIF background =====
 
-    /// <summary>Число колонок карточек на страницах-сетках (по настройке GridColumns: 4/6/8).</summary>
+    /// <summary>Number of card columns on grid pages (from the GridColumns setting: 4/6/8).</summary>
     public int GridColumns => _settings.Current.GridColumns;
 
     [RelayCommand]
@@ -799,7 +696,7 @@ public partial class MainViewModel : ObservableObject
         Search.IsActive = true;
     }
 
-    /// <summary>Вызывается из View при перетаскивании файлов.</summary>
+    /// <summary>Called from the View when files are dragged in.</summary>
     public async Task HandleDropAsync(string[] paths)
     {
         foreach (var p in paths)
@@ -820,8 +717,8 @@ public partial class MainViewModel : ObservableObject
     {
         _tray.Initialize();
         await Library.LoadAsync();
-        // Страница «Исполнители» строится из той же библиотеки — иначе при старте
-        // она пустая до первого изменения библиотеки.
+        // The Artists page is built from the same library — otherwise at startup
+        // it stays empty until the first library change.
         await Artists.LoadAsync();
         await Player.RestoreAsync(restorePlayback);
     }

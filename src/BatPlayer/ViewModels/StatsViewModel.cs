@@ -8,7 +8,7 @@ using BatPlayer.Services;
 
 namespace BatPlayer.ViewModels;
 
-/// <summary>Строка топа исполнителей.</summary>
+/// <summary>Top-artists row.</summary>
 public sealed class StatsArtistRow
 {
     public required int Index { get; init; }
@@ -16,7 +16,7 @@ public sealed class StatsArtistRow
     public required int Plays { get; init; }
 }
 
-/// <summary>Строка топа треков (и «чаще на повторе»).</summary>
+/// <summary>Top-tracks row (and "most replayed").</summary>
 public sealed class StatsTrackRow
 {
     public required int Index { get; init; }
@@ -26,10 +26,10 @@ public sealed class StatsTrackRow
 }
 
 /// <summary>
-/// Страница «Статистика»: сколько разных треков и сколько прослушиваний за период
-/// (день/неделя/месяц/год/всё), суммарные часы музыки, топ-5 исполнителей, топ-10
-/// треков и трек, который чаще всего ставили на повтор. Данные — из play_log
-/// (каждая прослушка отдельной строкой, включая платформенные треки).
+/// Statistics page: how many distinct tracks and plays over a period
+/// (day/week/month/year/all), total hours of music, top-5 artists, top-10
+/// tracks, and the track most often replayed. Data comes from play_log
+/// (each play is its own row, including platform tracks).
 /// </summary>
 public partial class StatsViewModel : PageViewModel
 {
@@ -47,8 +47,8 @@ public partial class StatsViewModel : PageViewModel
     [ObservableProperty] private StatsPeriod _period = StatsPeriod.Week;
 
     /// <summary>
-    /// Счётчик загрузок: быстрые клики по периодам не должны давать «гонку»,
-    /// в которой медленный устаревший ответ перезаписывает свежий.
+    /// Load counter: rapid period clicks must not produce a race in which
+    /// a slow stale response overwrites a fresh one.
     /// </summary>
     private int _loadSeq;
 
@@ -60,24 +60,23 @@ public partial class StatsViewModel : PageViewModel
         Loc.LanguageChanged += (_, _) =>
         {
             Title = Loc.Get("StatsTitle");
-            _ = LoadAsync(); // перечитать подписи/счётчик на новом языке
+            _ = LoadAsync(); // re-read labels/counter in the new language
         };
     }
 
-    /// <summary>Вызывается из MainViewModel.Navigate("Statistics").</summary>
+    /// <summary>Called from MainViewModel.Navigate("Statistics").</summary>
     public async Task OnNavigatedAsync() => await LoadAsync();
 
-    /// <summary>Перезагрузка на ЛЮБОЕ изменение периода.
-    /// Раньше грузила только команда: клик по радиокнопке сначала синхронно
-    /// выставлял Period через двусторонний IsChecked-биндинг, и команда видела
-    /// «период уже тот» и выходила, не перечитав данные — статистика не
-    /// переключалась. Теперь единственная точка загрузки — здесь.</summary>
+    /// <summary>Reload on ANY period change. Previously only the command loaded: a radio
+    /// button click first set Period synchronously via two-way IsChecked binding, so the
+    /// command saw "same period" and returned without re-reading the data — the stats
+    /// never switched. Now this is the single load point.</summary>
     partial void OnPeriodChanged(StatsPeriod value) => _ = LoadAsync();
 
     [RelayCommand]
     private Task SetPeriodAsync(string period)
     {
-        // Только парсим и выставляем период — загрузку делает OnPeriodChanged.
+        // Just parse and set the period — OnPeriodChanged does the loading.
         if (Enum.TryParse<StatsPeriod>(period, ignoreCase: true, out var p))
             Period = p;
         return Task.CompletedTask;
@@ -91,7 +90,7 @@ public partial class StatsViewModel : PageViewModel
         {
             var stats = await _history.GetStatsAsync(period);
 
-            // Пока грузились, выбрали другой период: ответ устарел — не применяем.
+            // A different period was chosen while loading: the response is stale — do not apply.
             if (seq != _loadSeq) return;
 
             UniqueTracksText = stats.UniqueTracks.ToString("N0");

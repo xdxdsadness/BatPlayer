@@ -7,15 +7,15 @@ using System.Windows.Media.Animation;
 namespace BatPlayer.Controls;
 
 /// <summary>
-/// Сворачивание «шторки» заголовка страницы при прокрутке: скроллишь вниз — шторка
-/// (заголовок + счётчик + кнопки шапки) плавно уезжает в ноль, контент занимает её
-/// место и пролетает чуть выше прежней границы; вернулся наверх — шторка разворачивается.
-/// Присоединяется к скроллируемому элементу (ListView/ScrollViewer), Header — сворачиваемый.
+/// Page header "curtain" collapse on scroll: scrolling down smoothly collapses the
+/// curtain (header + counter + header buttons) to zero, the content takes its place and
+/// flies slightly past the old boundary; back at the top the curtain expands.
+/// Attached to the scrollable element (ListView/ScrollViewer); Header is the collapsible one.
 /// </summary>
 public static class ScrollHeaderCollapse
 {
-    /// <summary>Шторка свернулась/развернулась (host, collapsed). Окно использует это,
-    /// чтобы показывать действия страницы в тайтл-баре, пока шторка спрятана.</summary>
+    /// <summary>The curtain collapsed/expanded (host, collapsed). The window uses this to
+    /// show page actions in the title bar while the curtain is hidden.</summary>
     public static event Action<FrameworkElement, bool>? CollapsedChanged;
 
     public static readonly DependencyProperty HeaderProperty =
@@ -33,7 +33,7 @@ public static class ScrollHeaderCollapse
         if (d is not FrameworkElement host) return;
         host.Loaded -= OnHostLoaded;
         host.Loaded += OnHostLoaded;
-        // Уже загружен (шаблоны страниц пересоздаются при навигации) — вешаем сразу.
+        // Already loaded (page templates are recreated on navigation) — attach right away.
         if (host.IsLoaded) Attach(host);
     }
 
@@ -48,17 +48,17 @@ public static class ScrollHeaderCollapse
         var header = GetHeader(host);
         if (sv == null || header == null) return;
 
-        // host замыкается явно: состояние (NaturalHeight/Collapsed) живёт на host'е,
-        // а sender'ом в ScrollChanged приходит сам ScrollViewer. Повторный Attach
-        // (Loaded + разрешение биндинга приходят дважды на один host) больше не
-        // подписывает ScrollChanged повторно — раньше лямбда копилась, и каждый
-        // scroll-event обрабатывался по два раза.
+        // host is captured explicitly: the state (NaturalHeight/Collapsed) lives on the
+        // host, while ScrollChanged's sender is the ScrollViewer itself. A repeated Attach
+        // (Loaded + binding resolution arrive twice per host) no longer subscribes to
+        // ScrollChanged twice — the lambda used to accumulate and every scroll event
+        // was handled twice.
         if ((bool)host.GetValue(AttachedProperty)) return;
         host.SetValue(AttachedProperty, true);
         sv.ScrollChanged += (_, args) => OnScrollChanged(host, args);
 
-        // Естественные размеры шторки снимаются при первом сворачивании (страница
-        // всегда загружается развёрнутой); хранятся в Property на host'е.
+        // The curtain's natural sizes are captured on first collapse (a page always loads
+        // expanded); stored in properties on the host.
         if (host.GetValue(NaturalHeightProperty) is not double h || double.IsNaN(h))
             host.SetValue(NaturalHeightProperty, header.ActualHeight > 0 ? header.ActualHeight : double.NaN);
         if (host.GetValue(NaturalMarginProperty) is not Thickness m || m.Top == -1)
@@ -95,9 +95,9 @@ public static class ScrollHeaderCollapse
         if (double.IsNaN(naturalH)) return;
 
         header.ClipToBounds = true;
-        // 300мс: сдвиг контента (шапка уступает место списку) растянут по всему
-        // первому глайду колеса — иначе он сжимался в начало прокрутки и читался
-        // как «проскок чуть дальше, чем должно».
+        // 300ms: the content shift (the header yields to the list) is stretched across the
+        // whole first wheel glide — otherwise it compressed into the start of the scroll
+        // and read as "jumping slightly past where it should".
         var duration = TimeSpan.FromMilliseconds(300);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 

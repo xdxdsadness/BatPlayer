@@ -14,18 +14,18 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Header: Apply выровнен по правому краю колонки контента. Обёртка —
-             StackPanel с той же шириной (MaxWidth=880) и тем же выравниванием,
-             что у колонки карточек в ScrollViewer ниже, и в контейнере с теми же
-             отступами (24/16): правый край кнопки всегда совпадает с правым
-             краем карточек при любой ширине окна. Заголовок остаётся на 32px. -->
+        <!-- Header: Apply is right-aligned with the content column. The wrapper is
+             a StackPanel with the same width (MaxWidth=880) and alignment as the
+             card column in the ScrollViewer below, in a container with the same
+             margins (24/16): the button's right edge always matches the right
+             edge of the cards at any window width. The header stays at 32px. -->
         <Grid Grid.Row="0" Margin="24,14,16,8">
             <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Medium"
                        Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"
                        HorizontalAlignment="Left" Margin="8,0,0,0"/>
             <StackPanel MaxWidth="880" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-                <!-- Right margin 10: компенсация сдвига карточек скроллбаром (8px
-                     внутри ScrollViewer сужает вьюпорт и смещает колонку влево). -->
+                <!-- Right margin 10: compensates the scrollbar shifting the cards
+                     (the 8px inside the ScrollViewer narrows the viewport). -->
                 <Button Style="{StaticResource AccentButton}" Padding="16,7" Margin="0,0,10,0" HorizontalAlignment="Right"
                         Click="ApplySettings_Click"
                         ToolTip="{Binding [SettingsApplyDesc], Source={x:Static loc:Loc.T}}">
@@ -416,11 +416,11 @@
                 <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <!-- PNG через Image + UniformToFill — как у карточки Spotify ниже.
-                                 Раньше здесь был векторный DrawingImage в ImageBrush со
-                                 Stretch=Uniform: 143x64 в квадрате 28x28letterbox'ился до ~12px
-                                 высоты, и тонкие штрихи логотипа на некоторых DPI/масштабах
-                                 пропадали целиком («иконка пропала»). -->
+                            <!-- PNG via Image + UniformToFill — like the Spotify card below.
+                                 A vector DrawingImage in an ImageBrush with Stretch=Uniform
+                                 letterboxed 143x64 in a 28x28 square down to ~12px height, and
+                                 the logo's thin strokes vanished entirely at some DPI/scales
+                                 ("the icon disappeared"). -->
                             <Border Width="28" Height="28" CornerRadius="7" Margin="0,0,8,0">
                                 <Image Source="pack://application:,,,/Resources/Logos/soundcloud.png"
                                        Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -431,7 +431,7 @@
                         <TextBlock Text="{Binding SoundCloudStatusText}" FontSize="13"
                                    Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
 
-                        <!-- Официальный SoundCloud API: pairing-подключение -->
+                        <!-- Official SoundCloud API: pairing connect -->
                         <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="6"
                                 Padding="10,8" Margin="0,0,0,10">
                             <StackPanel>
@@ -444,19 +444,19 @@
                                     <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="12,5"
                                             Command="{Binding ConnectScApiCommand}"
                                             Visibility="{Binding ScApiConnected, Converter={StaticResource InvBool2Vis}}">
-                                        <TextBlock Text="Подключить API" FontSize="12"/>
+                                        <TextBlock Text="{Binding [ScApiConnect], Source={x:Static loc:Loc.T}}" FontSize="12"/>
                                     </Button>
                                     <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="12,5"
                                             Command="{Binding DisconnectScApiCommand}"
                                             Visibility="{Binding ScApiConnected, Converter={StaticResource Bool2Vis}}">
-                                        <TextBlock Text="Отключить API" FontSize="12"/>
+                                        <TextBlock Text="{Binding [ScApiDisconnect], Source={x:Static loc:Loc.T}}" FontSize="12"/>
                                     </Button>
                                 </Grid>
                                 <TextBlock Text="{Binding ScApiStatusText}" FontSize="11"
                                            Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
-                                <!-- Пустой код не рисует ничего — конвертер не нужен
-                                     (Null2Vis живёт в ресурсах MainWindow и отсюда
-                                     StaticResource'ом не виден: настройки падали). -->
+                                <!-- Empty code draws nothing — no converter needed
+                                     (Null2Vis lives in MainWindow's resources and is not
+                                     visible from here via StaticResource). -->
                                 <TextBlock Text="{Binding ScApiPairingCode}" FontSize="14" FontWeight="SemiBold"
                                            FontFamily="{StaticResource AppFontMono}" Margin="0,6,0,0"/>
                             </StackPanel>
@@ -473,9 +473,9 @@
                                     Visibility="{Binding IsSoundCloudConnected, Converter={StaticResource Bool2Vis}}">
                                 <TextBlock Text="{Binding [DisconnectSoundCloud], Source={x:Static loc:Loc.T}}" FontSize="13"/>
                             </Button>
-                            <!-- Смена аккаунта: полный сброс сессии + профиля WebView2 и
-                                 чистое окно входа. Обычная пара «Отключить → Подключить»
-                                 автологинилась обратно в тот же аккаунт. -->
+                            <!-- Account switch: full reset of the session + WebView2 profile and
+                                 a clean login window. The plain Disconnect -> Connect pair
+                                 auto-logged back into the same account. -->
                             <Button Style="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,0"
                                     Command="{Binding SwitchSoundCloudAccountCommand}"
                                     Visibility="{Binding IsSoundCloudConnected, Converter={StaticResource Bool2Vis}}"

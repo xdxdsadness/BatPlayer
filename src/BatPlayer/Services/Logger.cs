@@ -7,18 +7,18 @@ using System.Threading.Tasks;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Логгер в файл без блокировки вызывающего потока.
-/// Путь: %LocalAppData%/BatPlayer/logs/app_YYYYMMDD.log
-/// Вызывающий поток (в т.ч. UI) только кладёт строку в ограниченную очередь —
-/// диск пишет фоновый поток батчами. Раньше каждый вызов делал синхронный
-/// AppendAllText под глобальным локом: на тиках позиции это давало постоянные
-/// микроподвисания UI и лог 400+ МБ/день.
-/// Ротация: по дню; файл > 64 МБ при открытии усекается; логи старше 7 дней
-/// удаляются на старте.
+/// File logger that never blocks the calling thread.
+/// Path: %LocalAppData%/BatPlayer/logs/app_YYYYMMDD.log
+/// The calling thread (including UI) only enqueues the line into a bounded queue —
+/// a background thread writes to disk in batches. Each call used to do a synchronous
+/// AppendAllText under a global lock: on position ticks that meant constant UI
+/// micro-stalls and a 400+ MB/day log.
+/// Rotation: daily; a file > 64 MB is truncated on open; logs older than 7 days
+/// are deleted at startup.
 /// </summary>
 public static class Logger
 {
-    private const int MaxQueue = 16384;      // переполнение — строки теряются, UI не ждёт
+    private const int MaxQueue = 16384;      // on overflow lines are dropped — the UI never waits
     private const long MaxLogFileBytes = 64 * 1024 * 1024;
     private const int RetentionDays = 7;
 
@@ -42,10 +42,10 @@ public static class Logger
         var line = $"{DateTime.Now:HH:mm:ss.fff} [{level}] {msg}";
         try
         {
-            // TryAdd: при переполнении отбрасываем строку вместо блокировки автора.
+            // TryAdd: on overflow the line is dropped instead of blocking the caller.
             Queue.TryAdd(line);
         }
-        catch { /* очередь закрыта при выгрузке — писать некуда */ }
+        catch { /* queue closed at shutdown — nowhere to write */ }
     }
 
     private static void WriterLoop()
@@ -65,12 +65,12 @@ public static class Logger
                 }
 
                 writer.WriteLine(line);
-                // Батчинг: всплеск строк копится в буфере, сбрасываем когда очередь пуста.
+                // Batching: a burst of lines accumulates in the buffer; flush when the queue is empty.
                 if (Queue.Count == 0)
                     writer.Flush();
             }
         }
-        catch { /* логгер не должен ронять приложение */ }
+        catch { /* the logger must never crash the app */ }
         finally
         {
             try { writer?.Flush(); writer?.Dispose(); } catch { }
@@ -86,7 +86,7 @@ public static class Logger
             try
             {
                 if (new FileInfo(path).Length > MaxLogFileBytes)
-                    File.Delete(path); // раздувшийся файл дня усекаем, начинаем заново
+                    File.Delete(path); // truncate the bloated day file and start over
             }
             catch { }
         }

@@ -2,7 +2,7 @@ using NAudio.Wave;
 
 namespace BatPlayer.Audio;
 
-/// <summary>Простой volume-scaler в sample chain — нужен для плавной регулировки громкости.</summary>
+/// <summary>Simple volume scaler in the sample chain — needed for smooth volume control.</summary>
 public sealed class VolumeSampleProvider : ISampleProvider
 {
     private readonly ISampleProvider _source;

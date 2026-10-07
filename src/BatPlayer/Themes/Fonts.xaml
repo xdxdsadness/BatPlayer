@@ -4,12 +4,10 @@
 
     <FontFamily x:Key="AppFont">Segoe UI Variable, Segoe UI, Inter, sans-serif</FontFamily>
     <FontFamily x:Key="AppFontDisplay">Segoe UI Variable Display, Segoe UI, Inter, sans-serif</FontFamily>
-    <!-- Моноширинный прежде для таймлайна шрифт заменён на обычный системный:
-         Cascadia/Consolas выглядели «терминально» (перечёркнутый ноль), пользователь
-         попросил проще. Время фиксированного формата HH:MM выравнивание держит -->
+    <!-- Mono font kept for fallback only; timeline uses the regular font (HH:MM stays aligned) -->
     <FontFamily x:Key="AppFontMono">Segoe UI Variable, Segoe UI, Consolas, monospace</FontFamily>
 
-    <!-- Компактная шкала: базовый кегль 13 (был 14) — интерфейс плотнее, надписи легче -->
+    <!-- Compact scale: body 13 (was 14) for a denser UI -->
     <sys:Double x:Key="FontSizeTiny">11</sys:Double>
     <sys:Double x:Key="FontSizeSmall">12</sys:Double>
     <sys:Double x:Key="FontSizeBody">13</sys:Double>

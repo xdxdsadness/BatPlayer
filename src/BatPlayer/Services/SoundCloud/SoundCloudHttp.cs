@@ -9,33 +9,33 @@ using System.Threading.Tasks;
 namespace BatPlayer.Services.SoundCloud;
 
 /// <summary>
-/// Единая фабрика HttpClient для SoundCloud-сервисов + цепочка фолбэков транспорта.
+/// Shared HttpClient factory for SoundCloud services + transport fallback chain.
 ///
-/// Авто-режим (настройка пуста): цепочка попыток
-///   1) direct — напрямую;
-///   2) локальный DPI-bypass (DpiBypassProxy, 127.0.0.1, фрагментация TLS ClientHello —
-///      обход SNI-блокировок провайдера БЕЗ VPN и внешних серверов);
-///   3) прокси пользователя/системы (AppSettings.SoundCloudProxy или WinINET-прокси,
-///      который пишут VPN-клиенты) — если настроен.
-/// Режимы "off" (только direct) и явный прокси из настройки оставляют один транспорт.
+/// Auto mode (empty setting), attempt order:
+///   1) direct;
+///   2) local DPI-bypass (DpiBypassProxy, 127.0.0.1, TLS ClientHello fragmentation —
+///      bypasses provider SNI blocking without a VPN or external servers);
+///   3) user/system proxy (AppSettings.SoundCloudProxy, or the WinINET proxy written by
+///      VPN clients) — if configured.
+/// "off" mode (direct only) and an explicit proxy leave a single transport.
 ///
-/// Успешный транспорт кэшируется (TTL ~10 мин) и становится первой попыткой, остальные
-/// остаются фолбэками. Клиенты — статические синглтоны (не плодим сокеты), пересоздаются
-/// только при смене прокси. Учётные данные прокси не используются и не логируются.
+/// The working transport is cached (TTL ~10 min) and tried first; the rest stay as fallbacks.
+/// Clients are static singletons (no socket churn) and are recreated only when the proxy
+/// changes. Proxy credentials are never used or logged.
 /// </summary>
 internal static class SoundCloudHttp
 {
-    /// <summary>Таймаут одного запроса (как было до правки).</summary>
+    /// <summary>Per-request timeout.</summary>
     private const int TimeoutSeconds = 15;
 
-    /// <summary>Таймаут чтения тела медиа-ответа: пауза между сегментами больше этого
-    /// значения трактуется как обрыв потока (DPI/CDN) и приводит к ретраю цепочки.</summary>
+    /// <summary>Media body read timeout: a pause between segments longer than this is
+    /// treated as a stream drop (DPI/CDN) and retried through the transport chain.</summary>
     private static readonly TimeSpan StreamReadTimeout = TimeSpan.FromSeconds(20);
 
-    /// <summary>Сколько держим «рабочий режим» до повторного зондирования direct→proxy.</summary>
+    /// <summary>How long the working mode is trusted before re-probing direct→proxy.</summary>
     private static readonly TimeSpan WorkingModeTtl = TimeSpan.FromMinutes(10);
 
-    /// <summary>Реестр читаем не чаще раза в минуту.</summary>
+    /// <summary>Registry read at most once a minute.</summary>
     private static readonly TimeSpan SystemProxyCacheTtl = TimeSpan.FromMinutes(1);
 
     private static readonly object Lock = new();
@@ -45,22 +45,22 @@ internal static class SoundCloudHttp
     private static string? _proxyClientKey;
     private static HttpClient? _bypassClient;
 
-    /// <summary>Антиблокировка zapret разрешена настройкой (AppSettings.SoundCloudZapretEnabled).
-    /// Устанавливается SoundCloudService при старте и на смене настроек.</summary>
-    public static bool ZapretEnabled { get; set; } = true;
+    /// <summary>Packet-level bypass allowed by setting (AppSettings.DpiBypassEnabled).
+    /// Set by SoundCloudService at startup and on setting changes.</summary>
+    public static bool DpiBypassEnabled { get; set; } = true;
 
-    /// <summary>Нормализованное значение AppSettings.SoundCloudProxy, применённое к клиентам.</summary>
+    /// <summary>Normalized AppSettings.SoundCloudProxy value applied to the clients.</summary>
     private static string _appliedSetting = string.Empty;
 
-    // Кэш рабочего режима: ключ транспорта ("direct"/"dpi-bypass"/формат прокси).
-    // null/просрочен — зондируем заново.
+    // Working-mode cache: transport key ("direct"/"dpi-bypass"/proxy format).
+    // null/expired — probe again.
     private const string DirectKey = "direct";
     private const string BypassKey = "dpi-bypass (local)";
     private static string? _workingModeKey;
     private static DateTime _workingModeUntilUtc = DateTime.MinValue;
 
-    // Кэш ОТКАЗОВ: транспорт, только что упавший по сети, пропускается 90 секунд —
-    // клики не должны каждый раз платить таймаутом мёртвого транспорта.
+    // Failure cache: a transport that just failed on the network is skipped for 90 seconds —
+    // clicks must not pay the dead transport's timeout every time.
     private static readonly TimeSpan TransportFailTtl = TimeSpan.FromSeconds(90);
     private static readonly Dictionary<string, DateTime> TransportFailedUntil = new();
 
@@ -85,17 +85,17 @@ internal static class SoundCloudHttp
 
     private enum ProxyMode
     {
-        /// <summary>Пустая настройка: direct первым, системный прокси — фолбэк.</summary>
+        /// <summary>Empty setting: direct first, system proxy as fallback.</summary>
         Auto,
-        /// <summary>"off": только direct, без фолбэка.</summary>
+        /// <summary>"off": direct only, no fallback.</summary>
         Off,
-        /// <summary>Явный прокси из настроек: только он, без фолбэка.</summary>
+        /// <summary>Explicit proxy from settings: only it, no fallback.</summary>
         Explicit
     }
 
     /// <summary>
-    /// Применить настройку SoundCloudProxy: при старте приложения и на каждое изменение настроек.
-    /// Смена значения сбрасывает кэш рабочего режима (следующий запрос зондирует заново).
+    /// Applies the SoundCloudProxy setting at app start and on every settings change.
+    /// A value change resets the working-mode cache (the next request re-probes).
     /// </summary>
     public static void ApplyUserSetting(string? setting)
     {
@@ -105,25 +105,25 @@ internal static class SoundCloudHttp
             if (string.Equals(_appliedSetting, normalized, StringComparison.Ordinal)) return;
             _appliedSetting = normalized;
             InvalidateWorkingMode();
-            _systemProxyReadUtc = DateTime.MinValue; // перечитать реестр на новом режиме
+            _systemProxyReadUtc = DateTime.MinValue; // re-read the registry for the new mode
         }
 
-        // В лог — только классификация; сама строка настройки не печатается (в ней могут быть credentials).
+        // Log only the classification; the setting string itself is not printed (may contain credentials).
         Logger.Info($"SoundCloud proxy setting: {DescribeSetting(normalized)}");
     }
 
     /// <summary>
-    /// GET с авто-выбором транспорта. <paramref name="createRequest"/> вызывается на каждую попытку
-    /// (HttpRequestMessage переиспользовать нельзя). Возвращает (HTTP-код, тело); если не сработал
-    /// ни один транспорт — пробрасывает последнее сетевое исключение.
+    /// GET with automatic transport selection. <paramref name="createRequest"/> is invoked on
+    /// every attempt (HttpRequestMessage cannot be reused). Returns (HTTP status, body); if no
+    /// transport works, rethrows the last network exception.
     /// </summary>
     public static async Task<(int Status, string Body)> SendWithFailoverAsync(
         Func<HttpRequestMessage> createRequest, CancellationToken ct)
     {
-        // Второй проход — после запуска пакетной антиблокировки (winws): она правит
-        // пакеты на уровне драйвера, direct-транспорт после её старта проходит сам.
+        // Second pass after the packet-level bypass starts: it rewrites packets at the
+        // driver level, so the direct transport passes on its own afterwards.
         List<(HttpClient Client, string Name)> attempts;
-        var zapretAttempted = false;
+        var bypassAttempted = false;
         while (true)
         {
             attempts = ResolveTransports();
@@ -147,34 +147,34 @@ internal static class SoundCloudHttp
                 catch (Exception) when (i == attempts.Count - 1)
                 {
                     MarkTransportFailed(name);
-                    failed = true; // последний транспорт тоже упал — выход из прохода
+                    failed = true; // last transport failed too — end the pass
                 }
             }
 
-            if (!failed || zapretAttempted
-                || !await SoundCloudZapret.EnsureStartedAsync(ZapretEnabled).ConfigureAwait(false))
+            if (!failed || bypassAttempted
+                || !await DpiBypass.EnsureStartedAsync(DpiBypassEnabled).ConfigureAwait(false))
                 break;
-            zapretAttempted = true;
-            Logger.Info("SoundCloud zapret started — retrying transports through it");
+            bypassAttempted = true;
+            Logger.Info("SoundCloud packet bypass started — retrying transports through it");
         }
 
-        throw new HttpRequestException("all SoundCloud transports failed (direct, dpi-bypass, proxy, zapret)");
+        throw new HttpRequestException("all SoundCloud transports failed (direct, dpi-bypass, proxy, packet bypass)");
     }
 
     /// <summary>
-    /// GET с авто-выбором транспорта, тело ответа отдаётся как Stream (для скачивания
-    /// mp3-стримов в кэш-файл без буферизации в память). ResponseHeadersRead: тело НЕ читается
-    /// в память здесь — вызывающий копирует Stream и обязан Dispose-нуть <paramref name="owner"/>
-    /// (он закрывает response/request и соединение). Статус НЕ проверяется: не-2xx отдаётся
-    /// как есть со стримом тела ошибки. Сетевое исключение последней попытки — пробрасывается.
+    /// GET with automatic transport selection, response body returned as a Stream (for
+    /// downloading media streams to a cache file without memory buffering). The body is NOT
+    /// read into memory here — the caller copies the Stream and must Dispose <paramref name="owner"/>
+    /// (it closes response/request and the connection). Status is NOT checked: non-2xx is
+    /// returned as-is with the error body stream. The last attempt's network exception is rethrown.
     /// </summary>
     public static async Task<(int Status, Stream? Stream, IDisposable? Owner)> SendStreamAsync(
         Func<HttpRequestMessage> createRequest, CancellationToken ct)
     {
-        // Второй проход — после запуска пакетной антиблокировки (winws): она правит
-        // пакеты на уровне драйвера, direct-транспорт после её старта проходит сам.
+        // Second pass after the packet-level bypass starts: it rewrites packets at the
+        // driver level, so the direct transport passes on its own afterwards.
         List<(HttpClient Client, string Name)> attempts;
-        var zapretAttempted = false;
+        var bypassAttempted = false;
         while (true)
         {
             attempts = ResolveTransports();
@@ -198,23 +198,23 @@ internal static class SoundCloudHttp
                 catch (Exception) when (i == attempts.Count - 1)
                 {
                     MarkTransportFailed(name);
-                    failed = true; // последний транспорт тоже упал — выход из прохода
+                    failed = true; // last transport failed too — end the pass
                 }
             }
 
-            if (!failed || zapretAttempted
-                || !await SoundCloudZapret.EnsureStartedAsync(ZapretEnabled).ConfigureAwait(false))
+            if (!failed || bypassAttempted
+                || !await DpiBypass.EnsureStartedAsync(DpiBypassEnabled).ConfigureAwait(false))
                 break;
-            zapretAttempted = true;
-            Logger.Info("SoundCloud zapret started — retrying transports through it");
+            bypassAttempted = true;
+            Logger.Info("SoundCloud packet bypass started — retrying transports through it");
         }
 
-        throw new HttpRequestException("all SoundCloud transports failed (direct, dpi-bypass, proxy, zapret)");
+        throw new HttpRequestException("all SoundCloud transports failed (direct, dpi-bypass, proxy, packet bypass)");
     }
 
-    // ===================== Выбор транспорта =====================
+    // ===================== Transport selection =====================
 
-    /// <summary>Цепочка попыток транспорта в порядке приоритета (см. доку класса).</summary>
+    /// <summary>Transport attempt chain in priority order (see the class doc).</summary>
     private static List<(HttpClient Client, string Name)> ResolveTransports()
     {
         var (mode, endpoint) = Resolve();
@@ -226,14 +226,14 @@ internal static class SoundCloudHttp
                 return new List<(HttpClient, string)> { direct };
 
             case ProxyMode.Explicit:
-                // Явный выбор пользователя: direct не пробуем, даже если он «работает».
+                // Explicit user choice: do not try direct, even if it "works".
                 return endpoint != null
                     ? new List<(HttpClient, string)> { (GetProxyClient(endpoint.Value), SoundCloudProxyConfig.Format(endpoint.Value)) }
                     : new List<(HttpClient, string)> { direct };
 
             default: // Auto
             {
-                // Порядок: закэшированный рабочий транспорт первым, остальные — фолбэками.
+                // Order: cached working transport first, the rest as fallbacks.
                 var bypassEndpoint = DpiBypassProxy.EnsureStarted();
                 var bypass = bypassEndpoint != null
                     ? (GetBypassClient(bypassEndpoint.Value), BypassKey)
@@ -255,8 +255,8 @@ internal static class SoundCloudHttp
                 else if (cached != null) { Add(user, endpoint != null ? SoundCloudProxyConfig.Format(endpoint.Value) : null); Add(bypass, BypassKey); Add(direct, DirectKey); }
                 else { Add(direct, DirectKey); Add(bypass, BypassKey); Add(user, endpoint != null ? SoundCloudProxyConfig.Format(endpoint.Value) : null); }
 
-                // Упавшие 90 секунд назад транспорты — в конец цепочки (первую попытку
-                // оставляем всегда: цепочка не должна остаться пустой).
+                // Transports that failed within the last 90 seconds go to the end of the
+                // chain (the first attempt is always kept: the chain must not be empty).
                 var attempts = ordered
                     .OrderBy(o => IsTransportFailed(o.Key) ? 1 : 0)
                     .Select(o => o.T)
@@ -279,7 +279,7 @@ internal static class SoundCloudHttp
             var userEndpoint = SoundCloudProxyConfig.ParseUserProxy(setting);
             if (userEndpoint != null) return (ProxyMode.Explicit, userEndpoint);
 
-            // Неразбираемая настройка уже залогирована в ApplyUserSetting — работаем как auto.
+            // Unparsable setting is already logged in ApplyUserSetting — behave as auto.
         }
 
         lock (Lock)
@@ -302,9 +302,9 @@ internal static class SoundCloudHttp
         return parsed != null ? SoundCloudProxyConfig.Format(parsed.Value) : "unrecognized, falling back to auto";
     }
 
-    // ==================== Кэш рабочего режима ===================
+    // ==================== Working-mode cache ===================
 
-    /// <summary>Рабочий транспорт из кэша или null, если кэш пуст/просрочен.</summary>
+    /// <summary>Working transport from the cache, or null if empty/expired.</summary>
     private static string? PeekWorkingMode()
     {
         lock (Lock)
@@ -323,27 +323,27 @@ internal static class SoundCloudHttp
             _workingModeKey = key;
             _workingModeUntilUtc = DateTime.UtcNow + WorkingModeTtl;
 
-            if (unchanged) return; // продлили TTL — режим не менялся, не логируем повторно
+            if (unchanged) return; // TTL extended, mode unchanged — don't log again
         }
 
         Logger.Info($"SoundCloud network mode selected: {key}");
     }
 
-    /// <summary>Сброс кэша выбора. Вызывается под <see cref="Lock"/>.</summary>
+    /// <summary>Resets the selection cache. Called under <see cref="Lock"/>.</summary>
     private static void InvalidateWorkingMode()
     {
         _workingModeKey = null;
         _workingModeUntilUtc = DateTime.MinValue;
     }
 
-    // ======================== Клиенты ===========================
+    // ======================== Clients ===========================
 
     private static HttpClient GetDirectClient()
     {
         lock (Lock) return _directClient ??= CreateClient(proxy: null);
     }
 
-    /// <summary>Клиент через локальный DPI-bypass прокси (фрагментация ClientHello).</summary>
+    /// <summary>Client through the local DPI-bypass proxy (ClientHello fragmentation).</summary>
     private static HttpClient GetBypassClient((string Host, int Port) endpoint)
     {
         lock (Lock)
@@ -367,15 +367,15 @@ internal static class SoundCloudHttp
 
             var webProxy = SoundCloudProxyConfig.TryCreateWebProxy(endpoint);
             if (webProxy == null)
-                return _directClient ??= CreateClient(proxy: null); // схема не поддержана — деградируем в direct
+                return _directClient ??= CreateClient(proxy: null); // unsupported scheme — degrade to direct
 
-            // Старый прокси-клиент не Dispose'им: по нему могут идти in-flight запросы.
-            // Пересоздание происходит только при смене прокси, так что сокеты не утекают.
+            // Do not dispose the old proxy client: in-flight requests may still use it.
+            // Recreation only happens on a proxy change, so sockets don't leak.
             _proxyClient = CreateClient(webProxy);
             _proxyClientKey = key;
         }
 
-        Logger.Info($"SoundCloud HTTP client created for proxy {key}"); // credentials в эндпоинт не входят
+        Logger.Info($"SoundCloud HTTP client created for proxy {key}"); // credentials are not part of the endpoint
         return _proxyClient;
     }
 
@@ -383,9 +383,9 @@ internal static class SoundCloudHttp
     {
         var handler = new SocketsHttpHandler
         {
-            UseCookies = false, // cookies SoundCloud передаются заголовком Cookie
+            UseCookies = false, // SoundCloud cookies are sent via the Cookie header
             AutomaticDecompression = DecompressionMethods.All,
-            Proxy = proxy // null — direct; socks5:///http:// поддержаны SocketsHttpHandler
+            Proxy = proxy // null — direct; socks5:// and http:// supported by SocketsHttpHandler
         };
 
         var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(TimeoutSeconds) };
@@ -405,27 +405,27 @@ internal static class SoundCloudHttp
     private static async Task<(int Status, Stream? Stream, IDisposable? Owner)> SendStreamOnceAsync(
         HttpClient client, Func<HttpRequestMessage> createRequest, CancellationToken ct)
     {
-        var request = createRequest(); // НЕ using: закрывается владельцем вместе с response
+        var request = createRequest(); // NOT using: disposed by the owner together with the response
         HttpResponseMessage response;
         try
         {
             response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             var stream = await response.Content.ReadAsStreamAsync(ct);
-            // Тело под таймаутом чтения: DPI/CDN обрыв потока посреди скачивания
-            // превращается в обычную сетевую ошибку вместо вечного зависания.
+            // Body under a read timeout: a DPI/CDN mid-download stream drop becomes a
+            // regular network error instead of an infinite hang.
             return ((int)response.StatusCode, new TimeoutReadStream(stream, StreamReadTimeout),
                     new StreamOwner(response, request));
         }
         catch
         {
-            // Заголовки/стрим не получены — чистим за собой, вызывающему нечем владеть.
+            // Headers/stream not received — clean up; the caller has nothing to own.
             request.Dispose();
             throw;
         }
     }
 
-    /// <summary>Самый внутренний текст исключения: там живёт настоящая причина
-    /// (DNS/timeout/refused/reset) — без него в логе только тип обёртки.</summary>
+    /// <summary>Innermost exception text: the real cause lives there (DNS/timeout/refused/reset) —
+    /// without it the log only shows the wrapper type.</summary>
     private static string RootMessage(Exception ex)
     {
         var cur = ex;
@@ -434,9 +434,9 @@ internal static class SoundCloudHttp
     }
 
     /// <summary>
-    /// Обёртка тела медиа-ответа: если данные перестают поступать на N секунд
-    /// (DPI рвёт поток посреди скачивания, обрыв CDN) — IOException вместо вечного
-    /// зависания. Вызывающий код ловит его как обычный сетевой сбой (ретрай/фолбэк).
+    /// Media body wrapper: if data stops arriving for N seconds (DPI tearing the stream
+    /// mid-download, CDN drop) — an IOException instead of an infinite hang. Callers catch
+    /// it as a regular network failure (retry/fallback).
     /// </summary>
     internal sealed class TimeoutReadStream : Stream
     {
@@ -477,24 +477,24 @@ internal static class SoundCloudHttp
         protected override void Dispose(bool disposing) { if (disposing) _inner.Dispose(); base.Dispose(disposing); }
     }
 
-    /// <summary>Держит response и request живыми, пока вызывающий читает Stream тела.</summary>
+    /// <summary>Keeps response and request alive while the caller reads the body Stream.</summary>
     private sealed class StreamOwner(HttpResponseMessage response, HttpRequestMessage request) : IDisposable
     {
         public void Dispose()
         {
-            response.Dispose(); // закрывает и Content-стрим
+            response.Dispose(); // also closes the content stream
             request.Dispose();
         }
     }
 
     /// <summary>
-    /// Сетевая ли ошибка (ретрай имеет смысл): недоступность/обрыв/таймаут HTTP-запроса,
-    /// но НЕ отмена вызывающим кодом.
+    /// Whether the error is a network one (a retry makes sense): unavailability/drop/timeout
+    /// of the HTTP request, but NOT caller cancellation.
     /// </summary>
     private static bool IsRetryableNetworkError(Exception ex, CancellationToken ct)
     {
         if (ct.IsCancellationRequested) return false;
         return ex is HttpRequestException
-               || (ex is TaskCanceledException && ex.InnerException is TimeoutException); // сработал HttpClient.Timeout
+               || (ex is TaskCanceledException && ex.InnerException is TimeoutException); // HttpClient.Timeout fired
     }
 }

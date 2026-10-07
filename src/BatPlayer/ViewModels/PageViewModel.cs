@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Базовый класс для всех вкладок главного окна.
+/// Base class for all main-window tabs.
 /// </summary>
 public abstract partial class PageViewModel : ObservableObject
 {

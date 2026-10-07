@@ -8,8 +8,8 @@
             >
     <UserControl.Resources>
         <cv:BoolToVisibilityConverter x:Key="Bool2Vis"/>
-        <!-- Логотип источника карточки: Яндекс по умолчанию, VK/SC по Source; локальные
-             без логотипа (их наличие показывает бейдж IconFile) -->
+        <!-- Card source logo: Yandex by default, VK/SC by Source; local tracks
+             have none (their presence is shown by the IconFile badge) -->
         <Style x:Key="WaveSourceLogo" TargetType="Image">
             <Setter Property="Width" Value="16"/>
             <Setter Property="Height" Value="16"/>
@@ -28,9 +28,9 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <!-- Карточка прошлого/следующего. Приглушённость — НЕ на кнопке, а на каждом
-             её элементе (SideDim*): обложка при смене трека анимируется отдельно и в
-             полёте должна быть яркой, а не упираться в 0.38 всей кнопки -->
+        <!-- Previous/next card. Dimming is NOT on the button but on each of its
+             elements (SideDim*): the cover is animated separately on track change
+             and must stay bright in flight, not clamped to 0.38 of the whole button -->
         <Style x:Key="DimSideCard" TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -44,8 +44,8 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Приглушённость обложки боковой карточки: обложка при смене трека
-             анимируется отдельно и в полёте должна быть яркой, а не упираться в 0.38 -->
+        <!-- Side card cover dimming: the cover is animated separately on track change
+             and must stay bright in flight, not clamped to 0.38 -->
         <Style x:Key="SideDimCover" TargetType="Border">
             <Setter Property="Opacity" Value="0.38"/>
             <Style.Triggers>
@@ -54,8 +54,8 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <!-- Приглушённость подписи (название+исполнитель) боковой карточки: панель
-             летит при смене трека целиком с обложкой, поэтому dim на ней, а не на детях -->
+        <!-- Side card caption (title+artist) dimming: the panel flies together
+             with the cover on track change, so dim it rather than the children -->
         <Style x:Key="SideDimPanel" TargetType="StackPanel">
             <Setter Property="Opacity" Value="0.38"/>
             <Style.Triggers>
@@ -118,7 +118,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- Генерация (первая, список ещё пуст): панель с вращающимся логотипом -->
+        <!-- Generating (first time, list still empty): panel with a spinning logo -->
         <Border Grid.Row="1" Background="{DynamicResource PanelBrush}"
                 Margin="24,0,24,12" Padding="14,10" CornerRadius="8">
             <Border.Style>
@@ -164,7 +164,7 @@
             </StackPanel>
         </Border>
 
-        <!-- ===== Волна: прошлый — слева, текущий — в центре, следующий — справа ===== -->
+        <!-- ===== The wave: previous — left, current — center, next — right ===== -->
         <Grid Grid.Row="2" Margin="24,0,24,12" x:Name="HeroPanel">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -182,8 +182,8 @@
                 <ColumnDefinition Width="170"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Прошлый трек: приглушён, клик — назад к нему. Focusable=False: после
-                 клика кнопка не держит фокус — пунктирная рамка не портит карточку -->
+            <!-- Previous track: dimmed, click goes back to it. Focusable=False: after
+                 a click the button does not keep focus — no dotted frame on the card -->
             <Button Grid.Column="0" x:Name="HeroPrevButton" Command="{Binding PlayCardCommand}" CommandParameter="{Binding HeroPrev}"
                     VerticalAlignment="Center" Margin="0,0,8,0" Focusable="False">
                 <Button.RenderTransform>
@@ -199,10 +199,11 @@
                     </Style>
                 </Button.Style>
                 <StackPanel>
-                    <!-- Body: обложка + подпись. Фейдится при появлении НОВОЙ карточки -->
+                    <!-- Body: cover + caption. Fades in when a NEW card appears -->
                     <StackPanel x:Name="HeroPrevBody">
-                        <!-- Квадратная обложка (1:1 по ширине колонки): без обрезки сверху/снизу.
-                             RenderTransform ведёт code-behind: перелёт из центра при смене трека -->
+                        <!-- Square cover (1:1 to the column width): no cropping top/bottom.
+                             RenderTransform is driven by code-behind: flight from the center
+                             on track change -->
                         <controls:SquareBorder x:Name="HeroPrevCover" Style="{StaticResource SideDimCover}"
                                 CornerRadius="5" Background="{DynamicResource SecondaryBrush}">
                             <Border.RenderTransform>
@@ -221,8 +222,8 @@
                                 </Border>
                             </Grid>
                         </controls:SquareBorder>
-                        <!-- Подпись едет вслед за обложкой коротким дрейфом без масштаба
-                             (transform ведёт code-behind): масштаб мелкого шрифта выглядел криво -->
+                        <!-- Caption follows the cover in a short drift without scale
+                             (transform driven by code-behind): scaling small text looked off -->
                         <StackPanel x:Name="HeroPrevText" Style="{StaticResource SideDimPanel}">
                             <StackPanel.RenderTransform>
                                 <TranslateTransform x:Name="PrevTextShift"/>
@@ -238,12 +239,12 @@
                 </StackPanel>
             </Button>
 
-            <!-- Текущий трек: большая обложка по центру + название -->
+            <!-- Current track: large centered cover + title -->
             <StackPanel Grid.Column="1" x:Name="HeroCurrentPanel"
                         VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460">
-                <!-- Квадратная обложка 1:1 по ширине зоны (Viewbox жмёт на малых окнах).
-                     RenderTransform ведёт code-behind: при смене трека обложка влетает
-                     из слота соседней карточки -->
+                <!-- Square cover 1:1 to the zone width (Viewbox shrinks on small windows).
+                     RenderTransform is driven by code-behind: on track change the cover flies
+                     in from the neighboring card's slot -->
                 <Viewbox x:Name="HeroCoverBox" Stretch="Uniform" MaxWidth="440" MaxHeight="440" HorizontalAlignment="Center">
                     <Viewbox.RenderTransform>
                         <TransformGroup>
@@ -254,7 +255,7 @@
                     <Grid Width="400" Height="400">
                         <Border x:Name="CoverRoot" CornerRadius="14" Background="{DynamicResource SecondaryBrush}">
                             <Grid>
-                                <!-- Плейсхолдер, ПОКА обложка не загружена -->
+                                <!-- Placeholder WHILE the cover is loading -->
                                 <Image Width="120" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Source="pack://application:,,,/Resources/batlogo_gray.png"/>
                                 <Border CornerRadius="14" controls:LazyCover.Path="{Binding HeroCurrent.ArtworkLocalPath}">
@@ -263,8 +264,8 @@
                                     </Border.Background>
                                 </Border>
 
-                                <!-- Полноsurface-кнопка Play/Pause: вся обложка кликабельна,
-                                     затемнение и круглая иконка проявляются на hover -->
+                                <!-- Full-surface Play/Pause button: the whole cover is clickable,
+                                     the dim and round icon appear on hover -->
                                 <Button Command="{Binding PlayCardCommand}" CommandParameter="{Binding HeroCurrent}"
                                         Cursor="Hand" Focusable="False">
                                     <Button.Style>
@@ -276,7 +277,7 @@
                                                         <Grid>
                                                             <Border CornerRadius="14" Background="#59000000"/>
                                                     <Grid Width="96" Height="96">
-                                                        <!-- Скруглённый квадрат вместо круга — язык логотипа -->
+                                                        <!-- Rounded square instead of a circle — logo language -->
                                                         <Border Background="#B3FFFFFF" CornerRadius="24"/>
                                                         <Path x:Name="PlayPauseIcon" Width="40" Height="40"
                                                               Stretch="Uniform" Fill="#101010"
@@ -301,7 +302,7 @@
                                     </Button.Style>
                                 </Button>
 
-                                <!-- Бейдж «есть локально» -->
+                                <!-- "Available locally" badge -->
                                 <Border CornerRadius="8" Background="#CC101010" Width="26" Height="26"
                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
                                         ToolTip="{Binding [YmLocalMatch], Source={x:Static loc:Loc.T}}">
@@ -324,9 +325,9 @@
                     </Grid>
                 </Viewbox>
 
-                <!-- Название / исполнитель / источник: летит вместе с обложкой. Ширина
-                     зафиксирована по обложке (Inner Grid центрируется сам) — иначе панель
-                     прыгала бы при смене длины названия -->
+                <!-- Title / artist / source: flies together with the cover. Width is
+                     fixed to the cover (the inner Grid centers itself) — otherwise the
+                     panel would jump when the title length changes -->
                 <StackPanel x:Name="HeroCurrentText" Margin="8,20,8,0" HorizontalAlignment="Center" MaxWidth="440"
                             Width="{Binding ActualWidth, ElementName=HeroCoverBox}">
                     <StackPanel.RenderTransform>
@@ -353,7 +354,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Следующий трек: приглушён, клик — вперёд. Focusable=False — без пунктира после клика -->
+            <!-- Next track: dimmed, click goes forward. Focusable=False — no dotted frame after a click -->
             <Button Grid.Column="2" x:Name="HeroNextButton" Command="{Binding PlayCardCommand}" CommandParameter="{Binding HeroNext}"
                     VerticalAlignment="Center" Margin="8,0,0,0" HorizontalContentAlignment="Right" Focusable="False">
                 <Button.RenderTransform>
@@ -369,10 +370,11 @@
                     </Style>
                 </Button.Style>
                 <StackPanel>
-                    <!-- Body: обложка + подпись. Фейдится при появлении НОВОЙ карточки -->
+                    <!-- Body: cover + caption. Fades in when a NEW card appears -->
                     <StackPanel x:Name="HeroNextBody">
-                        <!-- Квадратная обложка (1:1 по ширине колонки): без обрезки сверху/снизу.
-                             RenderTransform ведёт code-behind: перелёт из центра при смене трека -->
+                        <!-- Square cover (1:1 to the column width): no cropping top/bottom.
+                             RenderTransform is driven by code-behind: flight from the center
+                             on track change -->
                         <controls:SquareBorder x:Name="HeroNextCover" Style="{StaticResource SideDimCover}"
                                 CornerRadius="5" Background="{DynamicResource SecondaryBrush}">
                             <Border.RenderTransform>
@@ -391,7 +393,7 @@
                                 </Border>
                             </Grid>
                         </controls:SquareBorder>
-                        <!-- Подпись едет вслед за обложкой коротким дрейфом без масштаба -->
+                        <!-- Caption follows the cover in a short drift without scale -->
                         <StackPanel x:Name="HeroNextText" Style="{StaticResource SideDimPanel}">
                             <StackPanel.RenderTransform>
                                 <TranslateTransform x:Name="NextTextShift"/>
@@ -408,9 +410,9 @@
             </Button>
         </Grid>
 
-<!-- Empty state: иконка прижата к ЦЕНТРУ страницы (нижний край — за 16px до
-             центра), текст растёт вниз от центра — точка иконки одинакова во всех барах,
-             при переключении задний фон не «прыгает» -->
+<!-- Empty state: icon is pinned to the CENTER of the page (bottom edge 16px above
+             center), text grows downward from center — the icon's anchor point is the same
+             in all bars, so the background does not "jump" when switching -->
         <Border Grid.Row="2" Background="Transparent" Margin="24,0,24,12"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource Bool2Vis}}"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

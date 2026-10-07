@@ -7,22 +7,22 @@ using BatPlayer.Models;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Применение темы и акцентного цвета: перезаписывает Color/Brush-ресурсы приложения
-/// ДО создания MainWindow — все {StaticResource} в шаблонах резолвятся при загрузке
-/// окна и подхватывают новые значения без перезапуска.
+/// Applies the theme and accent color: overwrites the app's Color/Brush resources
+/// BEFORE MainWindow is created — all {StaticResource} in templates resolve at
+/// window load and pick up the new values without a restart.
 ///
-/// Режимы: "standard" — палитра Colors.xaml как есть; "darker" — интерфейс ещё темнее
-/// (фон/панели/границы уведены к чёрному, текст не тронут); "light" — светлая.
+/// Modes: "standard" — the Colors.xaml palette as-is; "darker" — an even darker UI
+/// (background/panels/borders pushed toward black, text untouched); "light" — light.
 ///
-/// ВАЖНО: кисти мутируются НА МЕСТЕ. Стили DarkTheme захватили ссылки на экземпляры
-/// кистей при первом парсинге (StaticResource резолвится один раз), поэтому замена
-/// ресурса на новую кисть до стилей не доходит — а изменение Color у существующего
-/// экземпляра обновляет всех, кто на него ссылается. Словарь держит кисти unfrozen
-/// именно для этого.
+/// IMPORTANT: brushes are mutated IN PLACE. The DarkTheme styles captured references
+/// to the brush instances at first parse (StaticResource resolves once), so replacing
+/// a resource with a new brush never reaches the styles — but changing the Color of
+/// an existing instance updates everything referencing it. The dictionary keeps the
+/// brushes unfrozen exactly for this.
 /// </summary>
 public static class ThemeService
 {
-    /// <summary>Пресеты акцентного цвета: ключ → (Accent, AccentDim).</summary>
+    /// <summary>Accent color presets: key → (Accent, AccentDim).</summary>
     public static readonly (string Key, string Label, string Accent, string Dim)[] Accents =
     [
         ("default", "Default", "#E8E8E8", "#888888"),
@@ -33,7 +33,7 @@ public static class ThemeService
         ("orange",  "Orange",  "#FFB13D", "#996A25")
     ];
 
-    /// <summary>Палитра «ещё темнее»: цвета фона/панелей/границ уведены к чёрному.</summary>
+    /// <summary>The "darker" palette: background/panel/border colors pushed toward black.</summary>
     private static readonly (string Key, string Hex)[] DarkerColors =
     [
         ("BgColor", "#060606"),
@@ -49,7 +49,7 @@ public static class ThemeService
         ("FocusColor", "#333333")
     ];
 
-    /// <summary>Светлая палитра: тёмный текст на светлых поверхностях.</summary>
+    /// <summary>Light palette: dark text on light surfaces.</summary>
     private static readonly (string Key, string Hex)[] LightColors =
     [
         ("BgColor", "#F2F2F5"),
@@ -70,7 +70,7 @@ public static class ThemeService
         ("AccentDimColor", "#808088")
     ];
 
-    /// <summary>Пары цвет-ресурс → кисть-ресурс (кисти мутируются на месте).</summary>
+    /// <summary>Color-resource → brush-resource pairs (brushes are mutated in place).</summary>
     private static readonly (string ColorKey, string BrushKey)[] ColorBrushPairs =
     [
         ("BgColor", "BgBrush"),
@@ -92,13 +92,13 @@ public static class ThemeService
         ("FocusColor", "FocusBrush")
     ];
 
-    /// <summary>Базовая палитра Colors.xaml, снятая при первом Apply, ПОКА ресурсы
-    /// ещё не тронуты. Режимы — дельты поверх неё: раньше «standard» был пустой
-    /// дельтой и не возвращал исходные цвета, из-за чего после light/darker текст
-    /// оставался тёмным, а переключения наслаивались друг на друга.</summary>
+    /// <summary>Base Colors.xaml palette captured at the first Apply, WHILE the
+    /// resources are still untouched. Modes are deltas over it: "standard" used to be
+    /// an empty delta and never restored the original colors, so after light/darker
+    /// the text stayed dark and switches stacked on top of each other.</summary>
     private static Dictionary<string, Color>? _baseColors;
 
-    /// <summary>Применить тему из настроек (вызывать до создания MainWindow и по «Применить»).</summary>
+    /// <summary>Applies the theme from settings (call before MainWindow is created and on "Apply").</summary>
     public static void Apply(AppSettings settings)
     {
         var res = Application.Current.Resources;
@@ -117,13 +117,13 @@ public static class ThemeService
             _ => Array.Empty<(string, string)>()
         };
 
-        // 1) полный сброс к базовой палитре, 2) дельта выбранного режима поверх.
+        // 1) full reset to the base palette, 2) delta of the selected mode on top.
         foreach (var (colorKey, color) in _baseColors)
             res[colorKey] = color;
         foreach (var (key, hex) in palette)
             res[key] = (Color)ColorConverter.ConvertFromString(hex);
 
-        // Акцент: пресет пользователя; "default" в светлой теме темнеет (серый не виден).
+        // Accent: the user's preset; "default" darkens in the light theme (gray is invisible).
         var accentKey = settings.AccentColor;
         if (accentKey == "default" && string.Equals(settings.ThemeMode, "light", StringComparison.Ordinal))
             accentKey = "darkdefault";
@@ -136,14 +136,14 @@ public static class ThemeService
         }
         res["AccentColor"] = (Color)ColorConverter.ConvertFromString(accent.Accent);
         res["AccentDimColor"] = (Color)ColorConverter.ConvertFromString(accent.Dim);
-        // Сердечки тоже под акцент (платформенные логотипы остаются собой).
+        // Hearts follow the accent too (platform logos stay themselves).
         res["FavoriteColor"] = (Color)ColorConverter.ConvertFromString(accent.Accent);
 
-        // Кисти: ВАЖНО — кисти из BAML-словарей приходят ЗАМОРОЖЕННЫМИ (frozen),
-        // мутировать их нельзя. Замороженные заменяются НОВЫМ экземпляром кисти,
-        // поэтому все ссылки на кисти темы в XAML должны быть DynamicResource
-        // (StaticResource удержал бы старый замороженный экземпляр, и тема/акцент
-        // не применялись бы к уже созданным стилям — «белые» AccentButton).
+        // Brushes: IMPORTANT — brushes from BAML dictionaries arrive FROZEN and must
+        // not be mutated. Frozen ones are replaced with a NEW brush instance, so all
+        // theme brush references in XAML must be DynamicResource (StaticResource would
+        // hold the old frozen instance and the theme/accent would never apply to
+        // already-created styles — the "white" AccentButton).
         foreach (var (colorKey, brushKey) in ColorBrushPairs)
         {
             if (res[colorKey] is not Color color) continue;

@@ -5,14 +5,14 @@ using System.Text;
 namespace BatPlayer.Services.Vk;
 
 /// <summary>
-/// Декодер ссылок вида https://vk.ru/mp3/audio_api_unavailable.mp3?extra=&lt;tag1&gt;#&lt;tag2&gt;.
-/// Порт алгоритма из веб-плеера VK (core_spa: функции M, L и реестр j):
-///   • tag1 — начальное значение (custom base64 с алфавитом, где "0" стоит на месте "O");
-///   • tag2 — список функций через таб; каждая — "имя\vарг1\vарг2…", применяется
-///     с КОНЦА списка к началу, первое значение в каждой паре — текущий результат;
-///   • v: реверс строки; r: ротация символов по двойному алфавиту; s: тасование по seed;
-///   • i: тасование по seed = vk.id ^ parseInt(аргумент); x: XOR символов с символом аргумента.
-/// Возвращает http(s)-ссылку на mp3 или исходную строку, если декод не удался.
+/// Decoder for URLs of the form https://vk.ru/mp3/audio_api_unavailable.mp3?extra=&lt;tag1&gt;#&lt;tag2&gt;.
+/// Port of the VK web player algorithm (core_spa: functions M, L and the j registry):
+///   • tag1 — initial value (custom base64 with an alphabet where "0" sits at "O");
+///   • tag2 — tab-separated function list; each entry is "name\varg1\varg2…", applied
+///     from the END of the list to the start; the first value in each pair is the current result;
+///   • v: reverse string; r: rotate chars over the doubled alphabet; s: shuffle by seed;
+///   • i: shuffle by seed = vk.id ^ parseInt(arg); x: XOR chars with the argument's char.
+/// Returns an http(s) mp3 URL, or the original string if decoding fails.
 /// </summary>
 public static class VkAudioUrlDecoder
 {
@@ -33,7 +33,7 @@ public static class VkAudioUrlDecoder
             var funcs = tag.Length > 1 && tag[1].Length > 0 ? VkBase64Decode(tag[1]) : string.Empty;
             if (funcs == null) return unavailableUrl;
 
-            // функции применяются с конца списка
+            // functions are applied from the end of the list
             var specs = funcs.Split('\t');
             for (var f = specs.Length - 1; f >= 0; f--)
             {
@@ -54,7 +54,7 @@ public static class VkAudioUrlDecoder
         }
         catch (Exception)
         {
-            return unavailableUrl; // декод не удался — вернём как есть, трек будет пропущен
+            return unavailableUrl; // decode failed — return as is; the track will be skipped
         }
     }
 
@@ -77,7 +77,7 @@ public static class VkAudioUrlDecoder
             else
                 x = idx;
 
-            // JS: (P++ % 4) — условие по старому P; сдвиг — по новому P
+            // JS: (P++ % 4) — condition uses the old P, shift the new P
             if (p % 4 != 0)
                 outChars.Append((char)(255 & (x >> ((-2 * (p + 1)) & 6))));
 
@@ -86,7 +86,7 @@ public static class VkAudioUrlDecoder
         return outChars.ToString();
     }
 
-    // ===== Реестр функций =====
+    // ===== Function registry =====
 
     private static string Reverse(string s)
     {
@@ -95,8 +95,8 @@ public static class VkAudioUrlDecoder
         return new string(chars);
     }
 
-    /// <summary>Ротация символов по двойному алфавиту (JS substr с отрицательным
-    /// началом считает от конца строки — повторяем это поведение).</summary>
+    /// <summary>Rotates chars over the doubled alphabet (JS substr with a negative start
+    /// counts from the string end — behavior replicated here).</summary>
     private static string Rotate(string s, int x)
     {
         var doubled = Alphabet + Alphabet;
@@ -112,8 +112,8 @@ public static class VkAudioUrlDecoder
         return new string(chars);
     }
 
-    /// <summary>Тасование: перестановка индексов (LCG с seed, модуль — длина строки)
-    /// и перенос символов по ним. seed может быть большим (vk.id ^ код) — BigInteger.</summary>
+    /// <summary>Shuffle: permutes indices (LCG with seed, modulo the string length)
+    /// and moves chars accordingly. The seed can be large (vk.id ^ code) — hence BigInteger.</summary>
     private static string Shuffle(string s, BigInteger seed)
     {
         var length = s.Length;

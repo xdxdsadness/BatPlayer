@@ -19,8 +19,8 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Содержимое центральной области: таблица треков, фильтры, сортировка.
-/// Показываются все треки фильтра; прокрутка — скроллом.
+/// Central content area: track table, filters, sorting.
+/// Shows all tracks of the filter; scrolling via scrollbar.
 /// </summary>
 public partial class LibraryViewModel : PageViewModel
 {
@@ -36,13 +36,13 @@ public partial class LibraryViewModel : PageViewModel
 
     private List<Track> _allTracks = new();
 
-    // Текущая страница фильтра (Home/Recent/RecentlyPlayed/Favorites) — нужна,
-    // чтобы пере-вычислить заголовок при смене языка.
+    // Current filter page (Home/Recent/RecentlyPlayed/Favorites) — needed to
+    // recompute the title when the language changes.
     private string _page = "Home";
 
-    /// <summary>Текущая страница-фильтр: пустое состояние LibraryView рисует иконку
-    /// того же пункта навигации, с которого открыта страница (Home — дом, Favorites —
-    /// сердце), — задний фон бара больше не «чужой».</summary>
+    /// <summary>Current filter page: the empty state in LibraryView draws the icon of the
+    /// nav item the page was opened from (Home — house, Favorites — heart), so the bar
+    /// background no longer looks "foreign".</summary>
     public string PageKind => _page;
 
     public ObservableCollection<Track> Tracks { get; } = new();
@@ -57,16 +57,16 @@ public partial class LibraryViewModel : PageViewModel
     [ObservableProperty] private string _scanCurrentFile = string.Empty;
     [ObservableProperty] private bool _isScanning;
 
-    /// <summary>Скелетон загрузки страницы-фильтра: ставится в момент клика (PrepareFilter),
-    /// снимается по завершении LoadAsync. Поиск и фоновые пересборки (LibraryChanged,
-    /// смена языка) его не трогают — чтобы скелетон не мигал при наборе и сканировании.</summary>
+    /// <summary>Filter page loading skeleton: set at click time (PrepareFilter), cleared
+    /// when LoadAsync finishes. Search and background rebuilds (LibraryChanged, language
+    /// change) do not touch it, so the skeleton does not flash while typing or scanning.</summary>
     [ObservableProperty] private bool _isLoading = true;
 
-    /// <summary>«Пустая страница»: загрузка завершена и треков нет — иначе заглушка
-    /// «библиотека пуста» мигала бы под скелетоном во время загрузки.</summary>
+    /// <summary>"Empty page": loading finished and there are no tracks — otherwise the
+    /// "library empty" placeholder would flash under the skeleton during load.</summary>
     public bool ShowEmptyState => !IsLoading && Tracks.Count == 0;
 
-    /// <summary>Поколение поискового запроса: устаревшие debounce-прогоны отбрасываются.</summary>
+    /// <summary>Search query generation: stale debounce runs are discarded.</summary>
     private int _searchGeneration;
 
     public LibraryViewModel(LibraryService library, AudioService audio, CoverCacheService covers, MetadataService meta,
@@ -85,11 +85,11 @@ public partial class LibraryViewModel : PageViewModel
         _ym = ym;
         Title = PageTitle(_page);
 
-        // VM живёт столько же, сколько приложение, поэтому отписка не нужна.
+        // VM lives as long as the app, so no unsubscribe is needed.
         Loc.LanguageChanged += (_, _) =>
         {
             Title = PageTitle(_page);
-            // Пересобираем список, чтобы DisplayArtist/DisplayAlbum перечитались.
+            // Rebuild the list so DisplayArtist/DisplayAlbum are re-read.
             SetTracks(_allTracks);
         };
 
@@ -108,10 +108,10 @@ public partial class LibraryViewModel : PageViewModel
             Application.Current?.Dispatcher.Invoke(() => _ = LoadAsync());
         };
 
-        // Живая перезагрузка «Недавно прослушанные»: новая прослушка — трек встаёт
-        // наверх, 50-й уходит из списка, без повторного захода на страницу.
-        // Дебаунс 500 мс: прослушка пишется в момент старта трека рядом со сменой
-        // карточек плеера — перезагрузка не должна соревноваться с этими кадрами.
+        // Live reload of "Recently Played": a new play moves the track to the top and
+        // the 50th drops off, without re-entering the page. 500 ms debounce: a play is
+        // logged when a track starts, right next to player card changes — the reload
+        // must not compete with those frames.
         if (history != null)
         {
             history.PlayLogged += () =>
@@ -151,10 +151,11 @@ public partial class LibraryViewModel : PageViewModel
         _                => Loc.Get("Home"),
     };
 
-    /// <summary>Синхронная часть смены фильтра — вызывается в момент клика, до анимации
-    /// перехода: заголовок и скелетон появляются вместе со страницей. Сама загрузка
-    /// (LoadAsync) откладывается до конца fade/slide (MainViewModel.LoadAfterTransitionAsync):
-    /// Clear/Add сотен карточек посреди анимации ронял её кадры.</summary>
+    /// <summary>Synchronous part of the filter change — runs at click time, before the
+    /// transition animation, so the header and skeleton appear with the page. The actual
+    /// load (LoadAsync) is deferred until the fade/slide ends
+    /// (MainViewModel.LoadAfterTransitionAsync): Clear/Add of hundreds of cards
+    /// mid-animation would drop its frames.</summary>
     public void PrepareFilter(string page)
     {
         _page = page;
@@ -169,11 +170,11 @@ public partial class LibraryViewModel : PageViewModel
             _               => "All"
         };
         IsLoading = true;
-        // Карточки прежнего фильтра гасим СРАЗУ, в момент клика: страница библиотеки
-        // одна на Home/Favorites/RecentlyPlayed, и без этого до завершения загрузки
-        // под новым заголовком были видны карточки предыдущего бара (у сервисных
-        // страниц такой проблемы нет — у них список живёт в своей VM и грузится
-        // мгновенно из кэша карточек). Чистый лист → карточки, как у Яндекса.
+        // Clear the previous filter's cards IMMEDIATELY, at click time: the library page
+        // is shared by Home/Favorites/RecentlyPlayed, and without this the previous
+        // bar's cards stayed visible under the new header until loading finished
+        // (service pages do not have this problem — their list lives in its own VM and
+        // loads instantly from cached cards). Clean sheet → cards, like Yandex.
         Tracks.Clear();
         OnPropertyChanged(nameof(ShowEmptyState));
     }
@@ -185,17 +186,17 @@ public partial class LibraryViewModel : PageViewModel
         _ = LoadForCurrentSearchAsync();
     }
 
-    /// <summary>Загрузка с учётом активного поиска (он перекрывает фильтр страницы):
-    /// вызывается как отложенная загрузка после анимации перехода.</summary>
+    /// <summary>Load honoring the active search (it overrides the page filter):
+    /// called as the deferred load after the transition animation.</summary>
     public Task LoadForCurrentSearchAsync()
         => string.IsNullOrWhiteSpace(SearchText) ? LoadAsync() : ApplySearchAsync();
 
     public async Task LoadAsync()
     {
-        // Локальные треки, лайки SoundCloud и музыка VK — независимые запросы: запускаем
-        // все сразу и ждём вместе (Task.WhenAll) вместо последовательных await.
-        // Ветка «Played» вместо локального List<Track> читает историю с played_at —
-        // сливается с платформенными прослушками play_log по общему времени (см. Merge).
+        // Local tracks, SoundCloud likes and VK music are independent queries: start
+        // them all at once and await together (Task.WhenAll) instead of sequential awaits.
+        // The "Played" branch reads history with played_at instead of a local List<Track> —
+        // merged with platform plays from play_log by time (see Merge).
         Task<List<Track>>? localTask;
         Task<List<LibraryServiceLocalPlay>>? localDatedTask = null;
         switch (FilterMode)
@@ -205,26 +206,26 @@ public partial class LibraryViewModel : PageViewModel
             case "Favorites": localTask = _library.GetFavoritesAsync(); break;
             default:          localTask = _library.GetAllTracksAsync(SortColumn, SortDirection); break;
         }
-        // «Recent» (недавно добавленные) — только локальные: лайки не запрашиваем вовсе.
+        // "Recent" (recently added) — local only: likes are not requested at all.
         var likesTask = FilterMode == "Recent"
             ? Task.FromResult<IReadOnlyList<SoundCloudLikeRow>>(new List<SoundCloudLikeRow>())
             : GetScLikesSafeAsync();
-        // Музыка VK — «All» (дополнение списка) и «Played» (match прослушек play_log):
-        // у VK в этой модели нет ни дат добавления («Recent»), ни лайков («Favorites»).
+        // VK music — "All" (list addition) and "Played" (match against play_log plays):
+        // VK has neither add dates ("Recent") nor likes ("Favorites") in this model.
         var vkTask = FilterMode is "All" or "Played"
             ? GetVkRowsSafeAsync()
             : Task.FromResult<IReadOnlyList<VkTrackRow>>(new List<VkTrackRow>());
-        // Музыка Яндекс Музыки — аналогично VK, плюс «Favorites»: лайки ЯМ и есть
-        // фавориты платформы (жалоба: добавленные в ЯМ треки не попадали в фавориты).
+        // Yandex Music — like VK, plus "Favorites": YM likes are the platform's
+        // favorites (complaint: tracks added in YM did not reach favorites).
         var ymTask = FilterMode is "All" or "Played" or "Favorites"
             ? GetYmRowsSafeAsync()
             : Task.FromResult<IReadOnlyList<YmTrackRow>>(new List<YmTrackRow>());
-        // Лайки Spotify — только для match'а платформенных прослушек play_log на «Played».
+        // Spotify likes — only for matching platform plays from play_log on "Played".
         var isPlayed = string.Equals(FilterMode, "Played", StringComparison.Ordinal);
         var spotifyTask = isPlayed
             ? GetSpotifyRowsSafeAsync()
             : Task.FromResult<IReadOnlyList<SpotifyTrackRow>>(new List<SpotifyTrackRow>());
-        // Платформенные прослушки (play_log, source != 'local') — только на «Played».
+        // Platform plays (play_log, source != 'local') — only on "Played".
         var platformPlaysTask = isPlayed
             ? GetPlatformPlaysSafeAsync()
             : Task.FromResult<IReadOnlyList<LibraryServicePlatformPlay>>(new List<LibraryServicePlatformPlay>());
@@ -234,27 +235,26 @@ public partial class LibraryViewModel : PageViewModel
         if (localDatedTask != null) allTasks.Add(localDatedTask);
         await Task.WhenAll(allTasks);
 
-        // Итоговый список собирается ПОЛНОСТЬЮ до Tracks.Clear(): построение карточек —
-        // один синхронный проход без промежуточных await. Раньше SC-лайки досыпались
-        // в Tracks уже после Clear/Add локальных, из-за чего список (и все карточки)
-        // перестраивались дважды — заметный фриз при навигации по сайдбару.
+        // The final list is built ENTIRELY before Tracks.Clear(): card building is a
+        // single synchronous pass with no intermediate awaits. Previously SC likes were
+        // appended to Tracks after the local Clear/Add, so the list (and all cards)
+        // were rebuilt twice — a noticeable freeze when navigating the sidebar.
         List<Track> full;
         if (localDatedTask != null)
         {
-            // «Played»: локальная история + платформенные прослушки play_log,
-            // честно отсортированные по времени прослушивания. Раньше платформенные
-            // треки (track.Id < 0, в tracks их нет) в этот список не попадали вовсе,
-            // а SC был представлен просто первыми 50 лайками — независимо от того,
-            // играли их или нет; теперь список отражает фактические прослушки.
+            // "Played": local history + platform plays from play_log, honestly sorted
+            // by play time. Previously platform tracks (track.Id < 0, absent from tracks)
+            // never made this list, and SC was just the first 50 likes regardless of
+            // whether they were played; now the list reflects actual plays.
             full = MergeRecentlyPlayed(localDatedTask.Result, platformPlaysTask.Result,
                 likesTask.Result, vkTask.Result, ymTask.Result, spotifyTask.Result);
         }
         else if (string.Equals(FilterMode, "Favorites", StringComparison.Ordinal))
         {
-            // «Фавориты»: единый порядок «свежие сверху» по времени добавления —
-            // лайки ЯМ/SC по времени лайка, локальные избранные по дате добавления
-            // файла. Жалоба: свежелайкнутые треки «не добавлялись» — попадали в
-            // конец/середину длинного списка ниже чужих платформ.
+            // "Favorites": unified "newest first" order by add time — YM/SC likes by
+            // like time, local favorites by file add date. Complaint: freshly liked
+            // tracks "did not get added" — they landed at the end/middle of the long
+            // list below other platforms' tracks.
             var ym = YmRuntimeTracks.BuildYmAppend(FilterMode, ymTask.Result, 0);
             full = new List<Track>(ym);
             full.AddRange(localTask!.Result);
@@ -264,21 +264,21 @@ public partial class LibraryViewModel : PageViewModel
         else
         {
             full = new List<Track>(localTask!.Result);
-            // «Played» — 50 самых свежих лайков (liked_at DESC), «Favorites»/«All» (Home) —
-            // все, «Recent» — ни одного (см. BuildScAppend).
+            // "Played" — the 50 freshest likes (liked_at DESC), "Favorites"/"All" (Home) —
+            // all of them, "Recent" — none (see BuildScAppend).
             full.AddRange(SoundCloudRuntimeTracks.BuildScAppend(FilterMode, likesTask.Result));
-            // VK — только на «All»; нумерация runtime-Id продолжается после SC-карточек,
-            // чтобы отрицательные Id не пересекались в одном списке.
+            // VK — only on "All"; runtime-Id numbering continues after the SC cards
+            // so negative Ids do not collide within one list.
             full.AddRange(VkRuntimeTracks.BuildVkAppend(FilterMode, vkTask.Result, likesTask.Result.Count));
-            // Яндекс Музыка — после VK; нумерация runtime-Id продолжается после SC+VK.
+            // Yandex Music — after VK; runtime-Id numbering continues after SC+VK.
             full.AddRange(YmRuntimeTracks.BuildYmAppend(FilterMode, ymTask.Result,
                 likesTask.Result.Count + vkTask.Result.Count));
-            // Единый порядок «новые сверху» НЕЗАВИСИМО от источника: свежедобавленный трек
-            // любой платформы встаёт над старыми треками остальных (раньше список был
-            // жёсткими блоками local→SC→VK→YM, и новый трек поднимался только внутри
-            // своего блока). Сортировка стабильна: при равных датах сохраняется прежний
-            // блочный порядок, а внутри блока — свой порядок платформы
-            // (date_added DESC / liked_at DESC / порядок каталога VK).
+            // Unified "newest first" order INDEPENDENT of source: a freshly added track
+            // from any platform rises above older tracks of the others (previously the
+            // list was rigid blocks local→SC→VK→YM, and a new track only rose within
+            // its own block). Sorting is stable: equal dates keep the previous block
+            // order, and within a block — the platform's own order
+            // (date_added DESC / liked_at DESC / VK catalog order).
             if (string.Equals(FilterMode, "All", StringComparison.Ordinal))
                 full = SortByAddedDescending(full);
         }
@@ -288,16 +288,16 @@ public partial class LibraryViewModel : PageViewModel
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 
-    /// <summary>Лимит страницы «Недавно прослушанные» — как GetRecentlyPlayedAsync.</summary>
+    /// <summary>Limit of the "Recently Played" page — same as GetRecentlyPlayedAsync.</summary>
     private const int RecentlyPlayedLimit = 50;
 
     /// <summary>
-    /// Слияние «Недавно прослушанные»: локальные треки (history) и платформенные прослушки
-    /// (play_log, source != 'local') упорядочиваются по played_at по убыванию, берутся
-    /// первые RecentlyPlayedLimit. Платформенные строки конвертируются в runtime-карточки
-    /// через точный матч (Title, Artist) со своим репозиторием (у прослушки в БД только
-    /// снимок метаданных); без совпадения строка пропускается. FilePath остаётся пустым —
-    /// файл резолвится при воспроизведении через AudioService.FilePathResolver.
+    /// Merge for "Recently Played": local tracks (history) and platform plays
+    /// (play_log, source != 'local') are ordered by played_at descending and the first
+    /// RecentlyPlayedLimit are taken. Platform rows are converted to runtime cards via
+    /// an exact (Title, Artist) match against their repository (a play row in the DB
+    /// holds only a metadata snapshot); without a match the row is skipped. FilePath
+    /// stays empty — the file is resolved at playback via AudioService.FilePathResolver.
     /// </summary>
     private List<Track> MergeRecentlyPlayed(
         List<LibraryServiceLocalPlay> local,
@@ -307,24 +307,24 @@ public partial class LibraryViewModel : PageViewModel
         IReadOnlyList<YmTrackRow> ymRows,
         IReadOnlyList<SpotifyTrackRow> spotifyRows)
     {
-        // Индекс по (Title, Artist): Dictionary по кортежу сравнивает элементы
-        // ординально — то самое «точное сравнение». При дублях в справочнике
-        // побеждает первая строка (как FirstOrDefault).
+        // Index by (Title, Artist): a Dictionary over a tuple compares elements
+        // ordinally — exactly the "exact match" needed. With duplicates in the
+        // catalog the first row wins (like FirstOrDefault).
         var likeByKey = IndexByTitleArtist(likes, l => (l.Title, l.Artist));
         var vkByKey = IndexByTitleArtist(vkRows, r => (r.Title, r.Artist));
         var ymByKey = IndexByTitleArtist(ymRows, r => (r.Title, r.Artist));
         var spotifyByKey = IndexByTitleArtist(spotifyRows, r => (r.Title, r.Artist));
 
-        // Нумерация runtime-Id продолжается по всем платформенным карточкам списка,
-        // чтобы отрицательные Id не пересекались (SpotifyRuntimeTracks пишет Id как есть,
-        // поэтому ей передаётся готовое отрицательное значение).
+        // Runtime-Id numbering continues across all platform cards of the list
+        // so negative Ids do not collide (SpotifyRuntimeTracks writes the Id as given,
+        // so it is passed an already negative value).
         var runtimeIndex = 0;
         var platform = new List<(Track Track, string PlayedAt)>(platformPlays.Count);
         foreach (var p in platformPlays)
         {
-            // Приоритет — сохранённый platform_id (трек узнаваем без справочника: так в
-            // «Недавно прослушанные» попадают прослушки ВОЛНЫ, которых нет среди лайков).
-            // Фолбэк для старых записей без id — точный матч (Title, Artist) по справочнику.
+            // Priority — the saved platform_id (the track is recognizable without the
+            // catalog: this is how WAVE plays, absent from likes, reach Recently Played).
+            // Fallback for old rows without an id — exact (Title, Artist) match against the catalog.
             Track? card = p.Source switch
             {
                 Track.SourceSoundCloud => !string.IsNullOrEmpty(p.PlatformId)
@@ -364,8 +364,8 @@ public partial class LibraryViewModel : PageViewModel
         merged.AddRange(local.Select(l => (l.Track, l.PlayedAt)));
         merged.AddRange(platform);
 
-        // played_at — ISO 8601 UTC (DateTime.UtcNow.ToString("o")); неразбираемые
-        // (напр. NULL у древних строк history) — в самое начало списка.
+        // played_at is ISO 8601 UTC (DateTime.UtcNow.ToString("o")); unparseable values
+        // (e.g. NULL in ancient history rows) go to the very top of the list.
         return merged
             .OrderByDescending(x => ParsePlayedAt(x.PlayedAt))
             .Take(RecentlyPlayedLimit)
@@ -390,17 +390,16 @@ public partial class LibraryViewModel : PageViewModel
             System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : DateTime.MinValue;
 
     /// <summary>
-    /// Единый порядок объединённого списка «новые сверху» по дате добавления независимо
-    /// от источника (Track.DateAdded: локальные — date_added, платформенные — время
-    /// лайка/первой синхронизации, см. TrackTimestamps). LINQ-сортировка стабильна:
-    /// равные даты сохраняют блочный порядок построения списка.
+    /// Unified "newest first" order of the merged list by add date regardless of source
+    /// (Track.DateAdded: local — date_added, platform — like/first-sync time, see
+    /// TrackTimestamps). LINQ sorting is stable: equal dates keep the block build order.
     /// </summary>
     private static List<Track> SortByAddedDescending(List<Track> tracks)
         => tracks.OrderByDescending(t => t.DateAdded).ToList();
 
-    /// <summary>Лайки — дополнение к локальной библиотеке: их сбой не должен прятать локальные треки.
-    /// Репозиторий лайков читается здесь ровно один раз за LoadAsync (свой единственный
-    /// запрос есть и в ApplySearchAsync).</summary>
+    /// <summary>Likes are an addition to the local library: their failure must not hide local tracks.
+    /// The likes repository is read exactly once per LoadAsync (ApplySearchAsync has its own
+    /// single query).</summary>
     private async Task<IReadOnlyList<SoundCloudLikeRow>> GetScLikesSafeAsync()
     {
         try
@@ -414,8 +413,8 @@ public partial class LibraryViewModel : PageViewModel
         }
     }
 
-    /// <summary>VK-музыка — дополнение к локальной библиотеке: сбой не должен прятать
-    /// локальные треки (и SC-лайки). Репозиторий читается один раз за LoadAsync.</summary>
+    /// <summary>VK music is an addition to the local library: a failure must not hide
+    /// local tracks (or SC likes). Read once per LoadAsync.</summary>
     private async Task<IReadOnlyList<VkTrackRow>> GetVkRowsSafeAsync()
     {
         try
@@ -429,8 +428,8 @@ public partial class LibraryViewModel : PageViewModel
         }
     }
 
-    /// <summary>Музыка Яндекс Музыки — дополнение к локальной библиотеке: сбой не должен
-    /// прятать локальные треки (и SC/VK). Репозиторий читается один раз за LoadAsync.</summary>
+    /// <summary>Yandex Music is an addition to the local library: a failure must not
+    /// hide local tracks (or SC/VK). Read once per LoadAsync.</summary>
     private async Task<IReadOnlyList<YmTrackRow>> GetYmRowsSafeAsync()
     {
         try
@@ -444,8 +443,8 @@ public partial class LibraryViewModel : PageViewModel
         }
     }
 
-    /// <summary>Лайки Spotify (для match'а прослушек play_log на «Played»): сбой не должен
-    /// прятать локальные треки и другие платформы.</summary>
+    /// <summary>Spotify likes (for matching play_log plays on "Played"): a failure must
+    /// not hide local tracks and other platforms.</summary>
     private async Task<IReadOnlyList<SpotifyTrackRow>> GetSpotifyRowsSafeAsync()
     {
         try
@@ -459,7 +458,7 @@ public partial class LibraryViewModel : PageViewModel
         }
     }
 
-    /// <summary>Платформенные прослушки из play_log: сбой не должен прятать локальную историю.</summary>
+    /// <summary>Platform plays from play_log: a failure must not hide the local history.</summary>
     private async Task<IReadOnlyList<LibraryServicePlatformPlay>> GetPlatformPlaysSafeAsync()
     {
         try
@@ -473,14 +472,14 @@ public partial class LibraryViewModel : PageViewModel
         }
     }
 
-    /// <summary>Полный набор треков фильтра.</summary>
+    /// <summary>Full track set of the filter.</summary>
     private void SetTracks(IEnumerable<Track> tracks)
     {
         _allTracks = tracks.ToList();
         Tracks.Clear();
         foreach (var t in _allTracks) Tracks.Add(t);
-        // Пустое состояние зависит и от количества: пересборка без загрузки
-        // (смена языка) тоже должна его пересчитать.
+        // The empty state depends on the count too: a rebuild without loading
+        // (language change) must recompute it as well.
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 
@@ -546,9 +545,9 @@ public partial class LibraryViewModel : PageViewModel
     [RelayCommand]
     private Task PlayTrack(Track? track) => PlayTrackCoreAsync(track);
 
-    /// <summary>Перемешать список страницы; если играет трек из этого списка — очередь
-    /// плеера перестраивается по новому порядку (платформенная очередь — карточки того
-    /// же источника, локальная — проигрываемые файлы перемешанного списка).</summary>
+    /// <summary>Shuffle the page list; if a track from this list is playing, the player
+    /// queue is rebuilt in the new order (platform queue — cards of the same source,
+    /// local — playable files of the shuffled list).</summary>
     [RelayCommand]
     private void ShuffleTracks()
     {
@@ -560,7 +559,7 @@ public partial class LibraryViewModel : PageViewModel
         if (current == null) return;
 
         var playingCard = Tracks.FirstOrDefault(IsCurrentTrack);
-        if (playingCard == null) return; // играет не из этого списка — очередь не трогаем
+        if (playingCard == null) return; // playing outside this list — leave the queue alone
 
         if (playingCard.IsPlatformTrack)
         {
@@ -578,8 +577,8 @@ public partial class LibraryViewModel : PageViewModel
 
 
     /// <summary>
-    /// Клик по кнопке Play на обложке: если этот трек сейчас играет — пауза/возобновление,
-    /// иначе — обычный запуск трека.
+    /// Play button on the artwork: if this track is playing — pause/resume,
+    /// otherwise start it normally.
     /// </summary>
     [RelayCommand]
     private Task PlayPauseTrack(Track? track) => PlayPauseTrackCoreAsync(track);
@@ -595,9 +594,9 @@ public partial class LibraryViewModel : PageViewModel
         await PlayTrackCoreAsync(track);
     }
 
-    /// <summary>Текущий ли это трек. Для платформенных карточек (SC/VK) сравниваем ещё
-    /// источник и ScId: Id у runtime-треков отрицательные и могут совпасть между
-    /// разными списками (Home/страницы платформ).</summary>
+    /// <summary>Is this the current track. For platform cards (SC/VK) we also compare
+    /// source and ScId: runtime track Ids are negative and can collide between
+    /// different lists (Home/platform pages).</summary>
     private bool IsCurrentTrack(Track track)
         => _audio.CurrentTrack is Track current
            && track.IsSameTrackAs(current);
@@ -607,9 +606,9 @@ public partial class LibraryViewModel : PageViewModel
         if (track == null) return;
         if (track.IsPlatformTrack)
         {
-            // Очередь = все карточки этой платформы текущего Home-списка в порядке
-            // отображения: Previous/Next ходят по всему списку, файлы (локальный матч
-            // или mp3 из кэша) резолвятся на переходе через AudioService.FilePathResolver.
+            // Queue = all cards of this platform in the current Home list in display
+            // order: Previous/Next walk the whole list; files (local match or cached
+            // mp3) are resolved on play via AudioService.FilePathResolver.
             var platformQueue = _allTracks.Where(t => t.Source == track.Source).ToList();
             _audio.PlayTrack(track, platformQueue);
             return;
@@ -618,8 +617,8 @@ public partial class LibraryViewModel : PageViewModel
     }
 
     /// <summary>
-    /// Контекстная очередь без SC-карточек с пустым FilePath: плеер не может открыть
-    /// ещё не резолвнутый файл, переход Next на такую позицию ронял бы воспроизведение.
+    /// Context queue without SC cards with an empty FilePath: the player cannot open
+    /// a not-yet-resolved file, and Next onto such a position would kill playback.
     /// </summary>
     private IEnumerable<Track> PlayableContextQueue()
     {
@@ -631,8 +630,8 @@ public partial class LibraryViewModel : PageViewModel
     private void AddToQueue(Track? track)
     {
         if (track == null) return;
-        // Платформенную карточку (SC/VK) без резолвнутого файла в очередь не добавляем:
-        // плеер не сможет её открыть.
+        // A platform card (SC/VK) without a resolved file is not added to the queue:
+        // the player could not open it.
         if (track.IsPlatformTrack && string.IsNullOrEmpty(track.FilePath)) return;
         _audio.AddToQueue(track);
     }
@@ -664,19 +663,19 @@ public partial class LibraryViewModel : PageViewModel
     {
         if (track == null) return;
 
-        // Лайк YM-карточки уходит в АККАУНТ Яндекс Музыки (как сердце в плеере):
-        // локальный UPDATE по отрицательному runtime-Id строки не находит, флажок
-        // менялся только в памяти и терялся при перезагрузке страницы.
+        // Liking a YM card goes to the Yandex Music ACCOUNT (like the player heart):
+        // a local UPDATE by negative runtime id finds no row, the flag only changed
+        // in memory and was lost on page reload.
         if (track.Source == Track.SourceYandex)
         {
             var target = !track.IsFavorite;
             if (!await _ym.SetTrackLikedAsync(track.ScId, target))
-                return; // API не подтвердил — сердечко не переключаем
+                return; // API did not confirm — do not toggle the heart
             track.IsFavorite = target;
             return;
         }
 
-        // Прочие платформенные runtime-карточки (VK/SC/Spotify): лайков в этой модели нет.
+        // Other platform runtime cards (VK/SC/Spotify): no likes in this model.
         if (track.Id <= 0) return;
 
         track.IsFavorite = !track.IsFavorite;
@@ -685,13 +684,13 @@ public partial class LibraryViewModel : PageViewModel
 
     partial void OnSearchTextChanged(string value)
     {
-        // Debounce 200ms + поколение запроса: при быстром наборе задержки
-        // срабатывают по очереди, но выполняется только поиск последнего ввода —
-        // результаты устаревших прогонов (и их чтения БД) отбрасываются.
+        // Debounce 200ms + query generation: with fast typing the delays fire in
+        // sequence but only the last input's search runs — stale runs (and their DB
+        // reads) are discarded.
         var generation = ++_searchGeneration;
         _ = Task.Delay(200).ContinueWith(_ =>
         {
-            if (generation != _searchGeneration) return; // ввод уже изменился
+            if (generation != _searchGeneration) return; // input already changed
             Application.Current?.Dispatcher.Invoke(() => _ = ApplySearchAsync(generation));
         });
     }
@@ -706,10 +705,10 @@ public partial class LibraryViewModel : PageViewModel
         }
         var tracks = await _library.GetAllTracksAsync(SortColumn, SortDirection);
 
-        // Поиск перекрывает фильтр страницы и ищет ещё и по платформенным метаданным —
-        // лайкам SoundCloud, музыке VK и Яндекс Музыки (title/artist): совпавшие —
-        // runtime-карточки в конце списка, файл резолвится на клике. Каждый репозиторий
-        // читается здесь один раз; сбой одной платформы не должен прятать локальные результаты.
+        // Search overrides the page filter and also covers platform metadata —
+        // SoundCloud likes, VK and Yandex Music tracks (title/artist): matches become
+        // runtime cards at the end of the list, the file is resolved on click. Each
+        // repository is read once here; one platform's failure must not hide local results.
         List<SoundCloudLikeRow> likes = new();
         try
         {
@@ -741,13 +740,13 @@ public partial class LibraryViewModel : PageViewModel
         }
 
         var filtered = SoundCloudRuntimeTracks.FilterWithSoundCloud(tracks, likes, SearchText, startIndex: 0);
-        // VK-совпадения — после SC; нумерация runtime-Id продолжается после уже
-        // построенных карточек, чтобы отрицательные Id не пересекались.
+        // VK matches come after SC; runtime-Id numbering continues after the already
+        // built cards so negative Ids do not collide.
         filtered.AddRange(VkRuntimeTracks.FilterWithVk(filtered.Count, vkRows, SearchText));
-        // Совпадения Яндекс Музыки — после VK (нумерация продолжается).
+        // Yandex Music matches come after VK (numbering continues).
         filtered.AddRange(YmRuntimeTracks.FilterWithYm(filtered.Count, ymRows, SearchText));
-        // Тот же единый порядок «новые сверху», что и на странице без поиска:
-        // совпадения платформ встают по своей дате добавления, а не глыбами в конце.
+        // The same unified "newest first" order as on the page without search:
+        // platform matches land by their own add date rather than as chunks at the end.
         SetTracks(SortByAddedDescending(filtered));
     }
 }

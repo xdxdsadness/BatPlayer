@@ -8,7 +8,7 @@ using BatPlayer.Models;
 namespace BatPlayer.Services;
 
 /// <summary>
-/// Загрузка/сохранение AppSettings в JSON. Single-file, atomic write.
+/// Loads/saves AppSettings as JSON. Single-file, atomic write.
 /// </summary>
 public sealed class SettingsService
 {
@@ -40,13 +40,33 @@ public sealed class SettingsService
         try
         {
             if (!File.Exists(_path)) return null;
-            var json = File.ReadAllText(_path);
+            var json = MigrateLegacyKeys(File.ReadAllText(_path));
             return JsonSerializer.Deserialize<AppSettings>(json, JsonOpts);
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "Settings load failed");
             return null;
+        }
+    }
+
+    /// <summary>Renames keys from older app versions to their current names.</summary>
+    private static string MigrateLegacyKeys(string json)
+    {
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonObject obj
+                || obj.ContainsKey("dpiBypassEnabled")
+                || obj["soundCloudZapretEnabled"] is not { } legacy)
+                return json;
+
+            obj["dpiBypassEnabled"] = legacy.DeepClone();
+            obj.Remove("soundCloudZapretEnabled");
+            return obj.ToJsonString();
+        }
+        catch
+        {
+            return json; // broken json is handled by Deserialize
         }
     }
 

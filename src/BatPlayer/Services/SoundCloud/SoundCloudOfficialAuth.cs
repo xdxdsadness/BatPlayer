@@ -8,25 +8,27 @@ using System.Threading;
 using System.Threading.Tasks;
 using BatPlayer.Services;
 
+using BatPlayer.Localization;
+
 namespace BatPlayer.Services.SoundCloud;
 
-/// <summary>Содержимое sc_api_auth.json: токен официального SoundCloud API
-/// (OAuth 2.1, локальный callback-флоу) и client_id зарегистрированного приложения.
-/// ФАЙЛ СОДЕРЖИТ ТОКЕН — в логи не печатать.</summary>
+/// <summary>Contents of sc_api_auth.json: the official SoundCloud API token
+/// (OAuth 2.1, local callback flow) and the registered app's client_id.
+/// THE FILE CONTAINS A TOKEN — never print it to logs.</summary>
 public sealed class SoundCloudApiAuthFile
 {
     public string? AccessToken { get; set; }
-    /// <summary>Refresh-токен OAuth 2.1: без него access_token после истечения (~час)
-    /// не восстановить — стримы официального API массово отвечают 401 («не играют»).</summary>
+    /// <summary>OAuth 2.1 refresh token: without it the access_token cannot be restored
+    /// after expiry (~1h) — official API streams then fail en masse with 401.</summary>
     public string? RefreshToken { get; set; }
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }
-    /// <summary>Когда истекает access_token (UTC); null — неизвестно (файлы старых версий).</summary>
+    /// <summary>When the access_token expires (UTC); null — unknown (older file versions).</summary>
     public DateTime? AccessTokenExpiresAtUtc { get; set; }
     public string? SavedAtUtc { get; set; }
 }
 
-/// <summary>Хранилище sc_api_auth.json (%LOCALAPPDATA%/BatPlayer). Atomic write.</summary>
+/// <summary>Store for sc_api_auth.json (%LOCALAPPDATA%/BatPlayer). Atomic write.</summary>
 public sealed class SoundCloudApiAuthStore
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -58,22 +60,22 @@ public sealed class SoundCloudApiAuthStore
 
     public void Delete()
     {
-        try { File.Delete(_path); } catch { /* нет файла */ }
+        try { File.Delete(_path); } catch { /* no file */ }
     }
 }
 
 /// <summary>
-/// Официальный SoundCloud API: подключение через OAuth 2.1 authorization-code +
-/// PKCE с ЛОКАЛЬНЫМ callback-сервером (http://127.0.0.1:8765/callback — документированный
-/// десктоп-флоу официального CLI). После токена — авто-регистрация приложения
-/// (POST api-reg.soundcloud.com/me/apps) для клиентских учётных данных.
+/// Official SoundCloud API: connection via OAuth 2.1 authorization-code + PKCE with a
+/// LOCAL callback server (http://127.0.0.1:8765/callback — the documented desktop flow
+/// of the official CLI). After the token, auto-registers the app
+/// (POST api-reg.soundcloud.com/me/apps) for client credentials.
 /// </summary>
 public sealed class SoundCloudOfficialAuth
 {
     private const string AuthorizeBase = "https://secure.soundcloud.com/authorize";
     private const string TokenUrl = "https://secure.soundcloud.com/oauth/token";
     private const string AppRegBase = "https://api-reg.soundcloud.com";
-    /// <summary>Публичный PKCE-клиент CLI официального репозитория.</summary>
+    /// <summary>Public PKCE client of the official CLI repository.</summary>
     private const string BundledClientId = "nXIZT4VQQYkgHs75vpIYbnINQciCkV5Y";
     private const string CallbackUri = "http://127.0.0.1:8765/callback";
     private const int CallbackPort = 8765;
@@ -89,21 +91,21 @@ public sealed class SoundCloudOfficialAuth
     public SoundCloudApiAuthFile Load() => _store.Load();
     public bool IsConnected => !string.IsNullOrEmpty(_store.Load().AccessToken);
 
-    /// <summary>Локальное подключение (совместимость): полный официальный флоу —
-    /// PKCE-вход → регистрация/получение СВОЕГО приложения → переподключение своим клиентом.
-    /// onStatus — тексты прогресса для UI.</summary>
+    /// <summary>Local connect (compatibility): the full official flow — PKCE login →
+    /// register/fetch the user's OWN app → reconnect with that client.
+    /// onStatus — progress text for the UI.</summary>
     public Task<SoundCloudApiAuthFile> ConnectLocallyAsync(
         Action<string>? onStatus, CancellationToken ct)
         => ConnectOfficialAsync(onStatus, ct);
 
     /// <summary>
-    /// Полное подключение официального API — 1:1 с официальным CLI sc-api-auth.mjs:
-    /// 1) PKCE-вход в браузере: СВОЙ client_id (если уже зарегистрирован) или бандлед;
-    /// 2) POST /me/apps — регистрация собственного приложения (или получение уже
-    ///    существующего), схема тела и обработка ошибок — как в CLI;
-    /// 3) если токен выдан бандлед-клиентом, а зарегистрирован СВОЙ — второй PKCE-проход:
-    ///    api.soundcloud.com отвечает 403 disallowed на токены заблокированного
-    ///    бандлед-клиента, и только токен собственного приложения может играть.
+    /// Full official API connection — 1:1 with the official CLI sc-api-auth.mjs:
+    /// 1) PKCE login in the browser: the user's OWN client_id (if already registered) or bundled;
+    /// 2) POST /me/apps — register the user's own app (or fetch the existing one); body
+    ///    schema and error handling match the CLI;
+    /// 3) if the token was issued to the bundled client but an own app is registered — a
+    ///    second PKCE pass: api.soundcloud.com answers 403 disallowed for tokens of the
+    ///    blocked bundled client, and only the own app's token can play.
     /// </summary>
     public async Task<SoundCloudApiAuthFile> ConnectOfficialAsync(
         Action<string>? onStatus, CancellationToken ct)
@@ -112,17 +114,17 @@ public sealed class SoundCloudOfficialAuth
         var loginClient = string.IsNullOrWhiteSpace(saved.ClientId) ? BundledClientId : saved.ClientId!;
         var file = await ConnectWithClientIdAsync(loginClient, saved.ClientSecret, onStatus, ct);
 
-        onStatus?.Invoke("Регистрирую приложение SoundCloud API...");
+        onStatus?.Invoke(Loc.Get("ScApiRegisteringApp"));
         var creds = await EnsureRegisteredAppAsync(file.AccessToken!, onStatus, ct);
         if (creds == null || string.IsNullOrEmpty(creds.Value.ClientId) || creds.Value.ClientId == loginClient)
             return file;
 
-        onStatus?.Invoke("Переподключаюсь с учётными данными вашего приложения (второй вход в браузере)...");
+        onStatus?.Invoke(Loc.Get("ScApiReconnectingOwnApp"));
         return await ConnectWithClientIdAsync(creds.Value.ClientId, creds.Value.ClientSecret, onStatus, ct);
     }
 
-    /// <summary>PKCE-проход с указанным клиентом: браузер → callback → токен →
-    /// регистрация приложения (если client_secret).</summary>
+    /// <summary>PKCE pass with the given client: browser → callback → token →
+    /// app registration (if client_secret).</summary>
     public async Task<SoundCloudApiAuthFile> ConnectWithClientIdAsync(
         string clientId, string? clientSecret, Action<string>? onStatus, CancellationToken ct)
     {
@@ -132,7 +134,7 @@ public sealed class SoundCloudOfficialAuth
         listener.Prefixes.Add($"http://127.0.0.1:{CallbackPort}/callback/");
         listener.Prefixes.Add($"http://localhost:{CallbackPort}/callback/");
         listener.Start();
-        onStatus?.Invoke("Ожидаю вход в браузере SoundCloud...");
+        onStatus?.Invoke(Loc.Get("ScApiWaitingBrowser"));
 
         var authUrl = $"{AuthorizeBase}?client_id={Uri.EscapeDataString(clientId)}" +
                       $"&redirect_uri={Uri.EscapeDataString(CallbackUri)}" +
@@ -143,11 +145,11 @@ public sealed class SoundCloudOfficialAuth
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             { FileName = authUrl, UseShellExecute = true });
         }
-        catch { /* браузер не открылся — пользователь откроет ссылку вручную (статус выше) */ }
+        catch { /* browser didn't open — the user will open the link manually (status shown above) */ }
 
         using var reg = ct.Register(() => { try { listener.Stop(); } catch { } });
 
-        // Ждём callback: первый запрос на /callback с code и state.
+        // Wait for the callback: the first /callback request carrying code and state.
         string? code = null;
         while (code == null && !ct.IsCancellationRequested)
         {
@@ -166,14 +168,15 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
 
             if (!string.IsNullOrEmpty(callbackError))
             {
-                Reply(ctx, 200, "<html><body style='font-family:Segoe UI;background:#1a1d22;color:#f1f1f1'>Отменено: " +
+                Reply(ctx, 200, "<html><body style='font-family:Segoe UI;background:#1a1d22;color:#f1f1f1'>" +
+                    Loc.Get("ScApiCanceledPage") +
                     System.Net.WebUtility.HtmlEncode(callbackError) + "</body></html>");
-                throw new Exception("Вход отменён: " + callbackError);
+                throw new Exception(Loc.Get("ScApiSignInCanceled") + callbackError);
             }
             if (string.IsNullOrEmpty(code))
             {
                 Reply(ctx, 400, "Missing code");
-                continue; // не callback с кодом — ждём дальше
+                continue; // not a code-bearing callback — keep waiting
             }
             if (returnedState != state)
             {
@@ -181,11 +184,11 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
                 throw new Exception("State mismatch (CSRF)");
             }
             Reply(ctx, 200, "<html><body style='font-family:Segoe UI;background:#1a1d22;color:#f1f1f1;text-align:center;padding-top:40px'>" +
-                "<h2>SoundCloud API подключён</h2>Можно закрыть это окно.</body></html>");
+                Loc.Get("ScApiConnectedPage") + "</body></html>");
         }
         ct.ThrowIfCancellationRequested();
 
-        onStatus?.Invoke("Обмениваю код на токен...");
+        onStatus?.Invoke(Loc.Get("ScApiExchangingCode"));
         var token = await TokenExchangeAsync(code!, verifier, clientId, ct);
 
         var file = new SoundCloudApiAuthFile
@@ -201,16 +204,16 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         return file;
     }
 
-    // ====================== Жизненный цикл токена ====================
+    // ====================== Token lifecycle ====================
 
-    /// <summary>Запас до истечения access_token, при котором считаем его протухшим.</summary>
+    /// <summary>Margin before access_token expiry at which it is considered stale.</summary>
     private static readonly TimeSpan TokenExpiryMargin = TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// Живой access_token для запросов официального API. Истекающий/протухший (или
-    /// forceRefresh после 401) обновляется refresh-грантом; refresh-токен ротируется
-    /// ответом и перезаписывается в файл. null — токена нет; если обновить не удалось,
-    /// отдаём прежний (запрос API всё равно вернёт 401 — но не молча теряем сессию).
+    /// Live access_token for official API requests. Expiring/stale (or forceRefresh after
+    /// 401) tokens are refreshed via the refresh grant; the rotated refresh token is written
+    /// back to the file. null — no token; if the refresh fails, the previous one is returned
+    /// (the API call will 401 anyway, but the session is not silently lost).
     /// </summary>
     public async Task<string?> GetValidAccessTokenAsync(CancellationToken ct, bool forceRefresh = false)
     {
@@ -220,13 +223,13 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         var expired = file.AccessTokenExpiresAtUtc.HasValue
                       && DateTime.UtcNow >= file.AccessTokenExpiresAtUtc.Value - TokenExpiryMargin;
         if (!expired && !forceRefresh) return file.AccessToken;
-        if (string.IsNullOrEmpty(file.RefreshToken)) return file.AccessToken; // старый файл без refresh — как раньше
+        if (string.IsNullOrEmpty(file.RefreshToken)) return file.AccessToken; // old file without refresh — behave as before
 
         await RefreshAsync(file, ct);
         return _store.Load().AccessToken;
     }
 
-    /// <summary>POST /oauth/token (grant_type=refresh_token); новые токены — в файл.</summary>
+    /// <summary>POST /oauth/token (grant_type=refresh_token); new tokens go to the file.</summary>
     private async Task RefreshAsync(SoundCloudApiAuthFile file, CancellationToken ct)
     {
         try
@@ -260,7 +263,7 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
             }
 
             file.AccessToken = access;
-            // OAuth 2.1 ротация: старый refresh-токен инвалидируется, сохраняем новый.
+            // OAuth 2.1 rotation: the old refresh token is invalidated; save the new one.
             if (root.TryGetProperty("refresh_token", out var rt) && !string.IsNullOrEmpty(rt.GetString()))
                 file.RefreshToken = rt.GetString();
             if (root.TryGetProperty("expires_in", out var ei) && ei.ValueKind == JsonValueKind.Number)
@@ -272,7 +275,7 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            // Обновление не должно ронять воспроизведение: вернётся прежний токен.
+            // Refresh must not break playback: the previous token is returned.
             Logger.Error(ex, "SoundCloud API token refresh failed");
         }
     }
@@ -288,7 +291,7 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
             ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
             ctx.Response.OutputStream.Close();
         }
-        catch { /* клиент уже ушёл */ }
+        catch { /* client already gone */ }
     }
 
     /// <summary>PKCE: verifier + S256 challenge + state.</summary>
@@ -338,25 +341,24 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         return (access, refresh, expiresAt);
     }
 
-    // ====================== Регистрация приложения (1:1 с CLI) ====================
+    // ====================== App registration (1:1 with the CLI) ====================
 
-    /// <summary>Метаданные регистрируемого приложения. POST /me/apps требует
-    /// name+description+website (как CLI sc-api-auth.mjs).</summary>
+    /// <summary>Metadata of the app being registered. POST /me/apps requires
+    /// name+description+website (as in the CLI sc-api-auth.mjs).</summary>
     private const string AppName = "Bat Player";
     private const string AppDescription = "Personal desktop music player: plays the user's own SoundCloud likes and library via the official API";
-    // TODO: перед публикацией заменить на адрес своего репозитория/сайта.
-    private const string AppWebsite = "https://github.com/your-github-username/BatPlayer";
+    private const string AppWebsite = "https://github.com/xdxdsadness/BatPlayer";
 
     /// <summary>
-    /// Регистрация (или получение уже существующего) собственного приложения —
-    /// по схеме официального CLI sc-api-auth.mjs. Возвращает учётные данные или
-    /// null, если регистрация недоступна (например, нужна подписка Artist Pro —
-    /// код application_creation_not_available; текст для UI — в onStatus).
+    /// Registers (or fetches the existing) user's own app — following the official CLI
+    /// sc-api-auth.mjs. Returns the credentials, or null if registration is unavailable
+    /// (e.g. an Artist Pro subscription is required — code application_creation_not_available;
+    /// UI text goes to onStatus).
     /// </summary>
     private async Task<(string? ClientId, string? ClientSecret)?> EnsureRegisteredAppAsync(
         string accessToken, Action<string>? onStatus, CancellationToken ct)
     {
-        // 1) Создание: POST /me/apps {name, description, website} — без обёрток.
+        // 1) Create: POST /me/apps {name, description, website} — no wrappers.
         using (var req = new HttpRequestMessage(HttpMethod.Post, $"{AppRegBase}/me/apps"))
         {
             req.Headers.Authorization = new("OAuth", accessToken);
@@ -372,11 +374,11 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
             if (res.IsSuccessStatusCode)
             {
                 var (cid, secret, urn) = ParseCredentials(text);
-                // Новому приложению нужен redirect_uri для будущих PKCE-входов
-                // (CLI ставит его отдельным PUT /me/apps/{credentialsUrn}).
+                // A new app needs a redirect_uri for future PKCE logins
+                // (the CLI sets it via a separate PUT /me/apps/{credentialsUrn}).
                 if (!string.IsNullOrEmpty(urn))
                     await UpdateRedirectAsync(accessToken, urn, ct);
-                onStatus?.Invoke($"Приложение зарегистрировано (client_id {cid}).");
+                onStatus?.Invoke(string.Format(Loc.Get("ScApiAppRegistered"), cid));
                 return (cid, secret);
             }
 
@@ -389,9 +391,9 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
             }
         }
 
-        // 2) Приложение уже есть: GET /me/apps → первое → PUT redirect (в ответе —
-        //    полные учётные данные, GET client_secret не отдаёт).
-        onStatus?.Invoke("Приложение уже зарегистрировано — получаю его учётные данные...");
+        // 2) App already exists: GET /me/apps → first → PUT redirect (the response carries
+        //    full credentials; GET does not return client_secret).
+        onStatus?.Invoke(Loc.Get("ScApiAppAlreadyRegistered"));
         using (var get = new HttpRequestMessage(HttpMethod.Get, $"{AppRegBase}/me/apps"))
         {
             get.Headers.Authorization = new("OAuth", accessToken);
@@ -414,13 +416,13 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
                 var (_, secret2) = await UpdateRedirectAsync(accessToken, urn, ct);
                 if (!string.IsNullOrEmpty(secret2)) secret = secret2;
             }
-            onStatus?.Invoke($"Найдено зарегистрированное приложение (client_id {cid}).");
+            onStatus?.Invoke(string.Format(Loc.Get("ScApiAppFound"), cid));
             return (cid, secret);
         }
     }
 
-    /// <summary>PUT /me/apps/{credentialsUrn} {redirect_uri} — ставит локальный callback
-    /// для будущих PKCE-входов. В ответе — полные учётные данные (включая secret).</summary>
+    /// <summary>PUT /me/apps/{credentialsUrn} {redirect_uri} — sets the local callback
+    /// for future PKCE logins. The response carries the full credentials (incl. the secret).</summary>
     private async Task<(bool Ok, string? ClientSecret)> UpdateRedirectAsync(
         string accessToken, string urn, CancellationToken ct)
     {
@@ -472,7 +474,7 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         return (null, null, null);
     }
 
-    /// <summary>Разбор errors[0].code / error_message (структура api-reg), fallback {"error": "..."}.</summary>
+    /// <summary>Parses errors[0].code / error_message (api-reg structure), fallback {"error": "..."}.</summary>
     private static (string? Code, string? Message) ParseApiError(string body)
     {
         try
@@ -496,17 +498,17 @@ if (ct.IsCancellationRequested) { try { listener.Stop(); } catch { } throw new O
         return (null, null);
     }
 
-    /// <summary>Текст для UI по коду ошибки регистрации (как CREATE_APP_ERROR_MESSAGES в CLI).</summary>
+    /// <summary>UI text for a registration error code (like CREATE_APP_ERROR_MESSAGES in the CLI).</summary>
     private static string RegistrationHint(string? code, string? apiMsg)
     {
         if (!string.IsNullOrEmpty(apiMsg)) return apiMsg;
         return code switch
         {
             "application_creation_not_available"
-                => "Регистрация приложений недоступна для аккаунта — нужна подписка SoundCloud Artist Pro",
-            "application_name_not_allowed" => "Имя приложения отклонено SoundCloud",
-            "application_website_not_allowed" => "URL сайта приложения отклонён SoundCloud",
-            _ => $"Регистрация приложения недоступна ({code ?? "unknown"})"
+                => Loc.Get("ScApiRegNeedsPro"),
+            "application_name_not_allowed" => Loc.Get("ScApiRegNameRejected"),
+            "application_website_not_allowed" => Loc.Get("ScApiRegWebsiteRejected"),
+            _ => string.Format(Loc.Get("ScApiRegUnavailable"), code ?? "unknown")
         };
     }
 }

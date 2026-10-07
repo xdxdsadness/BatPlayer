@@ -19,7 +19,7 @@ public partial class ArtistProfileView : UserControl
         e.Handled = true;
     }
 
-    // «+ в плейлист»: трек карточки (локальный или runtime-карточка платформы).
+    // "+ add to playlist": track from the card (local or platform runtime card).
     private void AddToPlaylist_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { DataContext: Models.Track track })

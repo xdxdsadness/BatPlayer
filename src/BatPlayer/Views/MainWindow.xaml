@@ -24,17 +24,16 @@
         <cv:VolumeToIconConverter x:Key="VolIcon"/>
         <cv:InverseBoolConverter x:Key="InvBool"/>
         <cv:StringEqualsToVisibilityConverter x:Key="PlatformSource2Vis"/>
-        <!-- Вертикальный слайдер громкости для popup над кнопкой. Только нативные
-             механизмы Slider: IsMoveToPointEnabled (клик по дорожке) + штатный drag
-             бегунка — без SliderDragBehavior (кастомный mouse-capture внутри popup
-             ненадёжен). IsDirectionReversed оставлен false: у вертикального Track
-             при false минимум СНИЗУ (заливка растёт вверх, вверх = громче), true
-             кладёт минимум сверху («вверх ногами») — проверено пробой раскладки.
-             Бегунок — кольцо: заливка PanelBrush скрывает дорожку внутри обруча. -->
+        <!-- Vertical volume slider for the popup above the button. Native Slider
+             mechanisms only: IsMoveToPointEnabled (track click) + standard thumb drag —
+             no SliderDragBehavior (custom mouse capture inside a popup is unreliable).
+             IsDirectionReversed stays false: for a vertical Track, false puts the minimum
+             at the BOTTOM (fill grows upward, up = louder); true flips it upside down.
+             Thumb is a ring: PanelBrush fill hides the track inside the hoop. -->
         <Style x:Key="VolumeVerticalSlider" TargetType="Slider">
-            <!-- Обязательно Vertical: Track берёт ориентацию из свойства слайдера,
-                 а не из шаблона — без сеттера Track горизонтальный, и слайдер
-                 «не регулируется» (бегунок зажат в 22px по горизонтали). -->
+            <!-- Must be Vertical: Track takes orientation from the slider property, not
+                 from the template — without this setter the Track is horizontal and the
+                 slider "does not respond" (thumb is squeezed into 22px horizontally). -->
             <Setter Property="Orientation" Value="Vertical"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -49,8 +48,8 @@
                             <Track x:Name="PART_Track"
                                    VerticalAlignment="Stretch" HorizontalAlignment="Center">
                                 <Track.DecreaseRepeatButton>
-                                    <!-- Заполненная часть дорожки (визуал), клики сквозь неё
-                                         уходят к Slider (move-to-point). -->
+                                    <!-- Filled part of the track (visual); clicks pass through
+                                         to the Slider (move-to-point). -->
                                     <RepeatButton Focusable="False" IsHitTestVisible="False">
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
@@ -93,19 +92,18 @@
                 <RowDefinition Height="80"/>   <!-- Player bar -->
             </Grid.RowDefinitions>
 
-<!-- Окрас окна: обложка играющего трека, растянутая на всё окно и сильно
-             размытая + затемнение — классический живой фон плееров. Цвета совпадают
-             с обложкой по определению, детализация фото естественно маскирует
-             бандинг — без шума и линий. BitmapCache на каждом слое: содержимое
-             статично между сменами трека, а кроссфейд анимирует Opacity САМОГО
-             слоя (применяется на композитинге, кэш не инвалидирует). Без кэша
-             ЛЮБАЯ перерисовка окна (hover-анимации карточек, вращение логотипа,
-             волна) рекомпозитила два полнокадровых изображения — главный
-             множитель CPU всего интерфейса. -->
+<!-- Window tint: the playing track's cover stretched over the window and heavily
+             blurred + darkening — the classic live player background. Colors match the
+             cover by definition and photo detail naturally masks banding — no noise,
+             no lines. BitmapCache on each layer: content is static between track changes,
+             and the crossfade animates the Opacity OF THE LAYER ITSELF (applied at
+             composition, cache stays valid). Without the cache ANY window repaint
+             (card hover animations, logo spin, wave) recomposited two full-frame images —
+             the main CPU multiplier of the whole UI. -->
             <Grid Grid.RowSpan="3" IsHitTestVisible="False">
 <Image x:Name="TintImgA" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" CacheMode="BitmapCache"/>
                 <Image x:Name="TintImgB" Stretch="UniformToFill" Opacity="0" RenderOptions.BitmapScalingMode="HighQuality" CacheMode="BitmapCache"/>
-                <!-- Затемнение: контент читается на любом мастере -->
+                <!-- Darkening: content stays readable on any cover -->
                 <Border Background="#66101218"/>
             </Grid>
 
@@ -127,7 +125,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Logo: тайл-иконка + название (batlogo.png) -->
+                    <!-- Logo: tile icon + name (batlogo.png) -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="16,0">
                         <Image Width="20" Height="20" Margin="0,0,10,0"
                                Source="pack://application:,,,/Resources/batlogo.png" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -136,13 +134,12 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <!-- Search: левый край на одной вертикали с заголовком страницы
-                         (сайдбар 220 + отступ контента 32 = 252). Поле прижато ВЛЕВО и
-                         имеет фиксированную ширину: при Stretch элемент с MaxWidth
-                         центрируется в колонке и «ездит» влево-вправо при смене страницы
-                         (ширина колонки зависит от числа кнопок действий справа).
-                         MaxWidth на ширину хоста — сжатие на узких окнах без наезда
-                         на кнопки справа. -->
+                    <!-- Search: left edge aligned with the page title column
+                         (sidebar 220 + content indent 32 = 252). The field is pinned LEFT
+                         with a fixed width: with Stretch, a MaxWidth element centers in the
+                         column and "drifts" when switching pages (column width depends on the
+                         number of action buttons on the right). MaxWidth bound to the host
+                         width — shrinks on narrow windows without hitting those buttons. -->
                     <Grid Grid.Column="1" x:Name="SearchHost" Margin="252,0,16,0" VerticalAlignment="Center">
                                     <Border x:Name="SearchField" Height="34" HorizontalAlignment="Left" VerticalAlignment="Center"
                                             Width="420" MaxWidth="{Binding ActualWidth, ElementName=SearchHost}"
@@ -162,9 +159,9 @@
                                                        Foreground="{DynamicResource TextInactiveBrush}"
                                                        VerticalAlignment="Center"
                                                        Visibility="{Binding SearchText, Converter={StaticResource EmptyToVis}}"/>
-                                            <!-- Отрицательный левый отступ гасит внутренний Margin=1 шаблона
-                                                 TextBox (Aero2): без него курсор наезжает на первую букву
-                                                 плейсхолдера «S…», стоящего в той же колонке -->
+                                            <!-- Negative left margin cancels the TextBox template's
+                                                 inner Margin=1 (Aero2): otherwise the caret overlaps
+                                                 the first letter of the "S…" placeholder in the same column -->
                                             <TextBox Grid.Column="1" x:Name="SearchBox" BorderThickness="0"
                                                      Margin="-2,0,0,0"
                                                      Background="Transparent" Foreground="{DynamicResource TextPrimaryBrush}"
@@ -187,59 +184,8 @@
                                     </Border>
                                 </Grid>
 
-                    <!-- Индикатор обхода блокировки SoundCloud (zapret): виден, пока идёт
-                         перебор стратегий (спиннер) и несколько секунд после финала
-                         (найдена/не найдена). Плашка как у синк-бейджа SC-страницы.
-                         Слева, сразу после логотипа: между ним и поиском ~240px пустого
-                         места при ЛЮБОЙ ширине окна (поиск начинается с фикс. отступа
-                         252) — плашка не может наехать ни на поиск, ни на кнопки справа.
-                         MaxWidth 230 обрезает длинные тексты до этой зоны. -->
-                    <Border Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
-                            Margin="8,0,0,0" Background="#CC232428" CornerRadius="10" Padding="10,5"
-                            MaxWidth="230"
-                            Visibility="{Binding BypassStatusText, Converter={StaticResource Null2Vis}}"
-                            ToolTip="{Binding BypassStatusText}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="13" Height="13" Margin="0,0,7,0" VerticalAlignment="Center"
-                                   Source="pack://application:,,,/Resources/batlogo_white.png"
-                                   RenderTransformOrigin="0.5,0.5" RenderOptions.BitmapScalingMode="HighQuality">
-                                <Image.RenderTransform>
-                                    <RotateTransform Angle="0"/>
-                                </Image.RenderTransform>
-                                <Image.Style>
-                                    <Style TargetType="Image">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsBypassBusy}" Value="True">
-                                                <DataTrigger.EnterActions>
-                                                    <!-- Именованный storyboard: ExitActions снимает его
-                                                         (RemoveStoryboard), поэтому повторный запуск
-                                                         перебора снова крутит спиннер с нуля -->
-                                                    <BeginStoryboard x:Name="BypassSpinStory">
-                                                        <Storyboard>
-                                                            <!-- Без TargetName: в стилях он недоступен —
-                                                                 крутим через путь свойства RenderTransform -->
-                                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                                             From="0" To="360" Duration="0:0:0.9"
-                                                                             RepeatBehavior="Forever"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </DataTrigger.EnterActions>
-                                                <DataTrigger.ExitActions>
-                                                    <RemoveStoryboard BeginStoryboardName="BypassSpinStory"/>
-                                                </DataTrigger.ExitActions>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Image.Style>
-                            </Image>
-                            <TextBlock Text="{Binding BypassStatusText}" FontSize="11.5"
-                                       VerticalAlignment="Center" Foreground="#FFE8E8E8"
-                                       MaxWidth="196" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </Border>
-
                     <!-- Top action buttons -->
-                    <!-- Плотность сетки карточек: 4 или 8 колонок (CompactGrid) -->
+                    <!-- Card grid density: 4 or 8 columns (CompactGrid) -->
                     <Button Grid.Column="3" Style="{StaticResource IconButton}" Margin="0,0,4,0"
                             Command="{Binding ToggleGridColumnsCommand}"
                             ToolTip="{Binding [ToggleGridDensity], Source={x:Static loc:Loc.T}}">
@@ -328,9 +274,9 @@
                                              Content="{Binding [Artists], Source={x:Static loc:Loc.T}}"
                                              Command="{Binding NavigateCommand}" CommandParameter="Artists"
                                              Tag="{StaticResource IconArtist}"/>
-                                <!-- Платформенные пункты: монохромные векторные логотипы
-                                     (NavButtonLogo, 30px) — крупнее обычных иконок, красятся
-                                     темой; у SoundCloud полный логотип с полосками -->
+                                <!-- Platform items: monochrome vector logos
+                                     (NavButtonLogo, 30px) — larger than regular icons, themed;
+                                     SoundCloud uses the full logo with bars -->
                                 <RadioButton Style="{StaticResource NavButtonLogo}" GroupName="Nav"
                                              Content="{Binding [SoundCloud], Source={x:Static loc:Loc.T}}"
                                              Command="{Binding NavigateCommand}" CommandParameter="SoundCloud"
@@ -361,8 +307,9 @@
                 </Border>
 
                 <!-- ===== Content host (rounded clip applied in code-behind) ===== -->
-                <!-- Фон прозрачен: базу красит RootBorder, амбиент-слой лежит над ней —
-                     непрозрачный фон здесь прятал бы свечение в зоне треков -->
+                <!-- Background stays transparent: RootBorder paints the base and the ambient
+                     layer sits above it — an opaque background here would hide the glow
+                     in the track area -->
                 <Grid Grid.Column="1" x:Name="ContentHost" Background="Transparent">
                     <ContentControl x:Name="PageHost" Content="{Binding CurrentPage}"/>
 
@@ -372,10 +319,10 @@
 
 
             <!-- ============ Player Bar ============ -->
-            <!-- Разделитель = верхняя граница бара (y=720): карточки клипуются ровно по
-                 ней (ContentHost заканчивается на границе строк), аватарка отцентрована
-                 в 80px строке → по 8px над и под ней. Замер давал: линия на 722.5 давала
-                 4.5px над аватаркой против 9px под ней — «снизу больше, чем сверху». -->
+            <!-- The separator = the bar's top border (y=720): cards clip exactly at it
+                 (ContentHost ends at the row boundary), the avatar is centered in the 80px
+                 row → 8px above and below. Measured: a line at 722.5 left 4.5px above the
+                 avatar vs 9px below — "more below than above". -->
             <Border Grid.Row="2" Background="Transparent"
                     CornerRadius="0,0,12,12"
                      BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
@@ -389,8 +336,8 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Обложка слева (как в SoundCloud). Hover: лёгкое увеличение —
-                         та же живая реакция, что у кнопок и карточек -->
+                    <!-- Cover on the left (SoundCloud-like). Hover: slight grow —
+                         the same lively reaction as buttons and cards -->
                     <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center" Margin="0,0,12,0"
                           Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BarCover_Click"
                           RenderTransformOrigin="0.5,0.5"
@@ -401,9 +348,9 @@
                         <Grid.Style>
                             <Style TargetType="Grid">
                                 <Style.Triggers>
-                                    <!-- Явный From="1": повторное наведение всегда проигрывает
-                                         масштаб заново (hold-end часов не подменить сеттером —
-                                         property-path в Style.Setter не разрешён) -->
+                                    <!-- Explicit From="1": re-hovering always replays the scale
+                                         (hold-end clocks cannot be overridden by a Setter —
+                                         property-path is not allowed in Style.Setter) -->
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Trigger.EnterActions>
                                             <BeginStoryboard>
@@ -431,15 +378,15 @@
                         </Grid.Style>
                         <!-- ImageBrush center-crops the artwork to a 1:1 square -->
                         <Border CornerRadius="8" Background="{DynamicResource SecondaryBrush}">
-                            <!-- Нет обложки: серый силуэт мыши — индикатор неактивного трека
-                                 (тот же #6F6F6F, что был у диска) -->
+                            <!-- No cover: gray bat silhouette marks an inactive track
+                                 (same #6F6F6F as the old disc) -->
                             <Image Width="40" Stretch="Uniform" HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Source="pack://application:,,,/Resources/batlogo_gray.png" RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Border>
-                        <!-- Два слоя обложки: кроссфейд при смене трека ведёт code-behind
-                             (старая обложка растворяется под новой, без резкой подмены).
-                             Слои прозрачны — сквозь них видна мышь-плейсхолдер. -->
+                        <!-- Two cover layers: the crossfade on track change is driven by
+                             code-behind (the old cover dissolves under the new one, no hard
+                             swap). Layers are transparent — the bat placeholder shows through. -->
                         <Border x:Name="BarCoverLayerA" CornerRadius="8" Opacity="0" IsHitTestVisible="False">
                             <Border.Background>
                                 <ImageBrush Stretch="UniformToFill"/>
@@ -452,8 +399,8 @@
                         </Border>
                     </Grid>
 
-                    <!-- Название / исполнитель: если не умещается — «…»;
-                         значок платформы прижат к названию (MaxWidth из code-behind) -->
+                    <!-- Title / artist: ellipsized when too long;
+                         platform badge hugs the title (MaxWidth from code-behind) -->
                     <StackPanel x:Name="PlayerTextHost" Grid.Column="1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" ClipToBounds="True">
                             <TextBlock x:Name="PlayerTitleText" FontSize="14" FontWeight="Medium"
@@ -470,11 +417,11 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <!-- Значок платформы после названия (local — значка нет).
-                                 FallbackValue=Collapsed обязателен: при CurrentTrack=null
-                                 путь CurrentTrack.Source не разрешается, и без фолбэка
-                                 значок оставался Visible — у «No track» светились все
-                                 три логотипа сразу. -->
+                            <!-- Platform badge after the title (local files have none).
+                                 FallbackValue=Collapsed is required: when CurrentTrack=null
+                                 the path CurrentTrack.Source does not resolve, and without the
+                                 fallback the badge stayed Visible — all three logos glowed on
+                                 "No track". -->
                             <Image Width="18" Height="18" Stretch="Uniform" Margin="6,0,0,0"
                                    VerticalAlignment="Center"
                                    Source="{StaticResource SoundCloudLogoSmall}"
@@ -494,7 +441,7 @@
                                    TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
 
-                    <!-- В избранное -->
+                    <!-- Favorite -->
                     <Button Grid.Column="2" Style="{StaticResource IconButton}" Margin="0,0,12,0"
                             Command="{Binding Player.ToggleFavoriteCommand}"
                             ToolTip="{Binding [Favorite], Source={x:Static loc:Loc.T}}">
@@ -539,7 +486,7 @@
                         </Path>
                     </Button>
 
-                    <!-- Транспорт в одном ряду: prev / play / next + shuffle / repeat (SoundCloud) -->
+                    <!-- Transport in one row: prev / play / next + shuffle / repeat (SoundCloud) -->
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource IconButton}" Margin="0,0,8,0"
                                 Command="{Binding Player.PreviousCommand}" ToolTip="{Binding [Previous], Source={x:Static loc:Loc.T}}">
@@ -549,12 +496,12 @@
                         </Button>
                         <Button Style="{StaticResource PlayIconButton}" Margin="0,0,8,0"
                                 Command="{Binding Player.PlayPauseCommand}" ToolTip="{Binding [PlayPause], Source={x:Static loc:Loc.T}}">
-                            <!-- Логотип вместо паузы: крутится, пока играет; на паузе
-                                 выбегает и замирает на текущем угле. Вращение ведёт штатная
-                                 DoubleAnimation (RepeatBehavior=Forever) из code-behind —
-                                 без пользовательского кода в покадровом рендер-цикле.
-                                 BitmapCache: логотип рисуется в текстуру один раз, кадры
-                                 вращения — дешёвые трансформы кэша, а не перерисовка. -->
+                            <!-- Logo instead of a pause icon: spins while playing; on pause it
+                                 coasts and freezes at the current angle. Rotation is driven by a
+                                 standard DoubleAnimation (RepeatBehavior=Forever) from code-behind —
+                                 no custom per-frame render code. BitmapCache: the logo is drawn
+                                 into a texture once; spin frames are cheap cache transforms,
+                                 not redraws. -->
                             <Image Width="28" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Source="pack://application:,,,/Resources/batlogo_dark.png"
                                    RenderTransformOrigin="0.5,0.5" RenderOptions.BitmapScalingMode="HighQuality"
@@ -616,7 +563,7 @@
                         </Button>
                     </StackPanel>
 
-                    <!-- Таймлайн -->
+                    <!-- Timeline -->
                     <Grid Grid.Column="4" Margin="16,0,8,0" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -639,12 +586,12 @@
                                    Margin="8,0,0,0" FontFamily="{StaticResource AppFontMono}"/>
                     </Grid>
 
-                    <!-- Правый край: громкость (выезжает при наведении) + расширенный плеер -->
+                    <!-- Right edge: volume (slides out on hover) + extended player -->
                     <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
-                        <!-- Громкость: кнопка; панель слайдера лежит на корневом уровне
-                             окна — гарантированный z-порядок над контентом, ни от чего
-                             не обрезается. Открытие/закрытие по наведению — code-behind. -->
+                        <!-- Volume: button; the slider panel lives at the window root —
+                             guaranteed z-order above content, clipped by nothing.
+                             Hover open/close is handled by code-behind. -->
                         <Button x:Name="VolumeButton" Style="{StaticResource IconButton}"
                                     Command="{Binding Player.ToggleMuteCommand}"
                                     MouseEnter="VolumeButton_MouseEnter"
@@ -668,7 +615,7 @@
                                 </Path>
                             </Button>
 
-                        <!-- «+ в плейлист»: добавляет играющий сейчас трек -->
+                        <!-- "Add to playlist": adds the currently playing track -->
                         <Button Style="{StaticResource IconButton}" Margin="8,0,0,0"
                                 Click="AddToPlaylistFromPlayer_Click"
                                 ToolTip="{Binding [AddToPlaylist], Source={x:Static loc:Loc.T}}">
@@ -681,16 +628,16 @@
                 </Grid>
             </Border>
 
-            <!-- Панель громкости на КОРНЕВОМ уровне окна: гарантированный z-порядок
-                 над всеми страницами и баром (в поддереве бара её верх срезался кромкой
-                 бара). Якорь — над кнопкой громкости: справа = паддинг бара 16 + «+» 30
-                 + зазор 8 + полкнопки 15 - полпанели 20 = 49; низ панели выше кнопки на
-                 ~6px: кнопка центрирована в баре 80px -> её низ в 25px от низа бара,
-                 плюс зазор 6 = 61.
-                 RowSpan=3 ОБЯЗАТЕЛЕН: в ячейке строки 2 (80px) при нижнем отступе 61
-                 гриды отмеряют панели слот 80-61=19px — явная Height=150 игнорируется,
-                 панель схлопывается до высоты контента (~25px) и выглядит «обрезанной».
-                 Span по всем строкам даёт слот во всё окно — Height=150 соблюдается. -->
+            <!-- Volume panel at the window ROOT level: guaranteed z-order above all pages
+                 and the bar (inside the bar's subtree its top was clipped by the bar edge).
+                 Anchored above the volume button: right = bar padding 16 + "+" 30 + gap 8
+                 + half-button 15 - half-panel 20 = 49; panel bottom ~6px above the button:
+                 button is centered in the 80px bar → its bottom is 25px from the bar bottom,
+                 plus a 6px gap = 61.
+                 RowSpan=3 IS REQUIRED: in the row-2 cell (80px) with bottom margin 61 the
+                 grids give the panel an 80-61=19px slot — the explicit Height=150 is ignored,
+                 the panel collapses to content height (~25px) and looks "cut off".
+                 Spanning all rows gives a full-window slot — Height=150 is honored. -->
             <Border Grid.RowSpan="3" x:Name="VolumePopupPanel" Width="40" Height="150" Margin="0,0,49,61"
                     VerticalAlignment="Bottom" HorizontalAlignment="Right"
                     Visibility="Collapsed"
@@ -712,10 +659,10 @@
                         Value="{Binding Player.Volume, Mode=TwoWay}"
                         LostMouseCapture="VolumeSlider_LostMouseCapture"/>
             </Border>
-<!-- Просмотрщик обложки: клик по аватарке в плеер-баре (повторный клик по аватарке
-                 или клик в любом месте — закрывает; крестика больше нет).
-                 Фон — нейтральная полупрозрачная вуаль без цвета (окно приглушается,
-                 а не красится); обложка — крупно, без тени. -->
+<!-- Cover viewer: click the avatar in the player bar (clicking the avatar again
+                 or clicking anywhere closes it; no close button anymore).
+                 Background is a neutral translucent veil with no hue (the window is
+                 dimmed, not tinted); the cover is shown large, without a shadow. -->
             <Grid Grid.RowSpan="3" Panel.ZIndex="100" x:Name="CoverViewerHost" Visibility="Collapsed" Focusable="False">
                 <Border x:Name="CoverViewerBlur" Background="#96101218"/>
                 <Image x:Name="CoverViewerImage" Stretch="Uniform" Opacity="0"

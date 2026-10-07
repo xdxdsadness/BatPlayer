@@ -1,13 +1,13 @@
 namespace BatPlayer.ViewModels;
 
 /// <summary>
-/// Страница, контент которой фильтруется универсальной поисковой строкой в шапке окна.
-/// Реализуют платформенные сетки (SoundCloud/Spotify/VK/Яндекс Музыка), «Волна» и «Загрузки»;
-/// страницы библиотеки (Home/Недавние/Любимые) работают через Library.SearchText —
-/// их поиск ищет ещё и по платформенным метаданным (см. LibraryViewModel.ApplySearchAsync).
+/// Page whose content is filtered by the universal search bar in the window header.
+/// Implemented by platform grids (SoundCloud/Spotify/VK/Yandex Music), "Wave" and "Downloads";
+/// library pages (Home/Recent/Favorites) work via Library.SearchText —
+/// their search also covers platform metadata (see LibraryViewModel.ApplySearchAsync).
 /// </summary>
 public interface ISearchablePage
 {
-    /// <summary>Применить поисковый запрос к контенту страницы; пустая строка — полный список.</summary>
+    /// <summary>Applies the search query to the page content; empty string means the full list.</summary>
     void ApplySearch(string? query);
 }

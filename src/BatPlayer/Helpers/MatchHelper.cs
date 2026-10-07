@@ -7,29 +7,29 @@ using BatPlayer.Models;
 namespace BatPlayer.Helpers;
 
 /// <summary>
-/// Сопоставление трека SoundCloud с треком локальной библиотеки.
-/// Ключ матча: нормализованный (ArtistHelper.Key) исполнитель + нормализованное название.
-/// Нормализация режет различия, которыми реальные имена почти всегда отличаются:
-/// регистр, пунктуацию, содержимое скобок («(Official Video)»), суффиксы feat./ft.
+/// Matches a SoundCloud track against a local library track.
+/// Match key: normalized (ArtistHelper.Key) artist + normalized title.
+/// Normalization removes the differences real names almost always have:
+/// case, punctuation, bracketed content ("(Official Video)"), feat./ft. suffixes.
 /// </summary>
 public static partial class MatchHelper
 {
-    // "(Official Video)", "[HD]", "{...}" — вырезаем вместе с содержимым.
+    // "(Official Video)", "[HD]", "{...}" — removed together with contents.
     [GeneratedRegex(@"\([^)]*\)|\[[^\]]*\]|\{[^}]*\}")]
     private static partial Regex BracketRegex();
 
-    // "feat. X", "ft X", "featuring X" — суффикс и всё, что после него.
+    // "feat. X", "ft X", "featuring X" — suffix and everything after it.
     [GeneratedRegex(@"\s+(?:feat\.?|ft\.?|featuring)\s+.*$")]
     private static partial Regex FeatRegex();
 
-    /// <summary>Нормализует имя исполнителя: пустые/legacy-значения схлопываются в "" через ArtistHelper.Key.</summary>
+    /// <summary>Normalizes an artist name: empty/legacy values collapse to "" via ArtistHelper.Key.</summary>
     public static string NormalizeArtist(string? artist)
         => Normalize(ArtistHelper.Key(artist));
 
     /// <summary>
-    /// Нормализация строки для матча: lower invariant, вырезание скобок и feat.-хвостов,
-    /// всё кроме букв и цифр — в пробел, схлопывание пробелов, trim.
-    /// Возвращает "" для пустых строк.
+    /// Normalizes a string for matching: lower invariant, brackets and feat. tails removed,
+    /// everything except letters and digits becomes a space, spaces collapsed, trimmed.
+    /// Returns "" for empty input.
     /// </summary>
     public static string Normalize(string? input)
     {
@@ -38,7 +38,7 @@ public static partial class MatchHelper
         var s = input.ToLowerInvariant();
         s = BracketRegex().Replace(s, " ");
         s = FeatRegex().Replace(s, " ");
-        // Не-буквы/цифры (пунктуация, дефисы, «&») → пробел; юникод-буквы (кириллица и т.д.) сохраняются.
+        // Non-alphanumerics (punctuation, hyphens, "&") → space; unicode letters (incl. Cyrillic) are kept.
         var sb = new System.Text.StringBuilder(s.Length);
         foreach (var ch in s)
             sb.Append(char.IsLetterOrDigit(ch) ? ch : ' ');
@@ -46,16 +46,16 @@ public static partial class MatchHelper
         return s;
     }
 
-    /// <summary>Ключ матча «исполнитель|название» после нормализации.</summary>
+    /// <summary>Match key "artist|title" after normalization.</summary>
     public static string BuildKey(string? artist, string? title)
         => NormalizeArtist(artist) + "|" + Normalize(title);
 
     /// <summary>
-    /// Ищет локальный трек, соответствующий треку SoundCloud.
-    /// 1) точный матч по ключу (артист + название);
-    /// 2) fallback: у SC-названия часто вид «Artist - Title» — если после отделения
-    ///    префикса совпадает название и исполнитель, берём его.
-    /// Возвращает null, если локального матча нет.
+    /// Finds a local track matching a SoundCloud track.
+    /// 1) exact match by key (artist + title);
+    /// 2) fallback: an SC title is often "Artist - Title" — if title and artist match
+    ///    after splitting off the prefix, that track is used.
+    /// Returns null when there is no local match.
     /// </summary>
     public static Track? FindLocalMatch(IEnumerable<Track> localTracks, string? scArtist, string? scTitle)
     {
@@ -82,10 +82,10 @@ public static partial class MatchHelper
     }
 
     /// <summary>
-    /// Прединдекс локальной библиотеки по ключам матчинга: O(M) на построение,
-    /// затем O(1) на каждый лайк/карточку платформы. Заменяет O(N*M) проход
-    /// FindLocalMatch при массовых матчах (сотни карточек × сотни-тысячи треков
-    /// давали сотни тысяч сравнений строк с нормализацией на каждый вход в бар).
+    /// Pre-indexes the local library by match keys: O(M) to build, then O(1) per like or
+    /// platform card. Replaces the O(N*M) FindLocalMatch pass for bulk matching
+    /// (hundreds of cards x hundreds/thousands of tracks used to cost hundreds of
+    /// thousands of normalized string comparisons on every search-bar input).
     /// </summary>
     public static MatchIndex BuildIndex(IEnumerable<Track> localTracks)
     {
@@ -105,7 +105,7 @@ public static partial class MatchHelper
         return index;
     }
 
-    /// <summary>Матч по прединдексу: эквивалентен FindLocalMatch, но O(1).</summary>
+    /// <summary>Match via the pre-index: equivalent to FindLocalMatch but O(1).</summary>
     public static Track? FindLocalMatch(MatchIndex index, string? scArtist, string? scTitle)
     {
         var key = BuildKey(scArtist, scTitle);
@@ -117,14 +117,14 @@ public static partial class MatchHelper
         return null;
     }
 
-    /// <summary>Индекс матчинга (см. BuildIndex/FindLocalMatch).</summary>
+    /// <summary>Match index (see BuildIndex/FindLocalMatch).</summary>
     public sealed class MatchIndex
     {
         public Dictionary<string, Track> ByKey { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, Track> BySplitKey { get; } = new(StringComparer.Ordinal);
     }
 
-    /// <summary>Разбирает SC-название вида «Artist - Title» на части; null, если шаблона нет.</summary>
+    /// <summary>Splits an SC title of the form "Artist - Title"; null if the pattern is absent.</summary>
     private static (string? Artist, string? Title) SplitEmbeddedTitle(string? scTitle)
     {
         if (string.IsNullOrWhiteSpace(scTitle)) return (null, null);

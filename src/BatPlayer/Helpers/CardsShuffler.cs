@@ -7,17 +7,17 @@ using BatPlayer.Services;
 
 namespace BatPlayer.Helpers;
 
-/// <summary>Общая кнопка «Перемешать» для страниц с треками: случайный порядок
-/// карточек; если играет трек из этого же списка — очередь плеера перестраивается
-/// по новому порядку с играющим треком на его месте (воспроизведение не прерывается,
-/// Next/Previous идут по перемешанной очереди). Играет не из этого списка — очередь
-/// не трогается: перемешается порядок карточек для следующих запусков.</summary>
+/// <summary>Shared Shuffle button for track pages: randomizes the card order; if a track
+/// from the same list is playing, the player queue is rebuilt in the new order with the
+/// playing track at its position (playback is not interrupted, Next/Previous follow the
+/// shuffled queue). If playback is from another list, the queue is left alone: only the
+/// card order is shuffled for future runs.</summary>
 public static class CardsShuffler
 {
-    /// <param name="buildTrack">Runtime-трек карточки для очереди; null — карточка
-    /// в очередь не попадает (непроиграбельная). i — позиция в перемешанном списке.</param>
-    /// <param name="isSameTrack">Играет ли сейчас трек этой карточки (по источнику
-    /// и платформенному id либо по Id локального).</param>
+    /// <param name="buildTrack">Runtime track of the card for the queue; null = the card
+    /// is excluded (unplayable). i is the position in the shuffled list.</param>
+    /// <param name="isSameTrack">Whether this card's track is currently playing (by source
+    /// and platform id, or by local Id).</param>
     public static void Shuffle<T>(ObservableCollection<T> cards, AudioService audio,
         Func<T, int, Track?> buildTrack, Func<Track, T, bool> isSameTrack, string logContext)
     {

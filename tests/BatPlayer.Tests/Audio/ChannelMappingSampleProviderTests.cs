@@ -6,7 +6,7 @@ using Xunit;
 
 namespace BatPlayer.Tests.Audio;
 
-/// <summary>Простой float-источник с заранее заданными сэмплами для проверки маппинга.</summary>
+/// <summary>Simple float source with predefined samples for mapping checks.</summary>
 internal sealed class ScriptedSampleSource : ISampleProvider
 {
     private readonly float[] _samples;
@@ -48,14 +48,14 @@ public class ChannelMappingSampleProviderTests
     [Fact]
     public void Downmix_FourToTwo_AveragesPairsRoundRobin()
     {
-        // Раскладка по кругу: каналы 0,2 -> выход 0; каналы 1,3 -> выход 1.
+        // Round-robin mapping: channels 0,2 -> out 0; channels 1,3 -> out 1.
         var src = new ScriptedSampleSource(4, 48000, new[] { 0.1f, 0.2f, 0.3f, 0.4f });
         var mapper = new ChannelMappingSampleProvider(src, 2);
 
         var buffer = new float[8];
         var read = mapper.Read(buffer, 0, buffer.Length);
 
-        Assert.Equal(2, read); // один кадр = 2 сэмпла
+        Assert.Equal(2, read); // one frame = 2 samples
         Assert.Equal((0.1f + 0.3f) / 2, buffer[0], 5);
         Assert.Equal((0.2f + 0.4f) / 2, buffer[1], 5);
     }
@@ -79,7 +79,7 @@ public class ChannelMappingSampleProviderTests
     [Fact]
     public void Downmix_SixToTwo_KeepsFrontLeftRightPositions()
     {
-        // 5.1 -> 2.0: L усредняет (FL, FC, BL), R усредняет (FR, LFE, BR).
+        // 5.1 -> 2.0: L averages (FL, FC, BL), R averages (FR, LFE, BR).
         var src = new ScriptedSampleSource(6, 44100, new[] { 0.6f, 0.5f, 0.4f, 0.3f, 0.2f, 0.1f });
         var mapper = new ChannelMappingSampleProvider(src, 2);
 
@@ -104,10 +104,10 @@ public class ChannelMappingSampleProviderTests
         var buffer = new float[64];
         var read = mapper.Read(buffer, 10, 40);
 
-        // Запрошено 40 сэмплов при offset 10: вернулось <= 40, запись не за границами.
+        // Requested 40 samples at offset 10: returned <= 40, no out-of-bounds writes.
         Assert.True(read <= 40);
-        Assert.Equal(0f, buffer[0], 5);   // до offset — не тронут
-        Assert.Equal(0f, buffer[50], 5);  // после offset+40 — не тронут
+        Assert.Equal(0f, buffer[0], 5);   // before offset — untouched
+        Assert.Equal(0f, buffer[50], 5);  // after offset+40 — untouched
         Assert.Equal(0.25f, buffer[10], 5);
     }
 

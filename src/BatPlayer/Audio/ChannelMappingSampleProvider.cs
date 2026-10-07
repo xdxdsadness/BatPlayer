@@ -4,22 +4,22 @@ using NAudio.Wave;
 namespace BatPlayer.Audio;
 
 /// <summary>
-/// Универсальный ремаппер каналов N→M для цепочки адаптации формата
-/// (например 5.1-файл на stereo-устройстве или 2.0-файл на 5.1-выходе).
-/// Правила:
-/// - N &lt; M: каждый источник идёт в свой выход (первые N каналов), лишние выходы — тишина;
-/// - N &gt; M: источники раскладываются по кругу (i % M) и усредняются внутри каждого выхода —
-///   фронт L/R сохраняет позиции при типичном downmix (FL, FC, BL → L; FR, LFE, BR → R).
-/// mono→stereo и stereo→mono обрабатываются штатными NAudio-провайдерами,
-/// этот класс нужен для остальных комбинаций.
+/// Universal N→M channel remapper for the format adaptation chain
+/// (e.g. a 5.1 file on a stereo device or a 2.0 file on a 5.1 output).
+/// Rules:
+/// - N &lt; M: each source goes to its own output (first N channels), extra outputs are silent;
+/// - N &gt; M: sources are distributed round-robin (i % M) and averaged per output —
+///   front L/R keep their positions in a typical downmix (FL, FC, BL → L; FR, LFE, BR → R).
+/// mono→stereo and stereo→mono are handled by built-in NAudio providers;
+/// this class covers the remaining combinations.
 /// </summary>
 public sealed class ChannelMappingSampleProvider : ISampleProvider
 {
     private readonly ISampleProvider _source;
     private readonly int _targetChannels;
-    // Для каждого выходного канала — список исходных каналов, которые усредняются в него.
+    // For each output channel — the list of source channels averaged into it.
     private readonly int[][] _outputGroups;
-    // Промежуточный буфер исходных сэмплов (чтение из источника порциями).
+    // Scratch buffer for source samples (the source is read in chunks).
     private readonly float[] _temp;
 
     public WaveFormat WaveFormat { get; }
@@ -35,7 +35,7 @@ public sealed class ChannelMappingSampleProvider : ISampleProvider
         WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, targetChannels);
 
         _outputGroups = BuildMapping(sourceChannels, targetChannels);
-        // Буфер исходных сэмплов: до 4096 кадров за один Read (~85мс при 48кГц).
+        // Source sample buffer: up to 4096 frames per Read (~85ms at 48kHz).
         _temp = new float[sourceChannels * 4096];
     }
 
@@ -43,14 +43,14 @@ public sealed class ChannelMappingSampleProvider : ISampleProvider
     {
         if (sourceChannels < targetChannels)
         {
-            // Каждый источник → свой выход, оставшиеся выходы немые.
+            // Each source → its own output, remaining outputs silent.
             var own = new int[targetChannels][];
             for (int c = 0; c < targetChannels; c++)
                 own[c] = c < sourceChannels ? new[] { c } : Array.Empty<int>();
             return own;
         }
 
-        // Раскладка по кругу: канал i попадает в выход i % targetChannels.
+        // Round-robin distribution: channel i goes to output i % targetChannels.
         var counts = new int[targetChannels];
         for (int i = 0; i < sourceChannels; i++)
             counts[i % targetChannels]++;
@@ -70,7 +70,7 @@ public sealed class ChannelMappingSampleProvider : ISampleProvider
     public int Read(float[] buffer, int offset, int count)
     {
         var sourceChannels = _source.WaveFormat.Channels;
-        // Сколько кадров помещается в выходной буфер и в наш scratch-буфер.
+        // How many frames fit into the output buffer and our scratch buffer.
         var frames = Math.Min(count / _targetChannels, _temp.Length / sourceChannels);
         if (frames <= 0) return 0;
 

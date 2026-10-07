@@ -18,7 +18,7 @@ public partial class NowPlayingWindow : Window
     public NowPlayingWindow()
     {
         InitializeComponent();
-        // В развёрнутом виде прямые углы, чтобы радиус не просвечивал.
+        // Square corners when maximized so the corner radius doesn't show.
         StateChanged += (_, _) =>
             RootBorder.CornerRadius = new CornerRadius(
                 WindowState == WindowState.Maximized ? 0 : 12);
@@ -35,8 +35,8 @@ public partial class NowPlayingWindow : Window
             _nowCoverFront = null;
         }
         DataContext = player;
-        // Стартовая синхронизация: если обложка уже в VM, проявляем её слоем
-        // (иначе слои останутся прозрачными, а мышь — поверх обложки).
+        // Initial sync: if the cover is already in the VM, fade it in
+        // (otherwise the layers stay transparent with the mouse overlay on top).
         OnNowCoverChanged();
     }
 
@@ -46,13 +46,13 @@ public partial class NowPlayingWindow : Window
             Dispatcher.BeginInvoke(OnNowCoverChanged);
     }
 
-    // ===== Кроссфейд большой обложки =====
+    // ===== Large cover cross-fade =====
     private void OnNowCoverChanged()
     {
         var img = _player?.CoverImage;
         if (img == null)
         {
-            // Обложки нет: слои растворяются, поверх проявляется мышь.
+            // No cover: fade the layers out so the bat border shows through.
             _nowCoverFront = null;
             FadeLayer(NowCoverLayerA, 0);
             FadeLayer(NowCoverLayerB, 0);
@@ -74,9 +74,9 @@ public partial class NowPlayingWindow : Window
 
     private static void FadeLayer(UIElement layer, double to)
     {
-        // Snapshot ДО снятия анимации: BeginAnimation(null) откатывает прозрачность
-        // к базовой — без фиксации текущего значения уходящий слой исчезал бы
-        // одним кадром, и кроссфейд выглядел как резкая подмена.
+        // Snapshot BEFORE removing the animation: BeginAnimation(null) reverts opacity
+        // to its base value — without pinning the current value the outgoing layer
+        // would vanish in one frame and the cross-fade would look like an abrupt swap.
         if (layer is FrameworkElement fe)
         {
             var current = fe.Opacity;

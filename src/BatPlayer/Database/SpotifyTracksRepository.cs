@@ -6,7 +6,7 @@ using Microsoft.Data.Sqlite;
 
 namespace BatPlayer.Database;
 
-/// <summary>Строка таблицы spotify_tracks (схема БД фиксирована, менять нельзя).</summary>
+/// <summary>Row of the spotify_tracks table (DB schema is fixed, do not change).</summary>
 public sealed class SpotifyTrackRow
 {
     public string SpotifyId { get; set; } = string.Empty;
@@ -21,7 +21,7 @@ public sealed class SpotifyTrackRow
     public string SyncedAt { get; set; } = string.Empty;
 }
 
-/// <summary>SQLite-репозиторий Liked Songs Spotify (таблица spotify_tracks).</summary>
+/// <summary>SQLite repository for Spotify Liked Songs (spotify_tracks table).</summary>
 public sealed class SpotifyTracksRepository
 {
     private readonly SqliteConnection _conn;
@@ -31,13 +31,7 @@ public sealed class SpotifyTracksRepository
         _conn = conn;
     }
 
-    public async Task EnsureTableAsync()
-    {
-        var sql = "CREATE TABLE IF NOT EXISTS spotify_tracks (\r\n    spotify_id TEXT PRIMARY KEY,\r\n    title TEXT NOT NULL,\r\n    artist TEXT NOT NULL,\r\n    album TEXT NOT NULL,\r\n    duration_ms INTEGER NOT NULL,\r\n    artwork_url TEXT NOT NULL,\r\n    artwork_local_path TEXT,\r\n    is_playable INTEGER NOT NULL,\r\n    added_at TEXT NOT NULL,\r\n    synced_at TEXT NOT NULL\r\n)";
-        await SqlMapper.ExecuteAsync((IDbConnection)_conn, sql);
-    }
-
-    /// <summary>Батчевый upsert: artwork_local_path не перетирается (локальный кэш обложек).</summary>
+    /// <summary>Batch upsert: artwork_local_path is preserved (local artwork cache).</summary>
     public async Task UpsertBatchAsync(List<SpotifyTrackRow> rows)
     {
         if (rows.Count == 0) return;
@@ -53,13 +47,6 @@ public sealed class SpotifyTracksRepository
             await SqlMapper.QueryAsync<SpotifyTrackRow>((IDbConnection)_conn, sql));
     }
 
-    public async Task<SpotifyTrackRow?> GetByIdAsync(string spotifyId)
-    {
-        const string sql = "SELECT * FROM spotify_tracks WHERE spotify_id = @spotifyId";
-        return await SqlMapper.QuerySingleOrDefaultAsync<SpotifyTrackRow>(
-            (IDbConnection)_conn, sql, (object)new { spotifyId });
-    }
-
     public async Task SetArtworkLocalPathAsync(string spotifyId, string path)
     {
         const string sql = "UPDATE spotify_tracks SET artwork_local_path = @path WHERE spotify_id = @spotifyId";
@@ -69,11 +56,5 @@ public sealed class SpotifyTracksRepository
     public async Task DeleteAllAsync()
     {
         await SqlMapper.ExecuteAsync((IDbConnection)_conn, "DELETE FROM spotify_tracks");
-    }
-
-    public async Task<int> GetCountAsync()
-    {
-        return await SqlMapper.ExecuteScalarAsync<int>(
-            (IDbConnection)_conn, "SELECT COUNT(*) FROM spotify_tracks");
     }
 }

@@ -11,21 +11,21 @@ using BatPlayer.Services.YandexMusic;
 namespace BatPlayer.Views;
 
 /// <summary>
-/// Окно входа в Яндекс Музыку — OAuth Device Flow Яндекс ID (без WebView2).
+/// Yandex Music login window — Yandex ID OAuth Device Flow (no WebView2).
 ///
-/// Почему не implicit-редирект: у клиента Яндекс Музыки согласие на oauth.yandex.ru
-/// работает только с официальным client_id Android-приложения, а токен приходит
-/// на music.yandex.ru, который мгновенно переехивает дальше (fragment теряется) —
-/// схема хрупкая. Device Flow надёжен: плеер запрашивает код (POST device/code),
-/// показывает его пользователю, тот вводит код на официальной странице
-/// oauth.yandex.ru/device в браузере, а плеер опрашивает POST token (grant_type=
-/// device_code) с рекомендованным интервалом до подтверждения/истечения кода.
+/// Why not an implicit redirect: the Yandex Music client's consent on oauth.yandex.ru only
+/// works with the official Android app client_id, and the token arrives at music.yandex.ru,
+/// which instantly redirects further (the fragment is lost) — a fragile scheme. Device Flow
+/// is reliable: the player requests a code (POST device/code), shows it to the user, who
+/// enters it on the official oauth.yandex.ru/device page in a browser, while the player
+/// polls POST token (grant_type=device_code) at the recommended interval until the code is
+/// confirmed or expires.
 ///
-/// Состояния: ЗапросКода → Ожидание → (Подтверждено — окно закрывается) |
-/// (Отказано/Сеть — статус + «Ещё раз») | (Истёк — код запрашивается заново).
-/// После получения токена: uid/displayName из account/status (необязательно),
+/// States: RequestCode → Waiting → (Confirmed — window closes) |
+/// (Denied/Network — status + "Try again") | (Expired — a new code is requested).
+/// After the token is received: uid/displayName from account/status (optional),
 /// YmService.SaveSessionOAuth(token, uid, displayName), DialogResult=true.
-/// Токен в лог не пишется (логируются только uid/факт сохранения).
+/// The token is never logged (only the uid and the fact of saving are logged).
 /// </summary>
 public partial class YmLoginWindow : Window
 {
@@ -53,10 +53,10 @@ public partial class YmLoginWindow : Window
         };
     }
 
-    // ======================== Код устройства ========================
+    // ======================== Device code ========================
 
-    /// <summary>Запросить новый код и начать опрос (старт окна, повтор по «Ещё раз»,
-    /// авто-обновление после истечения кода).</summary>
+    /// <summary>Request a new code and start polling (window start, retry via "Try again",
+    /// auto-refresh after the code expires).</summary>
     private async Task RequestNewCodeAsync()
     {
         if (_finished) return;
@@ -82,7 +82,7 @@ public partial class YmLoginWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // окно закрыли во время запроса
+            // window closed during the request
         }
         catch (Exception ex)
         {
@@ -91,7 +91,7 @@ public partial class YmLoginWindow : Window
         }
     }
 
-    // ========================= Опрос токена =========================
+    // ========================= Token polling =========================
 
     private async Task PollTokenTickAsync()
     {
@@ -110,18 +110,18 @@ public partial class YmLoginWindow : Window
 
             if (result.IsPending)
             {
-                _pollTimer.Start(); // следующий тик по прежнему интервалу
+                _pollTimer.Start(); // next tick at the same interval
             }
             else if (result.IsSlowDown)
             {
-                // Яндекс попросил опрашивать реже (интервал + 5 c).
+                // Yandex asked to poll less often (interval + 5s).
                 _pollIntervalSeconds += 5;
                 _pollTimer.Interval = TimeSpan.FromSeconds(_pollIntervalSeconds);
                 _pollTimer.Start();
             }
             else if (result.IsExpired)
             {
-                // Код истёк — тихо запрашиваем новый, пользователь вводит его заново.
+                // Code expired — silently request a new one; the user enters it again.
                 Logger.Info("Yandex Music login: device code expired — requesting a new one");
                 await RequestNewCodeAsync();
             }
@@ -132,27 +132,27 @@ public partial class YmLoginWindow : Window
             }
             else
             {
-                // invalid_response / неизвестный error — сетевой мусор или изменённая
-                // раскладка: пробуем снова по обычному тику.
+                // invalid_response / unknown error — transient noise or a changed page
+                // layout: retry on the next regular tick.
                 Logger.Warn($"Yandex Music login: device token poll issue ({result.ErrorCode})");
                 _pollTimer.Start();
             }
         }
         catch (OperationCanceledException)
         {
-            // окно закрыли во время опроса
+            // window closed during polling
         }
         catch (Exception ex)
         {
-            // Разовый сетевой сбой не роняет вход — следующий тик повторит.
+            // A one-off network failure doesn't kill the login — the next tick retries.
             Logger.Error(ex, "Yandex Music login: token poll failed");
             _pollTimer.Start();
         }
     }
 
-    // ========================= Завершение ===========================
+    // ========================= Finish ===========================
 
-    /// <summary>Сохранение OAuth-токена и закрытие окна (идемпотентно).</summary>
+    /// <summary>Save the OAuth token and close the window (idempotent).</summary>
     private async Task FinishAsync(string accessToken)
     {
         if (_finished) return;
@@ -161,7 +161,7 @@ public partial class YmLoginWindow : Window
 
         StatusText.Text = Loc.Get("YmDeviceConfirmed");
 
-        // uid/displayName — не обязательно: не получили, синк дозаполнит первым запросом.
+        // uid/displayName are optional: if not resolved, catalog sync fills them in on the first request.
         var account = await ResolveAccountAsync(accessToken);
 
         _ym.SaveSessionOAuth(accessToken, account?.Uid, account?.DisplayName);
@@ -170,8 +170,7 @@ public partial class YmLoginWindow : Window
         Close();
     }
 
-    /// <summary>uid/displayName из account/status. null — не получилось (токен всё равно
-    /// сохраняется).</summary>
+    /// <summary>uid/displayName from account/status. null — not resolved (the token is saved anyway).</summary>
     private async Task<YmAccountInfo?> ResolveAccountAsync(string accessToken)
     {
         try
@@ -192,7 +191,7 @@ public partial class YmLoginWindow : Window
 
     // =========================== UI =================================
 
-    /// <summary>Запрос кода идёт: кнопки неактивны, статус «получаем код».</summary>
+    /// <summary>Code request in progress: buttons disabled, status shows "requesting code".</summary>
     private void SetBusy(bool requesting)
     {
         OpenPageButton.IsEnabled = !requesting;
@@ -205,7 +204,7 @@ public partial class YmLoginWindow : Window
         }
     }
 
-    /// <summary>Ошибка входа: статус + кнопка «Ещё раз» (новый код).</summary>
+    /// <summary>Login failure: status + "Try again" button (new code).</summary>
     private void ShowFailure(string message)
     {
         _pollTimer.Stop();
@@ -217,7 +216,7 @@ public partial class YmLoginWindow : Window
 
     private void OpenPageButton_Click(object sender, RoutedEventArgs e)
     {
-        // verification_url из ответа Яндекса; пустой — дефолтная страница device.
+        // verification_url from Yandex's response; empty — default device page.
         var url = !string.IsNullOrEmpty(_deviceCode?.VerificationUrl)
             ? _deviceCode.VerificationUrl
             : YmService.DefaultVerificationUrl;
@@ -241,7 +240,7 @@ public partial class YmLoginWindow : Window
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
-            try { DragMove(); } catch { /* окно могло закрыться */ }
+            try { DragMove(); } catch { /* window may already be closed */ }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

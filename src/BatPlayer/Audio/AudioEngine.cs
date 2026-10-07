@@ -9,23 +9,23 @@ using BatPlayer.Services;
 namespace BatPlayer.Audio;
 
 /// <summary>
-/// Низкоуровневый аудиодвижок на NAudio. Отвечает за:
-/// - чтение файла (Mp3FileReader, WaveFileReader, AiffFileReader, VorbisWaveReader для OGG,
-///   FlacReader для FLAC, MediaFoundationReader — fallback для всего остального);
-/// - вывод через WasapiOut (shared по умолчанию, exclusive опционально);
-/// - адаптацию формата под устройство (каналы + ресемплинг в MixFormat) — трек не должен
-///   «не играть» из-за несовпадения формата файла с форматом устройства;
-/// - цепочку эффектов: (адаптация) -> Equalizer -> VolumeSampleProvider -> Output.
-/// Не содержит логики плейлистов — только текущий трек.
+/// Low-level NAudio audio engine. Handles:
+/// - file reading (Mp3FileReader, WaveFileReader, AiffFileReader, VorbisWaveReader for OGG,
+///   FlacReader for FLAC, MediaFoundationReader as fallback for everything else);
+/// - output via WasapiOut (shared by default, exclusive optional);
+/// - format adaptation to the device (channels + resampling to MixFormat) — a track
+///   must not fail to play just because the file and device formats differ;
+/// - effect chain: (adaptation) -> Equalizer -> VolumeSampleProvider -> Output.
+/// Contains no playlist logic — current track only.
 /// </summary>
 public sealed class AudioEngine : IDisposable
 {
-    // Event-sync режим позволяет более низкую задержку без глитчей;
-    // 120мс — запас от тресков при пиках UI/CPU (скролл, декоды обложек):
-    // на 80мс слышны dropout'ы как «шум поверх» трека.
+    // Event-sync mode allows lower latency without glitches; 120ms leaves headroom
+    // against crackling at UI/CPU peaks (scrolling, cover decodes) — at 80ms the
+    // dropouts are audible as noise over the track.
     private const int SharedLatencyMs = 120;
-    // Exclusive требовательнее к размеру буфера (выравнивание по периоду устройства),
-    // оставляем проверенное значение: неуспешная инициализация = потеря bit-perfect режима.
+    // Exclusive is more sensitive to buffer size (device period alignment);
+    // keep the proven value — failed init means losing bit-perfect mode.
     private const int ExclusiveLatencyMs = 100;
 
     private WaveStream? _reader;
@@ -42,9 +42,9 @@ public sealed class AudioEngine : IDisposable
     public TimeSpan CurrentTime => _reader?.CurrentTime ?? TimeSpan.Zero;
     public TimeSpan TotalTime   => _reader?.TotalTime ?? TimeSpan.Zero;
 
-    // Логическая громкость и флаг мьюта хранятся отдельно от громкости провайдера:
-    // раньше IsMuted выводился из «Volume == 0», из-за чего громкость при мьюте
-    // сохранялась как 0 и после снятия мьюта звук не возвращался.
+    // Logical volume and the mute flag are stored separately from the provider's
+    // volume: IsMuted used to be derived from "Volume == 0", so muting saved
+    // volume as 0 and sound never returned after unmute.
     private float _volume = 1f;
     private bool _muted;
     private float _fadeTarget = 1f;
@@ -82,14 +82,14 @@ public sealed class AudioEngine : IDisposable
         _endpointVolume = defaultDevice.AudioEndpointVolume;
     }
 
-    /// <summary>Список доступных WASAPI-устройств вывода.</summary>
+    /// <summary>Lists available WASAPI output devices.</summary>
     public static IEnumerable<MMDevice> EnumerateDevices()
     {
         using var enumerator = new MMDeviceEnumerator();
         return enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
     }
 
-    /// <summary>Открыть файл и подготовить к воспроизведению. Не запускает автоматически.</summary>
+    /// <summary>Opens a file and prepares it for playback; does not start playing automatically.</summary>
     public void Open(string filePath, bool useExclusiveMode, string? deviceFriendlyName = null)
     {
         Stop();
@@ -101,9 +101,9 @@ public sealed class AudioEngine : IDisposable
 
         var device = ResolveDevice(deviceFriendlyName);
 
-        // Exclusive: bit-perfect попытка с нативным форматом файла (без ресемплинга
-        // и ремапа каналов). Устройство занято или формат не поддерживается -> падаем
-        // в shared с адаптацией: трек не должен «не играть» из-за формата.
+        // Exclusive: bit-perfect attempt with the file's native format (no resampling
+        // or channel remap). If the device is busy or the format is unsupported,
+        // fall back to shared with adaptation — a track must not fail over format.
         if (useExclusiveMode)
         {
             try
@@ -126,7 +126,7 @@ public sealed class AudioEngine : IDisposable
             catch (Exception ex)
             {
                 Logger.Error(ex, $"WASAPI exclusive init failed for \"{filePath}\", falling back to shared mode");
-                // Цепочка exclusive-попытки больше не используется.
+                // The exclusive-attempt chain is no longer used.
                 _equalizer = null;
                 _volumeProvider = null;
             }
@@ -139,8 +139,8 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// Bit-perfect цепочка для exclusive-режима: нативный формат файла без адаптации.
-    /// EQ работает на исходной частоте — ресемплинга нет, частоты полос корректны.
+    /// Bit-perfect chain for exclusive mode: native file format, no adaptation.
+    /// EQ runs at the source rate — no resampling, band frequencies stay correct.
     /// </summary>
     private ISampleProvider BuildExclusiveChain(WaveStream reader)
     {
@@ -152,10 +152,10 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// Shared-цепочка с адаптацией под микс-формат устройства:
-    /// reader -> адаптер каналов -> ресемплинг (WDL) -> Equalizer -> Volume.
-    /// EQ стоит ПОСЛЕ ресемплинга: частоты полос должны соответствовать
-    /// реальной выходной частоте, а не частоте файла.
+    /// Shared chain adapted to the device mix format:
+    /// reader -> channel adapter -> resampling (WDL) -> Equalizer -> Volume.
+    /// EQ sits AFTER resampling: band frequencies must match the actual output
+    /// rate, not the file rate.
     /// </summary>
     private ISampleProvider BuildSharedChain(WaveStream reader, MMDevice device)
     {
@@ -166,15 +166,15 @@ public sealed class AudioEngine : IDisposable
         int targetChannels;
         try
         {
-            // AudioClient.MixFormat — целевой формат сеанса shared-режима устройства.
+            // AudioClient.MixFormat is the target session format for shared mode.
             using var audioClient = device.AudioClient;
             targetRate = audioClient.MixFormat.SampleRate;
             targetChannels = audioClient.MixFormat.Channels;
         }
         catch (Exception ex)
         {
-            // Нет доступа к MixFormat (редкие драйверы) — играем в формате файла,
-            // WASAPI shared сам приведёт формат, если сможет.
+            // MixFormat unavailable (rare drivers) — play in the file's format;
+            // WASAPI shared will convert it if it can.
             Logger.Error(ex, "Failed to read device MixFormat, using source format");
             targetRate = sourceFormat.SampleRate;
             targetChannels = sourceFormat.Channels;
@@ -182,7 +182,7 @@ public sealed class AudioEngine : IDisposable
 
         if (targetChannels >= 1 && targetRate > 0)
         {
-            // Адаптация каналов (частные случаи — штатные NAudio-провайдеры).
+            // Channel adaptation (common cases use built-in NAudio providers).
             if (sourceFormat.Channels == 1 && targetChannels == 2)
                 source = new MonoToStereoSampleProvider(source);
             else if (sourceFormat.Channels == 2 && targetChannels == 1)
@@ -192,9 +192,9 @@ public sealed class AudioEngine : IDisposable
             else if (sourceFormat.Channels != targetChannels)
                 source = new ChannelMappingSampleProvider(source, targetChannels);
 
-            // Ресемплинг под частоту микс-формата: sinc-режим WDL (штатный провайдер
-            // NAudio работает в режиме линейной интерполяции и глушит верхние частоты —
-            // см. SincResamplingSampleProvider).
+            // Resample to the mix-format rate using WDL sinc mode (the stock NAudio
+            // provider uses linear interpolation and muffles high frequencies —
+            // see SincResamplingSampleProvider).
             if (source.WaveFormat.SampleRate != targetRate)
                 source = new SincResamplingSampleProvider(source, targetRate);
         }
@@ -206,8 +206,8 @@ public sealed class AudioEngine : IDisposable
         return _volumeProvider;
     }
 
-    /// <summary>Целевое усиление нормализации громкости (линейное, 1 — выкл).
-    /// Провайдер доезжает до цели рампой — измерение громкости приезжает асинхронно.</summary>
+    /// <summary>Target volume-normalization gain (linear, 1 = off).
+    /// The provider ramps to the target — loudness measurement arrives asynchronously.</summary>
     public void SetNormalizeGain(float linear) => _normalize?.Target = linear;
 
     /// <summary>
@@ -224,14 +224,14 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// Выбор reader'а по расширению. internal — для юнит-тестов (BatPlayer.Tests).
-    /// Ошибка декодера не бросает исключение наружу: возвращает null (логи в Logger).
-    /// http(s)-ссылки (онлайн-стримы, напр. SoundCloud) открываются через Media Foundation
-    /// — он умеет читать mp3-прогресс из сети; file-ридеры для URL неприменимы.
+    /// Picks a reader by extension. internal for unit tests (BatPlayer.Tests).
+    /// Decoder errors return null instead of throwing (logged via Logger).
+    /// http(s) URLs (online streams, e.g. SoundCloud) open via Media Foundation,
+    /// which can stream mp3 progressively; file readers do not apply to URLs.
     /// </summary>
     internal static WaveStream? CreateReader(string filePath)
     {
-        // Онлайн-стрим: только MediaFoundationReader, выбор по расширению не имеет смысла.
+        // Online stream: MediaFoundationReader only — extension-based selection does not apply.
         if (filePath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             filePath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -264,7 +264,7 @@ public sealed class AudioEngine : IDisposable
                 case ".flac":
                     return CreateFlacReader(filePath);
                 default:
-                    // Opus, AAC, M4A, WMA, ALAC и прочее — через Media Foundation.
+                    // Opus, AAC, M4A, WMA, ALAC, etc. — via Media Foundation.
                     return new MediaFoundationReader(filePath);
             }
         }
@@ -276,13 +276,13 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// OGG Vorbis: управляемый декодер NAudio.Vorbis (не зависит от кодеков ОС).
-    /// Fallback — Media Foundation (на некоторых системах декодирует сам), затем null.
+    /// OGG Vorbis: managed NAudio.Vorbis decoder (no OS codec dependency).
+    /// Fallback — Media Foundation (decodes on some systems), then null.
     /// </summary>
     private static WaveStream? CreateVorbisReader(string filePath)
     {
-        // MF-fallback для .ogg убран: Media Foundation не декодирует Vorbis, а
-        // «успешное» открытие мусорного файла держало хендл (утечка, ломало тесты).
+        // MF fallback for .ogg removed: Media Foundation cannot decode Vorbis, and a
+        // "successful" open of a junk file kept a handle (leak, broke tests).
         try
         {
             return new NAudio.Vorbis.VorbisWaveReader(filePath);
@@ -295,8 +295,8 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// FLAC: управляемый декодер BunLabs.NAudio.Flac (собственный выход в формате файла —
-    /// важно для bit-perfect exclusive). Fallback — Media Foundation (нативный в Windows 10+).
+    /// FLAC: managed BunLabs.NAudio.Flac decoder (outputs the file's native format —
+    /// matters for bit-perfect exclusive). Fallback — Media Foundation (Windows 10+).
     /// </summary>
     private static WaveStream? CreateFlacReader(string filePath)
     {
@@ -360,18 +360,18 @@ public sealed class AudioEngine : IDisposable
         var target = TimeSpan.FromSeconds(
             Math.Clamp(position.TotalSeconds, 0, _reader.TotalTime.TotalSeconds));
 
-        // Перемотка «на живую» ломала декодер: аудио-поток WasapiOut параллельно
-        // читает reader, и запись CurrentTime посреди чтения рвала внутреннее
-        // состояние MP3-фреймов — Read кидался/возвращал конец, срабатывал
-        // PlaybackStopped, и трек после клика по таймлайну останавливался или
-        // перезапускался с начала. Пауза вывода на время перемотки убирает
-        // параллельное чтение полностью; Pause/Resume WASAPI делает без щелчков.
+        // Seeking while playing broke the decoder: the WasapiOut audio thread reads
+        // the reader concurrently, and writing CurrentTime mid-read corrupted MP3
+        // frame state — Read threw or returned EOF, PlaybackStopped fired, and the
+        // track stopped or restarted after a timeline click. Pausing the output
+        // during seek removes the concurrent read entirely; WASAPI pause/resume
+        // is click-free.
         var wasPlaying = IsPlaying;
         if (wasPlaying) _output?.Pause();
         _reader.CurrentTime = target;
 
-        // Верификация: декодер иногда не принимает позицию с первого раза
-        // (частичный сдвиг фрейм-индекса) — повторяем запись один раз.
+        // The decoder sometimes rejects the position on the first try (partial
+        // frame-index shift) — retry the write once.
         if (Math.Abs((_reader.CurrentTime - target).TotalSeconds) > 0.25)
             _reader.CurrentTime = target;
 
@@ -403,23 +403,23 @@ public sealed class AudioEngine : IDisposable
     public void SetEqualizerPreGain(double preGainDb)
     {
         if (_equalizer != null)
-            // PreGain провайдера — ЛИНЕЙНЫЙ множитель, а приходит значение в дБ.
-            // Без конверсии 0 дБ превращался в множитель 0 — первая же точка
-            // эквалайзера полностью глушила звук.
+            // The provider's PreGain is a LINEAR multiplier, but the value arrives
+            // in dB. Without conversion 0 dB became a factor of 0 — the first EQ
+            // node muted all sound.
             _equalizer.PreGain = (float)Math.Pow(10, preGainDb / 20.0);
     }
 
-    /// <summary>Плавно изменить громкость за durationMs (защита от щелчков).
-    /// Последний шаг точно попадает в цель; цель запоминается, чтобы параллельные
-    /// операции всегда могли восстановить корректную громкость.</summary>
+    /// <summary>Fades volume to the target over durationMs (prevents clicks).
+    /// The final step lands exactly on target; the target is remembered so
+    /// concurrent operations can always restore the correct volume.</summary>
     public async Task FadeVolumeAsync(float target, int durationMs = 200)
     {
         if (_volumeProvider == null) { _volume = Math.Clamp(target, 0f, 1f); return; }
         _fadeTarget = Math.Clamp(target, 0f, 1f);
 
-        // Новый фейд отменяет предыдущий: иначе старый цикл продолжает писать
-        // громкость (обычно 0) уже в НОВЫЙ провайдер после смены трека -> тишина,
-        // «лечится» только дёрганием громкости.
+        // A new fade cancels the previous one: otherwise the old loop keeps writing
+        // volume (usually 0) into the NEW provider after a track change -> silence
+        // until the user jiggles the volume.
         _fadeCts?.Cancel();
         _fadeCts?.Dispose();
         _fadeCts = new CancellationTokenSource();
@@ -431,7 +431,7 @@ public sealed class AudioEngine : IDisposable
         {
             for (int i = 1; i <= steps; i++)
             {
-                // Промежуточные шаги — без последнего: он ставит громкость ровно в цель.
+                // Intermediate steps only — the last one sets volume exactly to target.
                 if (i < steps)
                     Volume = start + (_fadeTarget - start) * (i / (float)steps);
                 await Task.Delay(10, token);
@@ -440,11 +440,11 @@ public sealed class AudioEngine : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // Фейд отменён (начался новый трек/операция) — громкость выставит новый владелец.
+            // Fade cancelled (new track/operation started) — the new owner sets the volume.
         }
     }
 
-    /// <summary>Немедленно остановить активный фейд громкости (перед Open нового трека).</summary>
+    /// <summary>Immediately stops the active volume fade (before opening a new track).</summary>
     public void CancelFade()
     {
         _fadeCts?.Cancel();

@@ -5,10 +5,9 @@ using Xunit;
 namespace BatPlayer.Tests.Services;
 
 /// <summary>
-/// Тесты «Моей волны» без сети: разбор /search и /similar (YmJsonParser), выбор
-/// матча поиска (RecommendationService.PickSearchMatch), аффинность исполнителей,
-/// ранжирование с весами сидов и лимитом на исполнителя, взвешенный сэмпл и
-/// чередование «реанимации» (RecommendationService). Чистые функции.
+/// Offline tests for "My Wave": /search and /similar parsing (YmJsonParser), search match
+/// picking, artist affinity, weighted ranking with per-artist caps, weighted sampling and
+/// spread. Pure functions.
 /// </summary>
 public class RecommendationServiceTests
 {
@@ -34,7 +33,7 @@ public class RecommendationServiceTests
             DurationMs = 200_000
         };
 
-    /// <summary>Яндекс-кандидат для тестов ранжирования (веса ключуются «yandex:{id}»).</summary>
+    /// <summary>Yandex candidate for ranking tests (weights keyed by "yandex:{id}").</summary>
     private static WaveItem Wave(string id, string artist, string title)
         => Item("yandex", id, artist, title);
 
@@ -86,7 +85,7 @@ public class RecommendationServiceTests
 
         var tracks = YmJsonParser.ParseSimilarTracks(json, seedYmId: "555");
 
-        // Сид исключён: в кандидаты попадает только похожий трек.
+        // Seed excluded: only the similar track becomes a candidate.
         var track = Assert.Single(tracks);
         Assert.Equal("901", track.Id);
         Assert.Equal("Other Artist", track.Artist);
@@ -107,7 +106,7 @@ public class RecommendationServiceTests
         var tracks = YmJsonParser.ParseSimilarTracks(json, seedYmId: null);
 
         Assert.Equal(2, tracks.Count);
-        Assert.Equal(1, tracks.Count(t => t.Id == "901")); // дубликат по id схлопнулся
+        Assert.Equal(1, tracks.Count(t => t.Id == "901")); // duplicate by id collapsed
         Assert.Contains(tracks, t => t.Id == "902");
     }
 
@@ -144,7 +143,7 @@ public class RecommendationServiceTests
     {
         var results = new List<YmTrackDto>
         {
-            Track("1", "My Song", "Seed Artist", durationMs: 300_000) // 100 c разница
+            Track("1", "My Song", "Seed Artist", durationMs: 300_000) // 100s apart
         };
 
         Assert.Null(RecommendationService.PickSearchMatch(results, "Seed Artist", "My Song", 200_000));
@@ -165,17 +164,16 @@ public class RecommendationServiceTests
     {
         var counts = new Dictionary<string, double> { ["top"] = 50, ["mid"] = 7, ["rare"] = 1 };
 
-        // Бонус относителен: артист с 7 прослушками против топа с 50 получает
-        // log2(8)/log2(51) ≈ 0.3 от максимума, а не насыщенный почти-максимум —
-        // артисты с парой прослушек больше не вытесняют играемых.
+        // Bonus is relative: 7 plays against a top of 50 give log2(8)/log2(51) ≈ 0.3 of max,
+        // not a near-max: barely-played artists no longer displace played ones.
         var top = RecommendationService.ArtistBonus(counts, 50, "top");
         var mid = RecommendationService.ArtistBonus(counts, 50, "mid");
         var rare = RecommendationService.ArtistBonus(counts, 50, "rare");
         var none = RecommendationService.ArtistBonus(counts, 50, "unknown");
 
-        Assert.Equal(1.2, top, 1);       // топ — полный бонус
-        Assert.True(mid < top * 0.6);    // 7 прослушек — ~53% отношения логарифмов
-        Assert.True(rare < top * 0.2);   // 1 прослушка — почти ничего
+        Assert.Equal(1.2, top, 1);       // top — full bonus
+        Assert.True(mid < top * 0.6);    // 7 plays — ~53% log ratio
+        Assert.True(rare < top * 0.2);   // 1 play — almost nothing
         Assert.Equal(0, none);
     }
 
@@ -192,14 +190,12 @@ public class RecommendationServiceTests
         };
         var suggestedKeys = new HashSet<string>(StringComparer.Ordinal)
         {
-            "wave fed artist|given track" // как в wave_suggested
+            "wave fed artist|given track" // same key as wave_suggested
         };
 
         var counts = RecommendationService.ComputePlayCounts(plays, suggestedKeys);
 
-        // 3 предложенных прослушки весят 3×0.25=0.75 (без дисконта было бы 3.0) —
-        // теперь они меньше одной органической: пассивное прослушивание почти
-        // не становится вкусом.
+        // 3 suggested plays weigh 0.75 (3.0 undiscounted) — less than one organic play.
         Assert.Equal(0.75, counts["wave fed artist"], 2);
         Assert.Equal(1.0, counts["organic artist"], 1);
         Assert.True(counts["organic artist"] > counts["wave fed artist"]);
@@ -208,8 +204,8 @@ public class RecommendationServiceTests
     [Fact]
     public void ComputeRawPlayCounts_IgnoresDiscount()
     {
-        // Сырые счётчики не дисконтируют прослушки из микса: пороги «сильного вкуса»
-        // и «известности» не должны зависеть от источника прослушивания.
+        // Raw counts do not discount suggested plays: taste/fame thresholds must not
+        // depend on the play source.
         var now = DateTime.UtcNow;
         var plays = new List<(string, string, DateTime)>
         {
@@ -229,8 +225,7 @@ public class RecommendationServiceTests
     [Fact]
     public void SpreadByArtist_PreservesRankingOrder()
     {
-        // Ранжирующий порядок сохраняется: сдвигается только трек, чей исполнитель
-        // совпал с предыдущим. Два «гиганта» больше не чередуются в голове.
+        // Ranking order preserved: only a track whose artist repeats the previous one moves.
         var selected = new List<WaveItem>
         {
             Item("yandex", "a1", "Artist A", "T1"),
@@ -242,7 +237,7 @@ public class RecommendationServiceTests
 
         var spread = RecommendationService.SpreadByArtist(selected, new Random(1));
 
-        // Окно 2: A не возвращается в последних двух треках — a2 уходит за c1.
+        // Window 2: A never returns within the last two tracks — a2 moves behind c1.
         Assert.Equal("a1", spread[0].PlatformId);
         Assert.Equal("b1", spread[1].PlatformId);
         Assert.Equal("c1", spread[2].PlatformId);
@@ -269,7 +264,7 @@ public class RecommendationServiceTests
             waveSize: 4, maxPerArtist: 3, rng: rng,
             demotedArtistKeys: null);
 
-        Assert.Equal(4, selected.Count);           // 3 × «One Artist» + 1 × «Another Artist»
+        Assert.Equal(4, selected.Count);           // 3 x "One Artist" + 1 x "Another Artist"
         Assert.Equal(3, selected.Count(t => t.Artist == "One Artist"));
     }
 
@@ -281,7 +276,7 @@ public class RecommendationServiceTests
         var rng = new Random(7);
         var playCounts = new Dictionary<string, double> { ["beloved artist"] = 50 };
 
-        // Джиттер ≤ 0.3, а бонус топ-артиста = 1.2: любимый исполнитель всегда первый.
+        // Jitter ≤ 0.3 vs top-artist bonus 1.2: the favorite always ranks first.
         for (var i = 0; i < 20; i++)
         {
             var selected = RecommendationService.RankCandidates(
@@ -295,8 +290,8 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_SeedWeightPulls_Up()
     {
-        // Оба кандидата незнакомых исполнителей, но у первого вес сида максимальный,
-        // у второго — ноль: первый должен всегда выходить выше джиттера.
+        // Both candidates are unknown artists, but the first carries max seed weight:
+        // it must always outrank jitter.
         var heavy = Wave("heavy", "Brand New Artist", "Heavy");
         var light = Wave("light", "Another New Artist", "Light");
         var rng = new Random(11);
@@ -343,8 +338,8 @@ public class RecommendationServiceTests
             if (sample[0] == "heavy") heavyWins++;
         }
 
-        // Вес 20 из суммы 24 → ~83%; при честном сэмплинге в 200 испытаниях
-        // отклонение за 65% практически невозможно.
+        // Weight 20 of 24 → ~83%; in 200 fair trials a deviation below 65% is
+        // practically impossible.
         Assert.True(heavyWins > 130, $"heavy picked only {heavyWins}/200");
     }
 
@@ -354,11 +349,11 @@ public class RecommendationServiceTests
         var items = Enumerable.Range(0, 10).Select(i => $"i{i}").ToList();
         var sample = RecommendationService.WeightedSample(items, _ => 1.0, count: 25, new Random(5));
 
-        Assert.Equal(10, sample.Count); // count > pool → весь пул без повторов
+        Assert.Equal(10, sample.Count); // count > pool → whole pool without repeats
         Assert.Equal(10, sample.Distinct().Count());
     }
 
-    // ========================= Парсеры исполнителей и каталога =========================
+    // ===================== Artist and catalog parsers =====================
 
     [Fact]
     public void ParseArtistTracks_ResultTracks_ParsesTracks()
@@ -417,7 +412,7 @@ public class RecommendationServiceTests
     [Fact]
     public void ParseArtistListeners_BriefInfo_ReadsStatsListeners()
     {
-        // Реальная структура brief-info: result.stats.lastMonthListeners.
+        // Real brief-info layout: result.stats.lastMonthListeners.
         var json = """
             {"result":{"artist":{"id":"555","name":"Seed Artist"},
              "stats":{"usedTracksCount":21,"directAlbumsCount":3,
@@ -425,23 +420,23 @@ public class RecommendationServiceTests
             """;
 
         Assert.Equal(48213, YmJsonParser.ParseArtistListeners(json));
-        // Фолбэк на прежнее имя поля.
+        // Fallback to the legacy field name.
         Assert.Equal(777, YmJsonParser.ParseArtistListeners(
             "{\"result\":{\"stats\":{\"listeners\":777}}}"));
-        Assert.Null(YmJsonParser.ParseArtistListeners("{\"result\":{}}")); // поля нет
-        Assert.Null(YmJsonParser.ParseArtistListeners("not json"));       // мусор
+        Assert.Null(YmJsonParser.ParseArtistListeners("{\"result\":{}}")); // no field
+        Assert.Null(YmJsonParser.ParseArtistListeners("not json"));       // garbage
     }
 
     [Fact]
     public void CollectArtistObjects_LabelsAreNotArtists()
     {
-        // label имеет пару id+name, но без признаков артиста — в исполнители не попадает
+        // label has id+name but no artist markers — excluded from artists
         var json = """
             {"result":{"something":{"label":{"id":"9","name":"Fake Label"}},
              "artistList":[{"id":"13","name":"Real One","cover":{"type":"from-artist-photos"}}]}}
             """;
 
-        var artists = YmJsonParser.ParseSearchArtists(json); // точный путь не сошёлся → DFS
+        var artists = YmJsonParser.ParseSearchArtists(json); // exact path missed → DFS
 
         var artist = Assert.Single(artists);
         Assert.Equal("13", artist.Id);
@@ -477,15 +472,15 @@ public class RecommendationServiceTests
         };
 
         Assert.Equal("2", RecommendationService.PickArtistMatch(results, "Madk1D")!.Id);
-        Assert.Equal("2", RecommendationService.PickArtistMatch(results, "madk1d & crew")!.Id); // запрос шире
+        Assert.Equal("2", RecommendationService.PickArtistMatch(results, "madk1d & crew")!.Id); // broader query
         Assert.Null(RecommendationService.PickArtistMatch(results, "totally other"));
     }
 
     [Fact]
     public void RankCandidates_HeavyArtistsGetBiggerCap()
     {
-        // 2 трека одного исполнителя с максимальным весом пула (топ play_log):
-        // у «тяжёлых» лимит 2 — оба попадают; «лёгкий» лимит 1 отрезал бы часть.
+        // 2 tracks by one artist with max pool weight (top play_log): the "heavy"
+        // cap is 2 — both fit; the "light" cap of 1 would cut some.
         var candidates = Enumerable.Range(0, 2)
             .Select(i => Wave($"id{i}", "Top Playlog Artist", $"Song{i}"))
             .ToList();
@@ -502,8 +497,8 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_LightArtistsStillCapped()
     {
-        // «Лёгкий» лимит 1 действует в основном проходе: из 6 треков новизны
-        // выбирается один, остальные слоты уходят другим исполнителям.
+        // The "light" cap of 1 applies in the main pass: one of 6 novelty tracks is
+        // chosen, the remaining slots go to other artists.
         var candidates = Enumerable.Range(0, 6)
             .Select(i => Wave($"id{i}", "Random New Artist", $"Song{i}"))
             .Concat(Enumerable.Range(0, 5)
@@ -522,8 +517,8 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_CapsSaturated_BackfillsToFullLength()
     {
-        // Лимиты насытились, а очередь короче waveSize: проходы добора ослабляют
-        // лимит до 3 на семейство — микс полной длины при достаточном разнообразии.
+        // Caps saturated but queue shorter than waveSize: backfill passes relax the
+        // limit to 3 per family — full-length mix with enough variety.
         var candidates = Enumerable.Range(0, 7)
             .SelectMany(a => Enumerable.Range(0, 5)
                 .Select(i => Wave($"a{a}t{i}", $"Family {a}", $"Song{a}-{i}")))
@@ -537,14 +532,14 @@ public class RecommendationServiceTests
         Assert.Equal(20, selected.Count);
         Assert.Equal(20, selected.Distinct().Count());
         Assert.All(selected.GroupBy(t => t.Artist).Select(g => g.Count()),
-            c => Assert.True(c <= 3, $"семейство набрало {c} > 3"));
+            c => Assert.True(c <= 3, $"family reached {c} > 3"));
     }
 
     [Fact]
     public void RankCandidates_SingleArtistPool_CappedAtThree()
     {
-        // Пул из одного исполнителя: добор поднимает лимит максимум до 3 —
-        // микс не превращается в альбом, даже когда других исполнителей нет.
+        // Single-artist pool: backfill raises the cap to at most 3 — the mix never
+        // becomes one album, even with no other artists.
         var candidates = Enumerable.Range(0, 6)
             .Select(i => Wave($"id{i}", "One Artist", $"Song{i}"))
             .ToList();
@@ -560,8 +555,8 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_Backfill_RespectsWaveSize()
     {
-        // Добор не выходит за waveSize: по слоту на исполнителя, потом +1 и +2
-        // на семейство — ровно до 8.
+        // Backfill stays within waveSize: one slot per artist, then +1 and +2 per
+        // family — exactly 8.
         var candidates = Enumerable.Range(0, 10)
             .Select(i => Wave($"id{i}", "One Artist", $"Song{i}"))
             .Concat(Enumerable.Range(0, 6)
@@ -582,9 +577,9 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_Backfill_KeepsArtistSpread()
     {
-        // Добор ослабляет лимит (1 + BackfillExtraPerArtist), а не снимает:
-        // 6 семейств по 6 треков заполняют микс из 12 максимум по 2 на семейство —
-        // хвост не собирается в сплошной блок одного исполнителя.
+        // Backfill relaxes the limit (1 + BackfillExtraPerArtist) instead of removing it:
+        // 6 families of 6 fill a 12-mix at most 2 per family — the tail never becomes
+        // one artist block.
         var candidates = Enumerable.Range(0, 6)
             .SelectMany(a => Enumerable.Range(0, 6)
                 .Select(i => Wave($"a{a}t{i}", $"Family {a}", $"Song{a}-{i}")))
@@ -598,7 +593,7 @@ public class RecommendationServiceTests
         Assert.Equal(12, selected.Count);
         Assert.All(selected.GroupBy(t => t.Artist).Select(g => g.Count()),
             c => Assert.True(c <= 1 + RecommendationService.BackfillExtraPerArtist,
-                $"семейство набрало {c} треков — добор не должен снимать лимит"));
+                $"family reached {c} tracks — backfill must not remove the limit"));
     }
 
     // ============================ IsSeedPlayed ============================
@@ -611,18 +606,17 @@ public class RecommendationServiceTests
 
         Assert.True(RecommendationService.IsSeedPlayed("Known Artist", "Anything", counts, playKeys));
         Assert.True(RecommendationService.IsSeedPlayed(
-            "feat & Known Artist", "Anything", counts, playKeys)); // соавтор тоже считается
+            "feat & Known Artist", "Anything", counts, playKeys)); // co-author counts too
         Assert.True(RecommendationService.IsSeedPlayed(
-            "Other Artist", "Some Title!", counts, playKeys)); // точная прослушка трека
+            "Other Artist", "Some Title!", counts, playKeys)); // exact track play
         Assert.False(RecommendationService.IsSeedPlayed("Never Played", "New Song", counts, playKeys));
     }
 
     [Fact]
     public void SpreadByArtist_SameArtistTracksNotAdjacent()
     {
-        // 3 трека исполнителя A (лучшие по рейтингу) + по одному B и C:
-        // подряд могут стоять максимум 2 разных, треки A разнесены по списку.
-        // Семейный лимит 2 в бою: A максимум дважды — раскладка разводит по списку.
+        // 3 tracks by artist A (top rated) + one each B and C: at most two of the same
+        // in a row, A tracks spread across the list.
         var selected = new List<WaveItem>
         {
             Item("yandex", "a1", "Artist A", "T1"),
@@ -636,8 +630,8 @@ public class RecommendationServiceTests
         var spread = RecommendationService.SpreadByArtist(selected, new Random(1));
 
         Assert.Equal(6, spread.Count);
-        // Семейная проверка: у соседних треков не пересекаются исполнители
-        // (после отрезания фитов) — "X & Y" и "X" считаются одним семейством.
+        // Family check: adjacent tracks share no artists (after stripping feats) —
+        // "X & Y" and "X" count as one family.
         for (var i = 1; i < spread.Count; i++)
         {
             var prevKeys = RecommendationService.TrackArtistKeys(spread[i - 1]);
@@ -664,8 +658,8 @@ public class RecommendationServiceTests
     [Fact]
     public void SpreadByArtist_ForcedTail_TwoFamiliesAlternate()
     {
-        // Хвост из двух семейств, все конфликтуют с окном: даже в форс-мажоре
-        // раскладка чередует A/B, а не собирает блок одного артиста.
+        // Tail of two families, all conflicting with the window: even in the forced
+        // case the spread alternates A/B instead of one artist block.
         var selected = new List<WaveItem>
         {
             Item("yandex", "a1", "Artist A", "T1"),
@@ -688,8 +682,8 @@ public class RecommendationServiceTests
     [Fact]
     public void RankCandidates_DemotedArtistRanksBelow()
     {
-        // Артист недавнего микса (демоушн ×0.25) проигрывает конкуренту с вдвое
-        // меньшим бонусом: голова следующего микса меняется.
+        // An artist from the recent mix (demotion x0.25) loses to a competitor with
+        // half the bonus: the next mix head changes.
         var recent = Wave("recent", "Recently Played Artist", "R1");
         var fresh = Wave("fresh", "Resting Artist", "F1");
         var rng = new Random(9);
@@ -704,15 +698,15 @@ public class RecommendationServiceTests
             new[] { recent, fresh }, playCounts, 50, NoSeeds(), 0,
             waveSize: 2, maxPerArtist: 3, rng, demotedArtistKeys: demoted);
 
-        // Без демоушна: recent 1.2 > fresh 0.48. С демоушном: 0.3 < 0.48.
+        // Without demotion: recent 1.2 > fresh 0.48. With demotion: 0.3 < 0.48.
         Assert.Equal("fresh", selected[0].PlatformId);
     }
 
     [Fact]
     public void RankCandidates_FeatVariantsShareFamilyCap()
     {
-        // "X", "X & B", "X feat. C" — одно семейство X: из 4 вариантов выбираются
-        // только 2 (тяжёлый лимит), остальные слоты уходят другим артистам.
+        // "X", "X & B", "X feat. C" — one family X: only 2 of 4 variants are chosen
+        // (heavy cap), the remaining slots go to other artists.
         var candidates = new List<WaveItem>
         {
             Wave("x1", "X", "Solo"),
