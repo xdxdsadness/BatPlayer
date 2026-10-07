@@ -26,6 +26,12 @@ Where a platform refuses to serve audio, the player degrades gracefully: local m
 then the platform's disk cache, then the platform stream. A built-in, fully automatic
 DPI-bypass engine restores access to blocked services without any VPN.
 
+## Screenshots
+
+| Home | My Mix |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![My Mix](docs/screenshots/my-mix.png) |
+
 ## Features
 
 - **Local library** — SQLite-backed collection with covers, playlists, history and listening stats
