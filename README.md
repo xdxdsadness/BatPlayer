@@ -16,6 +16,11 @@
 
 ---
 
+> [!IMPORTANT]
+> The **VK Music** and **Spotify** integrations are temporarily unavailable in this release.
+> They will return in an upcoming update — SoundCloud, Yandex Music and the local library
+> are not affected.
+
 ## About
 
 BatPlayer is a native WPF application (.NET 8) that combines a local music library with
