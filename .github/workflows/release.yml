@@ -50,7 +50,7 @@ jobs:
 
       - name: Prepare attestation file
         shell: pwsh
-        run: Copy-Item '${{ steps.attest.outputs.bundle }}' attestation.json
+        run: Copy-Item '${{ steps.attest.outputs.bundle-path }}' attestation.json
 
       - name: Attach files to the release
         uses: softprops/action-gh-release@v2
