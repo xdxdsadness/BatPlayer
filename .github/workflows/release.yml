@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  attestations: write
 
 jobs:
   release:
@@ -35,27 +33,7 @@ jobs:
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/bat_player.iss'
 
-      - name: Generate checksums
-        shell: pwsh
-        run: |
-          $file = Get-ChildItem installer/dist/*.exe
-          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
-          "$hash  $($file.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
-
-      - name: Generate build provenance attestation
-        uses: actions/attest-build-provenance@v2
-        id: attest
-        with:
-          subject-path: installer/dist/*.exe
-
-      - name: Prepare attestation file
-        shell: pwsh
-        run: Copy-Item '${{ steps.attest.outputs.bundle-path }}' attestation.json
-
-      - name: Attach files to the release
+      - name: Attach installer to the release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            installer/dist/BatPlayer-Setup-*.exe
-            attestation.json
-            SHA256SUMS.txt
+          files: installer/dist/BatPlayer-Setup-*.exe
